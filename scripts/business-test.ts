@@ -1,6 +1,7 @@
 // Business profile, owner audience and drag-and-drop checks (plan P0): unit checks on the
 // profile store and attachment handling, then live checks against the real model.
 // Synthetic data only.
+import { confirmText } from "../src/engine/types";
 import { join } from "node:path";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -89,7 +90,7 @@ const asked: string[] = [];
 const { engine, mem, business } = createAssistant({
   userId: "business-test",
   memoryRoot: MEM_ROOT,
-  confirm: async (q) => { asked.push(q); return answers.shift() ?? true; },
+  confirm: async (q) => { asked.push(confirmText(q)); return answers.shift() ?? true; },
   serviceTier: "priority",
   clientVersion: "business-test",
 });

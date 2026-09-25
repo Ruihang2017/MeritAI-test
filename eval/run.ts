@@ -4,6 +4,7 @@
 // runs graded by a different judge model (or not graded) are re-graded without re-running.
 //
 //   npm run eval -- [--set core|regression|full] [--runs 2] [--concurrency 8] [--only <regex>] [--out eval/results/<name>] [--no-judge] [--rejudge-only]
+import { confirmText } from "../src/engine/types";
 import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -157,7 +158,7 @@ async function worker(w: number) {
     userId: `eval-w${w}`,
     memoryRoot: join(TMP, `mem-${w}`),
     confirm: async (q) => {
-      asked.push(q);
+      asked.push(confirmText(q));
       return answers.length ? answers.shift()! : true;
     },
     serviceTier: "priority",

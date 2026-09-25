@@ -1,6 +1,7 @@
 // Employee register checks (plan P2): store and validation (unit), then the chat flow
 // against the real model (add, record documents, refuse sensitive data, look up, leave,
 // delete, declined writes). Synthetic data only.
+import { confirmText } from "../src/engine/types";
 import { join } from "node:path";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -52,7 +53,7 @@ const asked: string[] = [];
 const { engine, mem, register } = createAssistant({
   userId: "register-test",
   memoryRoot: join(TMP, "memory"),
-  confirm: async (q) => { asked.push(q); return answers.shift() ?? true; },
+  confirm: async (q) => { asked.push(confirmText(q)); return answers.shift() ?? true; },
   serviceTier: "priority",
   clientVersion: "register-test",
 });

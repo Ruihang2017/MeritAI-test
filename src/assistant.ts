@@ -2,7 +2,7 @@ import { readFileSync, mkdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AppServerEngine } from "./engine/appServer";
-import type { Engine } from "./engine/types";
+import type { Confirm, Engine } from "./engine/types";
 import { UserMemory } from "./memory/store";
 import { buildMemoryContext } from "./memory/context";
 import { memoryTools } from "./memory/tools";
@@ -44,8 +44,8 @@ export interface Assistant {
  */
 export function createAssistant(opts: {
   userId: string;
-  /** Asks the user a yes/no question (propose_memory, business profile changes). */
-  confirm: (question: string) => Promise<boolean>;
+  /** Asks the user a yes/no question (memory proposals, business profile and register changes). */
+  confirm: Confirm;
   /** Defaults to <repo>/memory; tests pass a throwaway dir. */
   memoryRoot?: string;
   /** Service tier id: "priority" or "default". */

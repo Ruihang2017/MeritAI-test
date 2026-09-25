@@ -6,7 +6,8 @@
 export type EngineEvent =
   | { type: "text_delta"; text: string }
   | { type: "text_done"; text: string }
-  | { type: "tool_activity"; summary: string }
+  /** `files`: absolute paths of files the tool saved (a UI can offer to open them). */
+  | { type: "tool_activity"; summary: string; files?: string[] }
   | { type: "skill_loaded"; name: string }
   | { type: "usage"; inputTokens: number; outputTokens: number; cachedInputTokens: number }
   | { type: "error"; message: string; willRetry: boolean }
@@ -52,7 +53,28 @@ export interface ToolOutcome {
   text: string;
   /** Optional one-line note shown to the user (e.g. "memory saved"). */
   display?: string;
+  /** Absolute paths of files the tool saved, if any. */
+  files?: string[];
 }
+
+/**
+ * A yes/no question a tool (or the app) needs the user to answer before it acts,
+ * e.g. saving to the business profile. Structured so a UI can show a dialog;
+ * confirmText() renders it for a terminal.
+ */
+export interface ConfirmRequest {
+  kind: "profile" | "register" | "memory" | "folder-import" | "criteria" | "setup";
+  /** The question, e.g. "Save to the business profile?" */
+  title: string;
+  /** What would change, one line each. */
+  items?: string[];
+  /** Cannot be undone (e.g. deleting an employee). */
+  destructive?: boolean;
+}
+
+export type Confirm = (req: ConfirmRequest) => Promise<boolean>;
+
+export const confirmText = (r: ConfirmRequest) => [r.title, ...(r.items ?? []).map((i) => `  ${i}`)].join("\n");
 
 export interface TranscriptEntry {
   role: "user" | "assistant";

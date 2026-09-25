@@ -496,7 +496,7 @@ export class AppServerEngine implements Engine {
         .catch((err: Error): ToolOutcome => ({ success: false, text: `tool failed: ${err.message}` }))
         .then((out) => {
           for (const u of extractUrls(out.text)) this.toolUrls.add(u);
-          if (out.display) this.active?.queue.push({ type: "tool_activity", summary: out.display });
+          if (out.display) this.active?.queue.push({ type: "tool_activity", summary: out.display, ...(out.files?.length ? { files: out.files } : {}) });
           this.conn.respond(r.id, toolResult(out));
         });
       return;

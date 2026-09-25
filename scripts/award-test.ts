@@ -1,6 +1,7 @@
 // Award and pay checks (plan P4): the award-finder skill against the real model.
 // Assistive only: likely award and level with reasons and official sources, no pay
 // calculations, always the Fair Work tools to confirm. Synthetic data only.
+import { confirmText } from "../src/engine/types";
 import { join } from "node:path";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -35,7 +36,7 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-award-test-"));
 let answers: boolean[] = [];
 const asked: string[] = [];
 function assistant(user: string) {
-  return createAssistant({ userId: user, memoryRoot: TMP, confirm: async (q) => { asked.push(q); return answers.shift() ?? false; }, serviceTier: "priority", clientVersion: "award-test" });
+  return createAssistant({ userId: user, memoryRoot: TMP, confirm: async (q) => { asked.push(confirmText(q)); return answers.shift() ?? false; }, serviceTier: "priority", clientVersion: "award-test" });
 }
 async function turn(e: Engine, text: string) {
   await e.newSession();

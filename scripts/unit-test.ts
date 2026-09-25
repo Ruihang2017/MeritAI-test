@@ -2,7 +2,7 @@
 // the first evaluation: apprentices, the leaving checklist, fixed-term notes, reminder
 // wording, small business status and adviser referral.
 import { join } from "node:path";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { ensureFolders } from "../src/files/folders";
 import { BusinessStore, adviserLine, renderProfile, smallBusinessLine, EMPTY_PROFILE } from "../src/business/profile";
@@ -12,6 +12,8 @@ import { Register, employeeLine, normaliseEmployee, type Employee } from "../src
 import { registerTools, FIXED_TERM_NOTE } from "../src/business/registerTools";
 import { computeReminders } from "../src/business/reminders";
 import { isOfficialUrl } from "../src/research/officialSources";
+import { AssistantApp } from "../src/app/app";
+import { confirmText } from "../src/engine/types";
 
 type Check = [string, boolean];
 const results: { name: string; checks: Check[]; detail?: string }[] = [];
@@ -112,7 +114,42 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   ]);
 }
 
-rmSync(TMP, { recursive: true, force: true });
+// ------------------------------------------------------------ application layer (no engine start, no model)
+{
+  const asked: string[] = [];
+  const f = ensureFolders(join(TMP, "app-files"));
+  const app = new AssistantApp({
+    userId: "unit-app",
+    memoryRoot: join(TMP, "app-mem"),
+    filesRoot: f.root,
+    ui: { confirm: async (r) => (asked.push(confirmText(r)), false) },
+  });
+  const src = join(TMP, "drop src");
+  mkdirSync(join(src, "applicants"), { recursive: true });
+  writeFileSync(join(src, "Resume A.md"), "# A\nBarista");
+  const withText = await app.takeDroppedPaths(`"${join(src, "Resume A.md")}" is she a good fit?`);
+  const pendingAfterText = app.hasPendingAttachments();
+  const onlyPath = await app.takeDroppedPaths(`"${join(src, "Resume A.md")}"`);
+  const folder = await app.attach([join(src, "applicants")]);
+  const refused = await app.attach([join(TMP, "app-mem")]);
+  record("application layer", [
+    ["dropped path removed from the text", withText.text === "is she a good fit?" && withText.outcomes[0]?.kind === "attached"],
+    ["attachment waits for the next message", pendingAfterText],
+    ["path-only line: empty text, reused file", onlyPath.text === "" && onlyPath.outcomes[0]?.kind === "attached" && (onlyPath.outcomes[0] as { reused: boolean }).reused],
+    ["folder import asked and declined", folder[0]?.kind === "not-imported" && asked.some((q) => /Import the folder "applicants"/.test(q))],
+    ["assistant folders refused", refused[0]?.kind === "refused"],
+    ["no profile → needs setup", app.needsSetup() && !app.profile().exists],
+    ["empty register, reminders, jobs, memories", !app.staff().length && !app.reminders().length && !app.jobs().length && !app.memories().preferences.length],
+    ["workspace from the host", app.folders().root === f.root],
+    ["tiers", app.setTier("standard") === "standard" && app.setTier("bogus") === null],
+  ], JSON.stringify({ withText, onlyPath, folder, refused }).slice(0, 600));
+}
+
+try {
+  rmSync(TMP, { recursive: true, force: true });
+} catch {
+  /* SQLite files may still be open on Windows; the OS temp cleaner removes them */
+}
 let fail = 0;
 for (const x of results) {
   const ok = x.checks.every(([, v]) => v);

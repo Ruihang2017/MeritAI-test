@@ -1,5 +1,6 @@
 // Memory system checks: store unit checks, then live checks against the real app-server.
 // Uses a throwaway memory dir and synthetic users; real memory/ is untouched.
+import { confirmText } from "../src/engine/types";
 import { join } from "node:path";
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -46,7 +47,7 @@ function makeEngine(user: string, answer: boolean[]) {
   const { engine, mem } = createAssistant({
     userId: user,
     memoryRoot: MEM_ROOT,
-    confirm: async (q) => { asked.push(q); return answer.shift() ?? false; },
+    confirm: async (q) => { asked.push(confirmText(q)); return answer.shift() ?? false; },
     serviceTier: "priority",
     clientVersion: "memory-test",
   });

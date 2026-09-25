@@ -1,4 +1,4 @@
-import type { ClientTool } from "../engine/types";
+import type { ClientTool, Confirm } from "../engine/types";
 import { AU_STATES, EMPLOYMENT_TYPES, BusinessStore, describeChanges, normalisePatch } from "./profile";
 import { findPii } from "../memory/store";
 
@@ -41,7 +41,7 @@ const PATCH_SCHEMA = {
  * update_business_profile: the only way the model changes the profile. Every
  * change is shown to the owner and saved only after they confirm.
  */
-export function businessTools(opts: { store: () => BusinessStore; confirm: (question: string) => Promise<boolean> }): ClientTool[] {
+export function businessTools(opts: { store: () => BusinessStore; confirm: Confirm }): ClientTool[] {
   return [
     {
       name: "update_business_profile",
@@ -72,7 +72,7 @@ export function businessTools(opts: { store: () => BusinessStore; confirm: (ques
         if (pii === "tax file number" || pii === "date of birth") {
           return { success: false, text: `Not saved: looks like personal data (${pii}). The profile holds business facts only.` };
         }
-        const ok = await opts.confirm(`Save to the business profile?\n  ${lines.join("\n  ")}\n`);
+        const ok = await opts.confirm({ kind: "profile", title: "Save to the business profile?", items: lines });
         if (!ok) return { success: true, text: "The owner did not confirm; nothing was saved. Ask what to correct.", display: "profile: not saved" };
         store.update(patch);
         return { success: true, text: `Saved to the business profile: ${lines.join("; ")}.`, display: `profile saved (${lines.length} change(s))` };

@@ -1,4 +1,5 @@
 import type { ClientTool, Engine, ToolOutcome } from "../engine/types";
+import { join } from "node:path";
 import { jobDir, listJobs, resolveRelInside, walk, type Folders } from "../files/folders";
 import { extractText, UnreadableFileError } from "../files/parse";
 import type { Catalog } from "./catalog";
@@ -173,6 +174,7 @@ export function screeningTools(opts: { engine: () => Engine; folders: () => Fold
             success: true,
             text: `Saved to the Outbox: ${files.map((f) => `"${f}"`).join(" and ")}. Tell the user the file name(s).`,
             display: `saved: ${files.join(" + ")}`,
+            files: files.map((f) => join(opts.folders().outbox, f)),
           };
         }),
     },
