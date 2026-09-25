@@ -1,0 +1,51 @@
+{
+  "name": "fx-chatbot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Office chatbot CLI on top of a locally hosted codex app-server",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/cli.ts",
+    "login": "tsx src/cli.ts --login",
+    "typecheck": "tsc --noEmit",
+    "gen:protocol": "codex app-server generate-ts --experimental --out src/protocol",
+    "e2e": "tsx scripts/e2e.ts",
+    "inspect": "tsx scripts/inspect.ts",
+    "ab:base": "tsx scripts/ab-base.ts",
+    "ab:tier": "tsx scripts/ab-tier.ts",
+    "test:skills": "tsx scripts/skills-test.ts",
+    "test:memory": "tsx scripts/memory-test.ts",
+    "test:research": "tsx scripts/research-test.ts",
+    "test:files": "tsx scripts/files-test.ts",
+    "test:hr": "tsx scripts/hr-test.ts",
+    "test:voice": "tsx scripts/voice-test.ts",
+    "test:screening": "tsx scripts/screening-test.ts",
+    "test:business": "tsx scripts/business-test.ts",
+    "test:hiring": "tsx scripts/hiring-test.ts",
+    "test:register": "tsx scripts/register-test.ts",
+    "test:reminders": "tsx scripts/reminders-test.ts",
+    "test:award": "tsx scripts/award-test.ts",
+    "test:unit": "tsx scripts/unit-test.ts",
+    "eval": "tsx eval/run.ts",
+    "eval:report": "tsx eval/report.ts",
+    "eval:compare": "tsx eval/compare.ts"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "@types/ws": "^8.18.1",
+    "pdf-lib": "^1.17.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "docx": "^9.7.2",
+    "exceljs": "^4.4.0",
+    "mammoth": "^1.12.3",
+    "marked": "^18.0.14",
+    "unpdf": "^1.8.1",
+    "ws": "^8.21.3"
+  }
+}

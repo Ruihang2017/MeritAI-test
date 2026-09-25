@@ -1,0 +1,20 @@
+// Dumps what capabilities a chatbot session actually has. Diagnostic only.
+import { resolve } from "node:path";
+import { AppServerConnection } from "../src/engine/rpc";
+const ROOT = resolve(import.meta.dirname, "..");
+const conn = new AppServerConnection({ codexBin: "codex", args: process.argv.slice(2), cwd: resolve(ROOT, "workspace"), env: { ...process.env, CODEX_HOME: resolve(ROOT, "codex_home") } });
+const call = async (m: any, p: any) => { try { return await conn.request(m, p); } catch (e: any) { return { error: e.message }; } };
+await conn.request("initialize", { clientInfo: { name: "inspect", title: null, version: "0" }, capabilities: { experimentalApi: true, requestAttestation: false } });
+conn.notify("initialized");
+const skills: any = await call("skills/list", { cwds: [resolve(ROOT, "workspace")], forceReload: true });
+console.log("SKILLS:", skills.error ?? skills.data.flatMap((d: any) => d.skills.map((s: any) => `${s.name}[${s.scope}${s.enabled ? "" : ",disabled"}${s.pluginId ? ",plugin=" + s.pluginId : ""}]`)).join(" "));
+const plugins: any = await call("plugin/installed", {});
+console.log("PLUGINS:", JSON.stringify(plugins).slice(0, 600));
+const mcp: any = await call("mcpServerStatus/list", {});
+console.log("MCP:", JSON.stringify(mcp).slice(0, 400));
+const apps: any = await call("app/installed", {});
+console.log("APPS:", JSON.stringify(apps).slice(0, 400));
+const feats: any = await call("experimentalFeature/list", {});
+console.log("FEATURES:", feats.error ?? (feats.data ?? []).map((f: any) => `${f.name}=${f.enabled}`).join(" "));
+conn.close();
+process.exit(0);

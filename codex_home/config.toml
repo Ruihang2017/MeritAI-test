@@ -1,0 +1,69 @@
+# CODEX_HOME for the chatbot. Isolated from the user's ~/.codex:
+# none of their MCP servers, plugins, skills or trusted projects leak in.
+
+model = "gpt-5.6-luna"
+model_reasoning_effort = "low"
+
+# Hard boundary for local execution, enforced by the OS sandbox (Windows: restricted token).
+sandbox_mode = "read-only"
+approval_policy = "never"
+
+# No web access in user conversations: they may contain candidate data and
+# pasted documents (prompt-injection risk). Official-source research runs in a
+# separate, isolated thread that enables web search per thread; see
+# src/research/officialSources.ts (the domain allowlist lives there).
+web_search = "disabled"
+
+[windows]
+sandbox = "unelevated"
+
+[analytics]
+enabled = false
+
+# Capability allowlist. Codex enables a lot by default; turn off everything a
+# plain chatbot does not need. Connectors (apps) run in the cloud, so the local
+# sandbox does NOT cover them: they must be disabled here.
+[features]
+shell_tool = false
+unified_exec = false
+apps = false
+plugins = false
+remote_plugin = false
+plugin_sharing = false
+tool_suggest = false
+skill_search = false
+skill_mcp_dependency_install = false
+multi_agent = false
+image_generation = false
+browser_use = false
+browser_use_external = false
+computer_use = false
+in_app_browser = false
+goals = false
+hooks = false
+memories = false
+
+# Built-in system skills that Codex installs into every CODEX_HOME.
+[[skills.config]]
+name = "imagegen"
+enabled = false
+
+[[skills.config]]
+name = "openai-docs"
+enabled = false
+
+[[skills.config]]
+name = "plugin-creator"
+enabled = false
+
+[[skills.config]]
+name = "review-agent"
+enabled = false
+
+[[skills.config]]
+name = "skill-creator"
+enabled = false
+
+[[skills.config]]
+name = "skill-installer"
+enabled = false

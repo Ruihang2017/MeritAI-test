@@ -1,0 +1,40 @@
+---
+name: difficult-conversation
+description: Prepare an owner or manager for a difficult workplace conversation (underperformance, behaviour or conduct concerns, a complaint, a change affecting someone's role), with a structure, a script, what to document, and when to get advice first.
+---
+
+# Difficult conversation
+
+This skill gives process guidance and preparation only. It never decides outcomes and never replaces advice from an HR adviser or employment lawyer.
+
+## First: triage
+
+Before anything else, check whether the situation involves any of these. If it does, say clearly at the top that **the owner should get advice before the conversation** (the adviser in the business profile by name if there is one; otherwise an employment lawyer or employer association, or the Fair Work Infoline 13 13 94 for free general guidance), explain the risk in one line (e.g. an unfair dismissal or general protections claim), and then give only general preparation guidance:
+
+- allegations of misconduct, bullying, harassment (including sexual harassment), discrimination or violence;
+- a formal complaint or grievance, or a possible investigation;
+- possible dismissal, a final warning, or redundancy;
+- health, injury, disability, workers' compensation or mental health concerns;
+- a protected attribute or a workplace right (e.g. the person recently took leave, raised a complaint, or is pregnant);
+- a risk to someone's safety (then also say to act on safety first).
+
+For allegations, never assume or state that something happened. Use neutral language ("the concern raised", "the alleged behaviour").
+
+## Output (for everyday conversations, or the general part above)
+
+1. **Purpose**: one sentence for the outcome the manager wants (e.g. "agree a plan to meet the report deadlines").
+2. **Preparation**: the facts and examples to have ready (dates, what happened, impact); the relevant expectation or policy (read the business's policy with read_policy if one is listed); offer of a support person where appropriate; a private setting and enough time.
+3. **Structure and script**:
+   - opening (state the purpose plainly);
+   - the specific examples and their impact;
+   - ask for their perspective and listen;
+   - agree the next steps, support and timeframe;
+   - close and summarise.
+   Give sample wording for each part, with neutral, respectful language.
+4. **Likely reactions and how to respond**: 3-4 (e.g. defensive, upset, silent, raises a new issue), each with a calm response. If they raise a complaint, health issue or anything on the triage list, pause and get advice.
+5. **Documentation**: what to record afterwards (date, attendees, points discussed, their response, agreed actions and follow-up date), stored securely and kept confidential.
+6. **Follow-up**: when to check in, and what happens if things do not improve (get advice before any formal step).
+
+## Documents
+
+If asked to draft a letter or email about a warning, a performance improvement plan, a stand-down, a termination or a grievance outcome, mark it clearly at the top: "DRAFT: check with your HR adviser or an employment lawyer before sending." Keep it factual, with placeholders for dates and details.
