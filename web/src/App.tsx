@@ -13,6 +13,7 @@ import { StaffPage } from "./components/Staff";
 import { FilesPage, MemoryPage, ProfilePage, SettingsPage } from "./components/Pages";
 import { HiringPage } from "./components/Hiring";
 import { FirstRun } from "./components/FirstRun";
+import { AllConversations } from "./components/AllConversations";
 
 export function App() {
   const api = useMemo(() => Api.fromLocation(), []);
@@ -246,6 +247,7 @@ function Shell({ api }: { api: Api }) {
             onDraftUsed={() => setDraft(null)}
           />
         )}
+        {page === "all" && <AllConversations api={api} onResume={(id) => void resume(id)} onNew={() => void newConversation()} />}
         {page === "staff" && <StaffPage api={api} onAsk={(t) => (setDraft(t), setPage("conversations"))} onChanged={() => void refresh()} />}
         {page === "files" && <FilesPage api={api} onAsk={(t) => (setDraft(t), setPage("conversations"))} />}
         {page === "profile" && <ProfilePage api={api} onAsk={() => void send("Set up my business profile", undefined, [], "setup")} onChanged={() => void refresh()} />}

@@ -4,7 +4,7 @@ import type { Connection } from "../api";
 import { fmtDate, fmtDatesIn } from "../format";
 import { Icon, type IconName } from "./Icon";
 
-export type Page = "conversations" | "staff" | "hiring" | "profile" | "files" | "memory" | "settings";
+export type Page = "conversations" | "all" | "staff" | "hiring" | "profile" | "files" | "memory" | "settings";
 
 export function AppBar({ state, connection, onAttention, showAttention }: { state: ShellState | null; connection: Connection; onAttention: () => void; showAttention: boolean }) {
   const status =
@@ -77,7 +77,7 @@ export function Nav({
   state: ShellState | null;
 }) {
   const item = (it: (typeof MAIN)[number]) => {
-    const on = it.key === page;
+    const on = it.key === page || (it.key === "conversations" && page === "all");
     const badge = it.key === "conversations" && state?.confirms.length ? { n: state.confirms.length, bg: "#F0D58A", fg: "#4A3600" } : it.key === "staff" && state?.attention.overdue ? { n: state.attention.overdue, bg: "#B3261E", fg: "#FFFFFF" } : null;
     return (
       <button key={it.key} type="button" className={`nav-item${on ? " on" : ""}`} aria-current={on ? "page" : undefined} onClick={() => onPage(it.key)}>
@@ -113,7 +113,7 @@ export function Nav({
               <span className="w">{new Date(r.startedAt).toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" })}</span>
             </button>
           ))}
-          <button type="button" className="all-conv" onClick={() => onPage("conversations")}>
+          <button type="button" className="all-conv" onClick={() => onPage("all")}>
             All conversations
           </button>
         </div>

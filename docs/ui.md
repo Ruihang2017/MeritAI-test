@@ -54,6 +54,7 @@ Methods: `state` (shell snapshot: account, business, workspace, busy, attention 
 | Page | What it does |
 |---|---|
 | Conversations | Streaming markdown; the steps of a reply; confirm cards with receipts; official sources as chips; warnings (pay calculation, unverified links), errors, usage limit; stop (Esc); new conversation; history and resume (earlier messages shown again, also after a page reload); attachments (button or drag and drop into the Inbox); guides picker; "a change is waiting" when sending over an open card |
+| All conversations | Search by title, grouped Today / This week / Earlier; opening one resumes it with its messages |
 | Attention | Reminders panel (≥ 1280 px) or an app-bar button and drawer on other pages |
 | Staff | Register table (search, type, people who left), row menu, detail drawer (dates, starting documents with timing), add and edit forms (errors shown by the form, e.g. personal data refused), new starter checklist after adding, fixed-term note after an end-date change, record documents, mark as left with the leaving checklist, delete (destructive dialog); "Ask the adviser" prefills the composer |
 | Hiring | Jobs, new job (JD + applications; submitting is the OK), steps, criteria confirmed in a dialog, results table (band, scores, flags), candidate drawer (criteria verdicts and evidence, strengths, gaps, questions, flags explained), Report menu (Word top 10, Excel everyone, candidate emails with the adviser) |
