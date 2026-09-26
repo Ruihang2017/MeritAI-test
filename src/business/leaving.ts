@@ -16,8 +16,12 @@ export const LEAVING_REASONS: LeavingReason[] = ["resignation", "dismissal", "re
 
 export type LeavingItem = Omit<ChecklistItem, "when"> & { when: "before the last day" | "final pay" | "after they leave" };
 
-/** `casual`: casuals have no paid annual or personal leave to pay out and no NES notice (Fair Work, checked 2026-09-26). */
-export function leavingChecklist(opts: { reason: LeavingReason; apprentice: boolean; states: string[]; casual?: boolean }): LeavingItem[] {
+/**
+ * `casual`: casuals have no paid annual or personal leave to pay out and no NES notice.
+ * `smallBusiness`: fewer than 15 employees (null = unknown): a dismissal follows the Small Business Fair Dismissal Code.
+ * (Fair Work, checked 2026-09-26.)
+ */
+export function leavingChecklist(opts: { reason: LeavingReason; apprentice: boolean; states: string[]; casual?: boolean; smallBusiness?: boolean | null }): LeavingItem[] {
   const items: LeavingItem[] = [];
   if (opts.reason === "dismissal" || opts.reason === "redundancy") {
     items.push({
@@ -25,6 +29,14 @@ export function leavingChecklist(opts: { reason: LeavingReason; apprentice: bool
       task: "Get advice before acting (the adviser in the business profile, an employment lawyer, an employer association, or the Fair Work Infoline 13 13 94), and follow a fair process.",
       why: "Dismissals and redundancies carry unfair dismissal and general protections risk; notice and redundancy pay rules apply.",
       source: S.finalPay,
+    });
+  }
+  if (opts.reason === "dismissal" && opts.smallBusiness !== false) {
+    items.push({
+      when: "before the last day",
+      task: `${opts.smallBusiness ? "As a small business employer (fewer than 15 employees)" : "If the business has fewer than 15 employees"}, follow the Small Business Fair Dismissal Code: unless it is serious misconduct (e.g. theft, fraud, violence, a serious safety breach), give a valid reason, warn them (preferably in writing) that their job is at risk if there is no improvement, let them respond, and give them a reasonable chance to improve. Keep the evidence (written warnings, the Code checklist).`,
+      why: "Following the Code makes a small business dismissal fair; skipping the warning is the usual reason it fails.",
+      source: S.unfairDismissal,
     });
   }
   items.push(
@@ -68,9 +80,15 @@ export function leavingChecklist(opts: { reason: LeavingReason; apprentice: bool
         },
     {
       when: "final pay",
-      task: "Withhold tax correctly on termination payments, report them through payroll, and pay the super owed on the final pay.",
+      task: "Withhold tax correctly on termination payments and report them through payroll.",
       why: "The ATO sets how termination payments are taxed and reported.",
       source: S.atoLeaving,
+    },
+    {
+      when: "final pay",
+      task: "Pay the super guarantee owed on the final pay: under Payday Super (from 1 July 2026) it must reach their fund within 7 business days after the payday. Do not use the old quarterly due dates.",
+      why: "Late super guarantee attracts the super guarantee charge.",
+      source: S.paydaySuper,
     },
     {
       when: "after they leave",
@@ -109,7 +127,7 @@ export function formatLeaving(items: LeavingItem[]): string {
 }
 
 /** The checklist as tool text, with instructions for presenting it. */
-export function leavingText(opts: { reason: LeavingReason; apprentice: boolean; states: string[]; casual?: boolean }): string {
+export function leavingText(opts: { reason: LeavingReason; apprentice: boolean; states: string[]; casual?: boolean; smallBusiness?: boolean | null }): string {
   return (
     `Leaving checklist (${opts.reason}${opts.casual ? ", casual" : ""}${opts.apprentice ? ", apprentice/trainee" : ""}; official sources checked ${LEAVING_CHECKED_ON}):\n${formatLeaving(leavingChecklist(opts))}\n\n` +
     "Tell the owner these steps in plain language, keeping every item and its source link. " +
@@ -117,6 +135,9 @@ export function leavingText(opts: { reason: LeavingReason; apprentice: boolean; 
     "Do not calculate the final pay amount: point to the Pay and Conditions Tool and the payroll system."
   );
 }
+
+/** Fewer than 15 employees (Fair Work's small business employer); null when the headcount is unknown. */
+export const smallBusinessOf = (headcount: number | null) => (headcount === null ? null : headcount < 15);
 
 export const isApprenticeRole = (role: string) => /apprentice|trainee/i.test(role);
 
@@ -143,7 +164,7 @@ export function leavingTools(business: () => BusinessStore): ClientTool[] {
         const reason = (LEAVING_REASONS as string[]).includes(String(a.reason)) ? (a.reason as LeavingReason) : "other";
         return {
           success: true,
-          text: leavingText({ reason, apprentice: a.is_apprentice_or_trainee === true, casual: a.is_casual === true, states: business().get().states }),
+          text: leavingText({ reason, apprentice: a.is_apprentice_or_trainee === true, casual: a.is_casual === true, states: business().get().states, smallBusiness: smallBusinessOf(business().get().headcount) }),
           display: `leaving checklist: ${reason}`,
         };
       },
