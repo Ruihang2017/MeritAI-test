@@ -12,6 +12,7 @@ import { AppBar, AttentionPanel, Nav, type Page } from "./components/Shell";
 import { StaffPage } from "./components/Staff";
 import { FilesPage, MemoryPage, ProfilePage, SettingsPage } from "./components/Pages";
 import { HiringPage } from "./components/Hiring";
+import { FirstRun } from "./components/FirstRun";
 
 export function App() {
   const api = useMemo(() => Api.fromLocation(), []);
@@ -53,6 +54,21 @@ function Shell({ api }: { api: Api }) {
   const [dialog, setDialog] = useState<{ id: string; req: ConfirmRequest } | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
   const [lastProgress, setLastProgress] = useState<string | null>(null);
+  const [firstRunDone, setFirstRunDone] = useState(() => {
+    try {
+      return sessionStorage.getItem("meritai.firstRun") === "done";
+    } catch {
+      return false;
+    }
+  });
+  const finishFirstRun = () => {
+    setFirstRunDone(true);
+    try {
+      sessionStorage.setItem("meritai.firstRun", "done");
+    } catch {
+      /* the flag only lasts for this tab anyway */
+    }
+  };
   const [login, setLogin] = useState<{ url: string | null; code: string | null; message: string } | null>(null);
 
   const refresh = useCallback(async () => {
@@ -201,6 +217,17 @@ function Shell({ api }: { api: Api }) {
           </span>
         </div>
       )}
+      {state && (!state.account.loggedIn || (state.business.needsSetup && !firstRunDone)) ? (
+        <FirstRun
+          api={api}
+          state={state}
+          login={login}
+          onRefresh={() => void refresh()}
+          onSetup={() => (finishFirstRun(), void send("Set up my business profile", undefined, [], "setup"))}
+          onForm={() => (finishFirstRun(), setPage("profile"))}
+          onSkip={finishFirstRun}
+        />
+      ) : (
       <div className="body">
         <Nav page={page} onPage={setPage} onNew={() => void newConversation()} recent={recent} onRecent={(id) => void resume(id)} currentThread={currentThread} state={state} />
         {page === "conversations" && (
@@ -227,6 +254,7 @@ function Shell({ api }: { api: Api }) {
         {page === "hiring" && <HiringPage api={api} progress={lastProgress} onAsk={(t) => (setDraft(t), setPage("conversations"))} />}
         {showPanel && <AttentionPanel reminders={reminders} onAsk={(t) => void send(t)} />}
       </div>
+      )}
       {attentionOpen && !showPanel && (
         <>
           <div className="scrim fill" onClick={() => setAttentionOpen(false)} />

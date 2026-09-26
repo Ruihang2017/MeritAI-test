@@ -43,12 +43,16 @@ export class FakeEngine implements Engine {
   ) {}
 
   async start(): Promise<void> {}
+  /** FX_FAKE_SIGNED_OUT=1 starts signed out, to try the first-run sign-in screens. */
+  private loggedIn = process.env.FX_FAKE_SIGNED_OUT !== "1";
+
   async account(): Promise<AccountStatus> {
-    return { loggedIn: true, description: "Demo (fake engine: scripted replies, no model)" };
+    return this.loggedIn ? { loggedIn: true, description: "Demo (fake engine: scripted replies, no model)" } : { loggedIn: false, description: "Not signed in (demo)" };
   }
   async login(onPrompt: (message: string) => void): Promise<void> {
     onPrompt("Open https://auth.openai.com/codex/device and enter code: DEMO-12345");
-    await sleep(1500);
+    await sleep(this.opts.delayMs === 0 ? 0 : 4000);
+    this.loggedIn = true;
   }
   async newSession(): Promise<SessionInfo> {
     this.threadId = randomUUID();
@@ -208,6 +212,13 @@ export class FakeEngine implements Engine {
       const what = text.replace(/^remember( this for future conversations:)?( that)?\s*/i, "").trim() || text;
       const r = yield* this.tool("remember", { text: what, replaces: null });
       yield* this.say(r?.success ? `Got it. I'll remember: "${what}"` : "I couldn't save that.");
+      return;
+    }
+    if (/\blimit\b|额度/.test(t)) {
+      // The message Codex sends when the ChatGPT plan's usage runs out.
+      const at = new Date(Date.now() + 3 * 3_600_000).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+      yield { type: "error", message: `You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at ${at}.`, willRetry: false };
+      yield { type: "turn_end", status: "failed", error: "usage limit" };
       return;
     }
     if (/resign|quit|leaving|辞职|离职/.test(t)) return yield* this.leaving(text);

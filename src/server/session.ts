@@ -183,7 +183,11 @@ export class UiSession {
   private async run(turnId: string, events: AsyncIterable<AppEvent>): Promise<void> {
     let error: string | undefined;
     try {
-      for await (const ev of events) this.emit({ event: "turn", turnId, ev });
+      for await (const ev of events) {
+        if (ev.type === "usage_limit") this.limit = { resetAt: ev.resetAt };
+        else if (ev.type === "text_delta") this.limit = null;
+        this.emit({ event: "turn", turnId, ev });
+      }
     } catch (e) {
       error = (e as Error).message;
     } finally {
@@ -193,6 +197,7 @@ export class UiSession {
   }
 
   private tier: "fast" | "standard" | null = null;
+  private limit: { resetAt: string | null } | null = null;
 
   /** Only an existing job's name (it becomes a folder name in the app). */
   private jobName(v: unknown): string {
@@ -252,6 +257,7 @@ export class UiSession {
       hasConversation: this.app.hasConversation(),
       title,
       attention: { overdue: rs.filter((r) => r.overdue).length, soon: rs.filter((r) => !r.overdue && r.due <= week).length },
+      usageLimit: this.limit,
       confirms: [...this.waiting].map(([id, w]) => ({ id, req: w.req })),
     };
   }

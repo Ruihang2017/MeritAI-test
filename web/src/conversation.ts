@@ -7,7 +7,8 @@ export type Block =
   | { kind: "confirm"; id: string; req: ConfirmRequest; state: "open" | "yes" | "no" | "withdrawn"; receipt?: string }
   | { kind: "warning"; message: string }
   | { kind: "unverified"; urls: string[] }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string }
+  | { kind: "limit"; resetAt: string | null };
 
 export interface Step {
   summary: string;
@@ -60,12 +61,16 @@ export function applyEvent(turn: Turn, ev: AppEvent): Turn {
       t.blocks = t.blocks.map((b) => (b.kind === "text" ? { ...b, text: ev.fixes.reduce((s, f) => s.split(f.from).join(f.to), b.text) } : b));
       break;
     case "error":
-      if (!ev.willRetry) t.blocks.push({ kind: "error", message: ev.message });
+      // A usage-limit error is shown by its own block (usage_limit follows it).
+      if (!ev.willRetry && !/usage limit/i.test(ev.message)) t.blocks.push({ kind: "error", message: ev.message });
+      break;
+    case "usage_limit":
+      t.blocks.push({ kind: "limit", resetAt: ev.resetAt });
       break;
     case "turn_end":
       t.status = ev.status;
       t.blocks = t.blocks.map((b) => (b.kind === "text" && !b.done ? { ...b, done: true } : b));
-      if (ev.status === "failed" && ev.error && !t.blocks.some((b) => b.kind === "error")) t.blocks.push({ kind: "error", message: ev.error });
+      if (ev.status === "failed" && ev.error && !t.blocks.some((b) => b.kind === "error" || b.kind === "limit")) t.blocks.push({ kind: "error", message: ev.error });
       break;
     case "usage":
       break;

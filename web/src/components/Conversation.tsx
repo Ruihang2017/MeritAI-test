@@ -311,6 +311,15 @@ function BlockView({ block: b, onAnswer, running, last }: { block: Block; onAnsw
           </span>
         </div>
       );
+    case "limit":
+      return (
+        <div className="banner warn" role="alert">
+          <Icon name="alert" size={18} />
+          <span>
+            <b>Usage limit reached{b.resetAt ? ` until ${b.resetAt}` : ""}.</b> Your ChatGPT plan&apos;s usage for MeritAI has run out, so the adviser can&apos;t answer until then. Still working without the adviser: the staff register and its forms, reminders, files, the business profile and memory.
+          </span>
+        </div>
+      );
     case "error":
       return (
         <div className="banner bad" role="alert">

@@ -73,6 +73,8 @@ export interface ShellState {
   title: string | null;
   /** Overdue and this-week counts for the Attention button and badges. */
   attention: { overdue: number; soon: number };
+  /** Set when the last reply hit the ChatGPT plan usage limit (cleared by the next reply that works). */
+  usageLimit: { resetAt: string | null } | null;
   /** Open questions (after a reconnect the UI shows them again). */
   confirms: { id: string; req: ConfirmRequest }[];
 }

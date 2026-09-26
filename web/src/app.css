@@ -1206,3 +1206,87 @@ button:disabled {
   color: #1446a6;
   text-align: center;
 }
+
+/* ---- first run (M4) */
+.first {
+  flex-grow: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 24px;
+  background-color: #eef2f7;
+}
+.first-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  gap: 8px;
+  font-size: 14px;
+}
+.first-steps li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid #d9dee7;
+  color: #4a5363;
+}
+.first-steps li.on {
+  background: #1a57cc;
+  border-color: #1a57cc;
+  color: #fff;
+  font-weight: 700;
+}
+.first-steps li.done {
+  background: #e3f3e8;
+  border-color: #e3f3e8;
+  color: #1e6b3e;
+}
+.first-card {
+  width: 560px;
+  max-width: 100%;
+  padding: 36px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.first-lead {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.55;
+  color: #4a5363;
+}
+.first-list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 14.5px;
+  line-height: 1.7;
+}
+.ws-choice {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border-radius: 10px;
+  border: 2px solid #1a57cc;
+  background: #eef3fc;
+  color: #1446a6;
+}
+.first-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.first-options .pick {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

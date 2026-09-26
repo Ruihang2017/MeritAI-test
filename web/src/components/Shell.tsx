@@ -12,7 +12,9 @@ export function AppBar({ state, connection, onAttention, showAttention }: { stat
       ? { word: connection === "connecting" ? "Connecting" : "Offline", dot: "#B3261E" }
       : !state?.account.loggedIn
         ? { word: "Not signed in", dot: "#B3261E" }
-        : state.busy
+        : state.usageLimit
+          ? { word: state.usageLimit.resetAt ? `Usage limit until ${state.usageLimit.resetAt}` : "Usage limit", dot: "#D9A400" }
+          : state.busy
           ? { word: "Working", dot: "#1A57CC" }
           : { word: "Ready", dot: "#2E9D5B" };
   return (

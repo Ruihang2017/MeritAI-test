@@ -38,6 +38,11 @@ function userId(): string {
  * synthetic employees from the design (not real people).
  */
 function demoWorkspace(): { filesRoot: string; memoryRoot: string } {
+  // --fresh: an empty demo workspace (no profile, no staff) to try the first-run screens.
+  if (flag("--fresh")) {
+    const stamp = new Date().toISOString().replace(/\D/g, "").slice(0, 14);
+    return { filesRoot: ensureFolders(resolve(ROOT, "workspace-demo", "fresh", stamp)).root, memoryRoot: resolve(ROOT, "memory-demo", "fresh", stamp) };
+  }
   const filesRoot = resolve(ROOT, "workspace-demo");
   const memoryRoot = resolve(ROOT, "memory-demo");
   if (!existsSync(resolve(filesRoot, ".assistant", "business.json"))) {

@@ -61,7 +61,17 @@ export interface AppUI {
 }
 
 /** Events of one assistant turn: the engine's events plus app-level warnings. */
-export type AppEvent = EngineEvent | { type: "warning"; code: "pay_calculation"; message: string };
+export type AppEvent =
+  | EngineEvent
+  | { type: "warning"; code: "pay_calculation"; message: string }
+  /** The ChatGPT plan's usage ran out (from the engine's error text); `resetAt` when it says, as it said it (e.g. "Sep 27th, 2026 2:43 AM"). */
+  | { type: "usage_limit"; resetAt: string | null };
+
+/** Recognises Codex's usage-limit error and the reset time in it. */
+export function usageLimit(message: string): { resetAt: string | null } | null {
+  if (!/usage limit/i.test(message)) return null;
+  return { resetAt: /try again (?:at|in) ([^.]+?)\.?$/i.exec(message.trim())?.[1]?.trim() ?? null };
+}
 
 /** Result of a form submission: saved (with `lines` for the receipt) or refused with a reason to show next to the form. */
 export type FormResult<T> = ({ ok: true; lines: string[] } & T) | { ok: false; error: string };
@@ -296,6 +306,10 @@ export class AssistantApp {
     for await (const ev of events) {
       yield ev;
       if (ev.type === "text_done" && looksLikePayCalculation(ev.text)) yield { type: "warning", code: "pay_calculation", message: PAY_GUARD_WARNING };
+      if (ev.type === "error") {
+        const limit = usageLimit(ev.message);
+        if (limit) yield { type: "usage_limit", resetAt: limit.resetAt };
+      }
     }
   }
 

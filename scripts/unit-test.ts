@@ -12,7 +12,7 @@ import { Register, employeeLine, normaliseEmployee, type Employee } from "../src
 import { registerTools, FIXED_TERM_NOTE } from "../src/business/registerTools";
 import { computeReminders } from "../src/business/reminders";
 import { isOfficialUrl } from "../src/research/officialSources";
-import { AssistantApp } from "../src/app/app";
+import { AssistantApp, usageLimit } from "../src/app/app";
 import { PendingConfirms } from "../src/app/confirms";
 import { launchCommand, type LaunchCommand } from "../src/app/launch";
 import { STAGING_PREFIX } from "../src/app/uploads";
@@ -402,6 +402,17 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["report saved in the Outbox", report.length === 1 && report[0].startsWith(f.outbox) && existsSync(report[0])],
     ["unknown job refused", badJob],
   ], JSON.stringify({ created: created.summary, asked, screened: screened.status }).slice(0, 500));
+}
+
+// ------------------------------------------------------------ usage limit (the engine's error text → a structured event for the UI)
+{
+  // Wording seen in the round 4 evaluation log (2026-09-26).
+  const real = "You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Sep 27th, 2026 2:43 AM.";
+  record("usage limit recognised", [
+    ["real message: reset time extracted", usageLimit(real)?.resetAt === "Sep 27th, 2026 2:43 AM"],
+    ["without a time: still a limit, no reset time", usageLimit("You've hit your usage limit.")?.resetAt === null],
+    ["other errors are not limits", usageLimit("stream disconnected before completion") === null],
+  ]);
 }
 
 // ------------------------------------------------------------ shortened links corrected, others left flagged
