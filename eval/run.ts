@@ -230,6 +230,8 @@ async function worker(w: number) {
           if (ev.type === "tool_activity") act.push(ev.summary);
           if (ev.type === "skill_loaded") result.skills.push(ev.name);
           if (ev.type === "unverified_links") result.flagged.push(...ev.urls);
+          // As a front end does: the shortened link is replaced in the shown reply.
+          if (ev.type === "links_corrected") for (const f of ev.fixes) { reply = reply.split(f.from).join(f.to); act.push(`link corrected: ${f.from} → ${f.to}`); }
           if (ev.type === "error" && !ev.willRetry) failed = ev.message;
           if (ev.type === "turn_end" && ev.status !== "completed") failed ??= ev.error ?? `turn ${ev.status}`;
         }

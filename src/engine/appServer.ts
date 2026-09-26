@@ -468,9 +468,17 @@ export class AppServerEngine implements Engine {
         const t = n.params.turn;
         const status = t.status === "inProgress" ? "failed" : t.status;
         if (turn.replyParts.length) {
-          const reply = turn.replyParts.join("\n\n");
+          let reply = turn.replyParts.join("\n\n");
+          const fixes: { from: string; to: string }[] = [];
+          const unverified: string[] = [];
+          for (const u of new Set(extractUrls(reply).filter((u) => !this.toolUrls.has(u)))) {
+            const to = correctUrl(u, this.toolUrls);
+            if (to) fixes.push({ from: u, to });
+            else unverified.push(u);
+          }
+          for (const f of fixes) reply = reply.split(f.from).join(f.to);
           this.log.push({ role: "assistant", text: reply });
-          const unverified = extractUrls(reply).filter((u) => !this.toolUrls.has(u));
+          if (fixes.length) turn.queue.push({ type: "links_corrected", fixes });
           if (unverified.length) turn.queue.push({ type: "unverified_links", urls: unverified });
         }
         turn.queue.push({ type: "turn_end", status, error: t.error?.message });
@@ -523,6 +531,21 @@ export class AppServerEngine implements Engine {
 /** URLs in text, normalised (trailing punctuation removed) so tool output and replies compare equal. */
 export function extractUrls(text: string): string[] {
   return [...text.matchAll(/https?:\/\/[^\s)\]>"'`]+/g)].map((m) => m[0].replace(/[.,;:!?]+$/, ""));
+}
+
+/**
+ * The model sometimes cuts the last path segment of a URL a tool gave it
+ * (".../when-a-worker-leaves" for ".../when-a-worker-leaves-your-business"): a dead link.
+ * Returns the one tool URL that `url` is such a truncation of, else null. Only the last
+ * segment may differ, and only by a cut at a hyphen, so a parent page is never rewritten.
+ */
+export function correctUrl(url: string, known: Iterable<string>): string | null {
+  const hits = new Set<string>();
+  for (const k of known) {
+    const rest = k.startsWith(url) ? k.slice(url.length) : "";
+    if (/^-[^/?#]+$/.test(rest)) hits.add(k);
+  }
+  return hits.size === 1 ? [...hits][0] : null;
 }
 
 function toWebSearchRecord(item: Extract<ThreadItem, { type: "webSearch" }>): WebSearchRecord {

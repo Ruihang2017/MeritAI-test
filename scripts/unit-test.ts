@@ -19,6 +19,7 @@ import { STAGING_PREFIX } from "../src/app/uploads";
 import { ROOT } from "../src/assistant";
 import { basePrompt, MARKDOWN_SWAPS } from "../src/basePrompt";
 import { MAX_ATTACH_BYTES } from "../src/files/attach";
+import { correctUrl } from "../src/engine/appServer";
 import { confirmText, type Confirm, type ConfirmContext, type ConfirmRequest } from "../src/engine/types";
 
 type Check = [string, boolean];
@@ -179,6 +180,20 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["markdown rule: headings, numbered lists, bold, links", /GitHub-flavoured markdown/.test(md) && /headings/.test(md) && /numbered lists/.test(md) && /\*\*bold\*\*/.test(md) && /\[text\]\(url\)/.test(md)],
     ["markdown: no raw-text rule left", !/raw text|plain-text|no bold or italics/.test(md)],
   ], changed.join("\n"));
+}
+
+// ------------------------------------------------------------ shortened links corrected, others left flagged
+{
+  const ato = "https://www.ato.gov.au/businesses-and-organisations/hiring-and-paying-your-workers/engaging-a-worker/when-a-worker-leaves-your-business";
+  const known = [ato, "https://www.fairwork.gov.au/ending-employment/final-pay", "https://www.fairwork.gov.au/leave/sick-and-carers-leave", "https://www.fairwork.gov.au/leave/sick-and-carers-leave-evidence"];
+  record("link correction", [
+    ["cut last segment → the tool URL", correctUrl(ato.replace("-your-business", ""), known) === ato],
+    ["changed ending stays flagged", correctUrl(ato.replace("-your-business", "-a-worker"), known) === null],
+    ["parent page is not rewritten", correctUrl("https://www.fairwork.gov.au/ending-employment", known) === null],
+    ["site root is not rewritten", correctUrl("https://www.fairwork.gov.au", known) === null],
+    ["two candidates → no guess", correctUrl("https://www.fairwork.gov.au/leave/sick-and-carers", known) === null],
+    ["unrelated URL stays flagged", correctUrl("https://example.com/when-a-worker-leaves", known) === null],
+  ]);
 }
 
 // ------------------------------------------------------------ cancellable confirmations
