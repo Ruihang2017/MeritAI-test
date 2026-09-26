@@ -170,6 +170,12 @@ export class FakeEngine implements Engine {
       yield { type: "turn_end", status: "failed", error: "demo failure" };
       return;
     }
+    if (/^remember\b|记住/.test(t)) {
+      const what = text.replace(/^remember( this for future conversations:)?( that)?\s*/i, "").trim() || text;
+      const r = yield* this.tool("remember", { text: what, replaces: null });
+      yield* this.say(r?.success ? `Got it. I'll remember: "${what}"` : "I couldn't save that.");
+      return;
+    }
     if (/resign|quit|leaving|辞职|离职/.test(t)) return yield* this.leaving(text);
     if (/this week|remind|what('s| is) due|提醒|到期/.test(t) && !/final pay|最终工资/.test(t)) return yield* this.reminders();
     if (/calculat|算一下|总共/.test(t)) {

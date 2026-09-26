@@ -14,7 +14,7 @@ import { summarizeSession } from "../memory/summarize";
 import type { Preference, SessionRecord, TaskNote } from "../memory/store";
 import { attachToInbox, findDroppedPaths, importIntoJob, MAX_ATTACH_BYTES } from "../files/attach";
 import { ensureFolders, jobDir, listJobs, validateFilesRoot, walk, type Folders } from "../files/folders";
-import { listInbox, type InboxEntry } from "../files/tools";
+import { listFolder, listInbox, type FolderEntry, type InboxEntry } from "../files/tools";
 import { profileLines, type BusinessProfile } from "../business/profile";
 import { listPolicies, type PolicyEntry } from "../business/policies";
 import type { DocumentId, Employee } from "../business/register";
@@ -513,6 +513,20 @@ export class AssistantApp {
     return { folders: f, inbox: listInbox(f) };
   }
 
+  /** Everything a Files page lists: Inbox, Outbox, Policies (with titles) and jobs. */
+  workspaceFiles(): {
+    root: string;
+    inbox: FolderEntry[];
+    outbox: FolderEntry[];
+    policies: (FolderEntry & { title: string; description: string })[];
+    jobs: { job: string; files: number; criteria: string; path: string }[];
+  } {
+    const f = this.folders();
+    const meta = new Map(listPolicies(f).map((p) => [p.id, p]));
+    const policies = listFolder(f.policies).map((e) => ({ ...e, title: meta.get(e.name)?.title ?? e.name, description: meta.get(e.name)?.description ?? "" }));
+    return { root: f.root, inbox: listFolder(f.inbox), outbox: listFolder(f.outbox), policies, jobs: this.jobs().map((j) => ({ ...j, path: jobDir(f, j.job) })) };
+  }
+
   /** Opens a workspace file (or folder) with the system's default app, e.g. a saved report. */
   openFile(path: string): Promise<OpenResult> {
     return this.launch("open", path);
@@ -540,6 +554,11 @@ export class AssistantApp {
     ensureFolders(root);
     this.a.mem.updateSettings({ filesRoot: root });
     return this.folders();
+  }
+
+  /** True when the workspace is the default folder (the user never chose one). */
+  workspaceIsDefault(): boolean {
+    return !this.a.mem.settings().filesRoot;
   }
 
   resetFilesRoot(): Folders {

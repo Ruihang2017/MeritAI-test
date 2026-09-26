@@ -327,6 +327,40 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   ], JSON.stringify({ added: added.ok, pii, rows: rows[0]?.next }).slice(0, 500));
 }
 
+// ------------------------------------------------------------ browser UI: files, profile, memory, settings (M3/M4)
+{
+  process.env.FX_FAKE_DELAY_MS = "0";
+  const f = ensureFolders(join(TMP, "ui-pages"));
+  writeFileSync(join(f.inbox, "Jo resume.md"), "# Jo\nBarista (synthetic)");
+  writeFileSync(join(f.policies, "leave.md"), "---\ntitle: Leave policy\ndescription: Our leave on top of the NES\n---\nText");
+  const session = new UiSession({ engine: "fake" });
+  const app = new AssistantApp({ userId: "unit-pages", memoryRoot: join(TMP, "ui-pages-mem"), filesRoot: f.root, engine: "fake", ui: { confirm: session.confirm } });
+  session.attach(app);
+  await app.start();
+  await app.openSession();
+  const call = <M extends Method>(method: M, params: Methods[M]["params"]) => session.handle({ id: 1, method, params } as never) as Promise<Methods[M]["result"]>;
+  const files = await call("files", undefined);
+  const prof = await call("updateProfile", { changes: { tradingName: "Wattle Lane Cleaning", headcount: 12 } });
+  const badProf = await call("updateProfile", { changes: { notes: "Owner's date of birth 1970-01-01" } });
+  const events: ServerEvent[] = [];
+  session.subscribe((e) => events.push(e));
+  await call("send", { text: "Remember that I sign letters as Alex Morgan, Operations Manager", turnId: "r1" });
+  await new Promise<void>((ok) => { const t = setInterval(() => events.some((e) => e.event === "turnDone") && (clearInterval(t), ok()), 5); });
+  const mem = await call("memories", undefined);
+  const forgot = mem.preferences[0] ? await call("forget", { id: mem.preferences[0].id }) : { forgotten: false };
+  const settings = await call("settings", undefined);
+  const tier = await call("setTier", { tier: "standard" });
+  const badWs = await call("setWorkspace", { path: "C:\\Windows" }).then(() => false, () => true);
+  await app.close();
+  record("browser UI: files, profile, memory, settings", [
+    ["files: inbox and policies with titles, absolute paths", files.inbox.some((x) => x.name === "Jo resume.md" && x.path.startsWith(f.root)) && files.policies.some((x) => x.title === "Leave policy")],
+    ["profile form: saved lines; personal data refused", prof.ok && prof.lines.some((l) => /12/.test(l)) && !badProf.ok],
+    ["memory: remembered through the reply, listed, forgotten", mem.preferences.some((x) => /Alex Morgan/.test(x.text)) && forgot.forgotten],
+    ["settings: fake engine, tier switch", settings.engine === "fake" && tier.tier === "standard"],
+    ["workspace: a system folder is refused", badWs],
+  ], JSON.stringify({ badProf, mem, settings }).slice(0, 500));
+}
+
 // ------------------------------------------------------------ shortened links corrected, others left flagged
 {
   const ato = "https://www.ato.gov.au/businesses-and-organisations/hiring-and-paying-your-workers/engaging-a-worker/when-a-worker-leaves-your-business";

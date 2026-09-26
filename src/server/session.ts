@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
-import type { AssistantApp } from "../app/app";
+import type { AppEvent, AssistantApp } from "../app/app";
 import type { Confirm, ConfirmRequest } from "../engine/types";
 import { DOCUMENTS, expectedDocuments } from "../business/register";
 import { documentTiming } from "../business/reminders";
 import { LEAVING_REASONS } from "../business/leaving";
-import type { ClientMessage, Method, Methods, ServerEvent, ShellState, StaffRow } from "./protocol";
+import type { ClientMessage, Method, Methods, ServerEvent, Settings, ShellState, StaffRow } from "./protocol";
 
 /**
  * Connects UI messages to one AssistantApp: an allowlist of methods, the reply
@@ -67,7 +67,7 @@ export class UiSession {
       if (this.turn || this.app.isBusy()) throw new Error("A reply is still running.");
       const turnId = str(p?.turnId, "turnId", 100);
       this.turn = turnId;
-      void this.run(turnId, text, skill);
+      void this.run(turnId, p.mode === "setup" ? this.app.setup() : this.app.send(text, skill ? { skill } : {}));
       return { turnId };
     },
     stop: async () => {
@@ -118,6 +118,40 @@ export class UiSession {
       return this.app.markLeft(int(p.id), str(p.leftDate, "leftDate", 10), p.reason);
     },
     removeEmployee: async (p) => this.app.removeEmployee(int(p?.id)),
+    files: async () => this.app.workspaceFiles(),
+    profile: async () => {
+      const p = this.app.profile();
+      return { exists: p.exists, profile: p.profile, policies: p.policies };
+    },
+    updateProfile: async (p) => this.app.updateProfile(obj(p?.changes, "changes")),
+    memories: async () => this.app.memories(),
+    forget: async (p) => ({ forgotten: this.app.forget(str(p?.id, "id", 100)) !== null }),
+    settings: async () => this.settings(),
+    setTier: async (p) => {
+      if (p?.tier !== "fast" && p?.tier !== "standard") throw new Error("tier must be fast or standard");
+      this.app.setTier(p.tier);
+      this.tier = p.tier;
+      return this.settings();
+    },
+    setWorkspace: async (p) => {
+      this.busyCheck();
+      if (p?.path === null) this.app.resetFilesRoot();
+      else this.app.setFilesRoot(str(p?.path, "path", 1000));
+      return this.settings();
+    },
+    login: async () => {
+      try {
+        await this.app.login((message) => {
+          const url = /https?:\/\/\S+/.exec(message)?.[0]?.replace(/[.,;]$/, "") ?? null;
+          const code = /code:?\s*([A-Z0-9]{3,}(?:-[A-Z0-9]{3,})*)/i.exec(message)?.[1] ?? null;
+          this.emit({ event: "login", url, code, message });
+        });
+        if ((await this.app.account()).loggedIn) await this.app.openSession();
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, error: (e as Error).message };
+      }
+    },
     openFile: async (p) => this.app.openFile(str(p?.path, "path", 2000)),
     revealFile: async (p) => this.app.revealFile(str(p?.path, "path", 2000)),
   };
@@ -126,16 +160,30 @@ export class UiSession {
     if (this.turn || this.app.isBusy()) throw new Error("A reply is still running.");
   }
 
-  private async run(turnId: string, text: string, skill?: string): Promise<void> {
+  private async run(turnId: string, events: AsyncIterable<AppEvent>): Promise<void> {
     let error: string | undefined;
     try {
-      for await (const ev of this.app.send(text, skill ? { skill } : {})) this.emit({ event: "turn", turnId, ev });
+      for await (const ev of events) this.emit({ event: "turn", turnId, ev });
     } catch (e) {
       error = (e as Error).message;
     } finally {
       this.turn = null;
       this.emit({ event: "turnDone", turnId, ...(error ? { error } : {}) });
     }
+  }
+
+  private tier: "fast" | "standard" | null = null;
+
+  private async settings(): Promise<Settings> {
+    const info = this.app.sessionInfo();
+    return {
+      account: await this.app.account(),
+      engine: this.opts.engine,
+      model: info?.model ?? null,
+      tier: this.tier ?? (info?.serviceTier === "priority" ? "fast" : info ? "standard" : "fast"),
+      workspace: this.app.folders().root,
+      workspaceIsDefault: this.app.workspaceIsDefault(),
+    };
   }
 
   private staffRows(includeLeft: boolean): StaffRow[] {

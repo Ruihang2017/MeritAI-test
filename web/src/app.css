@@ -1003,3 +1003,65 @@ button:disabled {
   flex-direction: column;
   gap: 4px;
 }
+
+/* ---- files, profile, memory, settings */
+.tab {
+  height: 40px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 500;
+  color: #4a5363;
+  border: 0;
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+}
+.tab.on {
+  color: #1446a6;
+  border-bottom-color: #1a57cc;
+  font-weight: 700;
+}
+.two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+  align-content: start;
+  max-width: 1120px;
+}
+@media (max-width: 1100px) {
+  .two-col {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.set {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.signin {
+  border: 1px solid #d9dee7;
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #fafbfd;
+  font-size: 14px;
+}
+.code {
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #d9dee7;
+}
+.docs li .btn {
+  flex-shrink: 0;
+}

@@ -10,6 +10,7 @@ import { ConversationPage } from "./components/Conversation";
 import { Icon } from "./components/Icon";
 import { AppBar, AttentionPanel, Nav, type Page } from "./components/Shell";
 import { StaffPage } from "./components/Staff";
+import { FilesPage, MemoryPage, ProfilePage, SettingsPage } from "./components/Pages";
 
 export function App() {
   const api = useMemo(() => Api.fromLocation(), []);
@@ -48,6 +49,7 @@ function Shell({ api }: { api: Api }) {
   const restored = useRef(false);
   const [dialog, setDialog] = useState<{ id: string; req: ConfirmRequest } | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
+  const [login, setLogin] = useState<{ url: string | null; code: string | null; message: string } | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -115,6 +117,9 @@ function Shell({ api }: { api: Api }) {
           case "progress":
             setToast(m.message);
             break;
+          case "login":
+            setLogin({ url: m.url, code: m.code, message: m.message });
+            break;
         }
       }),
     [api, refresh],
@@ -126,12 +131,12 @@ function Shell({ api }: { api: Api }) {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const send = async (text: string, skill?: string, attachments: string[] = []) => {
+  const send = async (text: string, skill?: string, attachments: string[] = [], mode?: "setup") => {
     const turnId = crypto.randomUUID();
     setPage("conversations");
     setTurns((ts) => [...ts, { id: turnId, at: new Date(), user: { text, attachments }, ...(skill ? { skill } : {}), steps: [], blocks: [], status: "running" }]);
     try {
-      await api.call("send", { text, turnId, ...(skill ? { skill } : {}) });
+      await api.call("send", { text, turnId, ...(skill ? { skill } : {}), ...(mode ? { mode } : {}) });
       setState((s) => (s ? { ...s, busy: true } : s));
     } catch (e) {
       setTurns((ts) => ts.map((t) => (t.id === turnId ? applyEvent(t, { type: "turn_end", status: "failed", error: (e as Error).message }) : t)));
@@ -210,7 +215,11 @@ function Shell({ api }: { api: Api }) {
           />
         )}
         {page === "staff" && <StaffPage api={api} onAsk={(t) => (setDraft(t), setPage("conversations"))} onChanged={() => void refresh()} />}
-        {page !== "conversations" && page !== "staff" && <Later page={page} />}
+        {page === "files" && <FilesPage api={api} onAsk={(t) => (setDraft(t), setPage("conversations"))} />}
+        {page === "profile" && <ProfilePage api={api} onAsk={() => void send("Set up my business profile", undefined, [], "setup")} onChanged={() => void refresh()} />}
+        {page === "memory" && <MemoryPage api={api} />}
+        {page === "settings" && <SettingsPage api={api} login={login} onChanged={() => void refresh()} />}
+        {page === "hiring" && <Later page={page} />}
         {showPanel && <AttentionPanel reminders={reminders} onAsk={(t) => void send(t)} />}
       </div>
       {attentionOpen && !showPanel && (
