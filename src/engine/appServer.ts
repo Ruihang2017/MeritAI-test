@@ -294,6 +294,9 @@ export class AppServerEngine implements Engine {
         cursor,
         limit: 100,
         sortKey: "updated_at",
+        // From the state DB only: the default also rescans every rollout file to repair metadata,
+        // which took 4-7 s with ~1,450 stored threads (tests and evals share this CODEX_HOME).
+        useStateDbOnly: true,
       })) as ThreadListResponse;
       for (const t of page.data) out.push({ threadId: t.id, preview: t.preview, updatedAt: new Date(t.updatedAt * 1000) });
       cursor = page.nextCursor;
