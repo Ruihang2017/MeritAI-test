@@ -7,7 +7,7 @@
   "scripts": {
     "start": "tsx src/cli.ts",
     "login": "tsx src/cli.ts --login",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p web",
     "gen:protocol": "codex app-server generate-ts --experimental --out src/protocol",
     "e2e": "tsx scripts/e2e.ts",
     "inspect": "tsx scripts/inspect.ts",
@@ -28,23 +28,35 @@
     "test:unit": "tsx scripts/unit-test.ts",
     "eval": "tsx eval/run.ts",
     "eval:report": "tsx eval/report.ts",
-    "eval:compare": "tsx eval/compare.ts"
+    "eval:compare": "tsx eval/compare.ts",
+    "ui": "tsx src/server/main.ts",
+    "ui:fake": "tsx src/server/main.ts --fake",
+    "ui:build": "vite build web",
+    "ui:dev": "tsx src/server/main.ts --dev --fake"
   },
   "engines": {
     "node": ">=22"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^6.1.1",
     "pdf-lib": "^1.17.1",
     "tsx": "^4.23.15",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1"
   },
   "dependencies": {
     "docx": "^9.7.2",
     "exceljs": "^4.4.0",
     "mammoth": "^1.12.3",
     "marked": "^18.0.14",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "unpdf": "^1.8.1",
     "ws": "^8.21.3"
   }

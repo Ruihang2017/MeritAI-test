@@ -1,5 +1,5 @@
-import { readFileSync, rmSync } from "node:fs";
-import { basename, join } from "node:path";
+import { readFileSync, rmSync, statSync } from "node:fs";
+import { basename, extname, join } from "node:path";
 import { createAssistant, ROOT, type Assistant } from "../assistant";
 import type { ReplyFormat } from "../basePrompt";
 import { PendingConfirms } from "./confirms";
@@ -8,23 +8,23 @@ import { stageUploads, type Upload } from "./uploads";
 export type { Upload } from "./uploads";
 export type { Launcher, OpenResult } from "./launch";
 export type { ReplyFormat } from "../basePrompt";
-import type { AccountStatus, Confirm, ConfirmRequest, EngineEvent, SessionInfo } from "../engine/types";
+import type { AccountStatus, Confirm, ConfirmRequest, EngineEvent, SessionInfo, TranscriptEntry } from "../engine/types";
 import { userSection } from "../memory/context";
 import { summarizeSession } from "../memory/summarize";
 import type { Preference, SessionRecord, TaskNote } from "../memory/store";
 import { attachToInbox, findDroppedPaths, importIntoJob, MAX_ATTACH_BYTES } from "../files/attach";
 import { ensureFolders, jobDir, listJobs, validateFilesRoot, walk, type Folders } from "../files/folders";
-import { listInbox, type InboxEntry } from "../files/tools";
+import { listFolder, listInbox, type FolderEntry, type InboxEntry } from "../files/tools";
 import { profileLines, type BusinessProfile } from "../business/profile";
 import { listPolicies, type PolicyEntry } from "../business/policies";
-import type { DocumentId, Employee } from "../business/register";
+import { DOCUMENTS, expectedDocuments, type DocumentId, type Employee } from "../business/register";
 import { checkDocuments, checkEmployeeChanges, checkNewEmployee, fixedTermEndChanged, FIXED_TERM_OWNER_NOTE, type FormNote } from "../business/registerOps";
 import { checkProfilePatch } from "../business/tools";
 import { newStarterChecklist, type ChecklistItem, type EmploymentType } from "../business/onboarding";
 import { isApprenticeRole, leavingChecklist, LEAVING_REASONS, smallBusinessOf, type LeavingItem, type LeavingReason } from "../business/leaving";
-import { remindersFor, type Reminder } from "../business/reminders";
+import { documentTiming, remindersFor, todayLocal, type Reminder } from "../business/reminders";
 import { looksLikePayCalculation, PAY_GUARD_WARNING } from "../business/payGuard";
-import { formatCriteria, ingestJob, jdFromFolder, proposeCriteria, purgeMissingJobs, screenJob, type IngestSummary, type Progress } from "../screening/pipeline";
+import { formatCriteria, ingestJob, jdFromFolder, proposeCriteria, purgeMissingJobs, screenJob, type IngestSummary, type Progress, type ScreenResult } from "../screening/pipeline";
 import { chatSummary, saveReports } from "../screening/report";
 import { LiveSession } from "../voice/liveSession";
 import { VoiceBridge } from "../voice/bridge";
@@ -61,7 +61,17 @@ export interface AppUI {
 }
 
 /** Events of one assistant turn: the engine's events plus app-level warnings. */
-export type AppEvent = EngineEvent | { type: "warning"; code: "pay_calculation"; message: string };
+export type AppEvent =
+  | EngineEvent
+  | { type: "warning"; code: "pay_calculation"; message: string }
+  /** The ChatGPT plan's usage ran out (from the engine's error text); `resetAt` when it says, as it said it (e.g. "Sep 27th, 2026 2:43 AM"). */
+  | { type: "usage_limit"; resetAt: string | null };
+
+/** Recognises Codex's usage-limit error and the reset time in it. */
+export function usageLimit(message: string): { resetAt: string | null } | null {
+  if (!/usage limit/i.test(message)) return null;
+  return { resetAt: /try again (?:at|in) ([^.]+?)\.?$/i.exec(message.trim())?.[1]?.trim() ?? null };
+}
 
 /** Result of a form submission: saved (with `lines` for the receipt) or refused with a reason to show next to the form. */
 export type FormResult<T> = ({ ok: true; lines: string[] } & T) | { ok: false; error: string };
@@ -75,6 +85,36 @@ export type AttachOutcome =
   | { path: string; kind: "not-imported" }
   | { path: string; kind: "refused"; reason: string }
   | { path: string; kind: "error"; message: string };
+
+/** "Soon" for reminders shown as counts and tones (the Attention button's "this week", the Staff page's amber). */
+export const SOON_DAYS = 7;
+
+/** An employee with what a Staff page shows next to them. */
+export type StaffOverviewRow = Employee & {
+  /** The earliest reminder for this person (or their last day once they left). */
+  next: { text: string; due: string; tone: "red" | "amber" | "n" } | null;
+  /** Starting documents expected for them, recorded or not (with when each is due). */
+  documentsExpected: { id: DocumentId; label: string; timing: string; recorded: string | null }[];
+};
+
+/** "Probation ends 2026-10-02: Leo Tran (Cleaner)" → "Probation ends 2026-10-02" (the row already shows the name). */
+export function withoutName(title: string, name: string): string {
+  const i = title.indexOf(name);
+  if (i <= 0) return title;
+  return (title.slice(0, i).replace(/(:|\s+for)\s*$/, "") + title.slice(i + name.length).replace(/^\s*\([^)]*\)/, "")).trim();
+}
+
+const addDaysIso = (iso: string, days: number) => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+
+/** File types the Open button may start (documents and images). */
+const OPENABLE = [".pdf", ".docx", ".doc", ".xlsx", ".xls", ".csv", ".md", ".txt", ".rtf", ".png", ".jpg", ".jpeg", ".gif", ".webp"];
+
+/** A job's screening state for a UI: like ScreenResult, but the criteria may not exist yet. */
+export type JobResults = Omit<ScreenResult, "rubric"> & { rubric: ScreenResult["rubric"] | null };
 
 export type ScreenOutcome =
   | { status: "no-jd"; job: string }
@@ -130,6 +170,8 @@ export class AssistantApp {
     clientVersion?: string;
     /** Starts the system's open / reveal command (openFile, revealFile); tests pass a fake. */
     launcher?: Launcher;
+    /** "fake": scripted replies with the real tools (UI work without the model). */
+    engine?: "codex" | "fake";
   }) {
     this.userId = opts.userId;
     this.launcher = opts.launcher ?? spawnLauncher;
@@ -151,6 +193,7 @@ export class AssistantApp {
       format: opts.format,
       memoryRoot: opts.memoryRoot,
       clientVersion: opts.clientVersion,
+      engine: opts.engine,
       onLog: opts.ui.log,
       onProgress: opts.ui.progress,
     });
@@ -212,6 +255,11 @@ export class AssistantApp {
   async history(): Promise<SessionRecord[]> {
     const stored = new Set((await this.a.engine.listStoredSessions()).map((s) => s.threadId));
     return this.a.mem.sessions().filter((s) => stored.has(s.threadId)).slice(0, 15);
+  }
+
+  /** The messages of the current conversation from its start (also after a resume), for a UI to show. No model call. */
+  async conversation(): Promise<TranscriptEntry[]> {
+    return this.session ? this.a.engine.readTranscript(this.session.threadId) : [];
   }
 
   /** Continues an earlier conversation with this user's current memory. */
@@ -285,6 +333,10 @@ export class AssistantApp {
     for await (const ev of events) {
       yield ev;
       if (ev.type === "text_done" && looksLikePayCalculation(ev.text)) yield { type: "warning", code: "pay_calculation", message: PAY_GUARD_WARNING };
+      if (ev.type === "error") {
+        const limit = usageLimit(ev.message);
+        if (limit) yield { type: "usage_limit", resetAt: limit.resetAt };
+      }
     }
   }
 
@@ -327,6 +379,22 @@ export class AssistantApp {
   // ------------------------------------------------------------------ attachments (drag and drop)
 
   /** Attachments waiting for the next message. */
+  /** Names of the files attached for the next message (a UI shows them as chips). */
+  pendingAttachments(): string[] {
+    return this.pending.notes.flatMap((n) => {
+      const m = /^\[attached: "([^"]+)"/.exec(n);
+      return m ? [m[1]] : [];
+    });
+  }
+
+  /** Takes a file back off the next message (the file stays in the Inbox). */
+  detach(name: string): boolean {
+    const before = this.pending.notes.length;
+    this.pending.notes = this.pending.notes.filter((n) => !n.startsWith(`[attached: "${name}"`));
+    this.pending.images = this.pending.images.filter((p) => basename(p) !== name);
+    return this.pending.notes.length < before;
+  }
+
   hasPendingAttachments(): boolean {
     return this.pending.notes.length > 0;
   }
@@ -400,10 +468,10 @@ export class AssistantApp {
     return !this.a.business().exists();
   }
 
-  profile(): { exists: boolean; profile: BusinessProfile; lines: string[]; path: string; policiesDir: string; policies: PolicyEntry[] } {
+  profile(): { exists: boolean; profile: BusinessProfile; lines: string[]; path: string; policiesDir: string; policies: PolicyEntry[]; smallBusiness: boolean | null } {
     const b = this.a.business();
     const p = b.get();
-    return { exists: b.exists(), profile: p, lines: profileLines(p), path: b.path, policiesDir: this.folders().policies, policies: listPolicies(this.folders()) };
+    return { exists: b.exists(), profile: p, lines: profileLines(p), path: b.path, policiesDir: this.folders().policies, policies: listPolicies(this.folders()), smallBusiness: smallBusinessOf(p.headcount) };
   }
 
   staff(includeLeft = false): Employee[] {
@@ -412,6 +480,33 @@ export class AssistantApp {
 
   reminders(): Reminder[] {
     return remindersFor(this.a.register(), this.a.business());
+  }
+
+  /** Overdue reminders and those due within SOON_DAYS (the Attention button and badges). */
+  attentionSummary(): { overdue: number; soon: number } {
+    const rs = this.reminders();
+    const soon = addDaysIso(todayLocal(), SOON_DAYS);
+    return { overdue: rs.filter((r) => r.overdue).length, soon: rs.filter((r) => !r.overdue && r.due <= soon).length };
+  }
+
+  /** The register for a Staff page: each person's next reminder and their starting documents with timing. */
+  staffOverview(includeLeft = false): StaffOverviewRow[] {
+    const rs = this.reminders();
+    const soon = addDaysIso(todayLocal(), SOON_DAYS);
+    return this.staff(includeLeft).map((e) => {
+      const mine = rs.filter((r) => r.employeeId === e.id).sort((a, b) => a.due.localeCompare(b.due))[0];
+      const next: StaffOverviewRow["next"] =
+        e.status === "left"
+          ? e.leftDate
+            ? { text: `Left ${e.leftDate}`, due: e.leftDate, tone: "n" }
+            : null
+          : mine
+            ? { text: withoutName(mine.title, e.name), due: mine.due, tone: mine.overdue ? "red" : mine.due <= soon ? "amber" : "n" }
+            : null;
+      const done = new Map(e.documents.map((d) => [d.id, d.date]));
+      const timing = documentTiming(e.startDate);
+      return { ...e, next, documentsExpected: expectedDocuments(e).map((id) => ({ id, label: DOCUMENTS[id], timing: timing[id], recorded: done.get(id) ?? null })) };
+    });
   }
 
   // ------------------------------------------------------------------ forms
@@ -505,6 +600,20 @@ export class AssistantApp {
     return { folders: f, inbox: listInbox(f) };
   }
 
+  /** Everything a Files page lists: Inbox, Outbox, Policies (with titles) and jobs. */
+  workspaceFiles(): {
+    root: string;
+    inbox: FolderEntry[];
+    outbox: FolderEntry[];
+    policies: (FolderEntry & { title: string; description: string })[];
+    jobs: { job: string; files: number; criteria: string; path: string }[];
+  } {
+    const f = this.folders();
+    const meta = new Map(listPolicies(f).map((p) => [p.id, p]));
+    const policies = listFolder(f.policies).map((e) => ({ ...e, title: meta.get(e.name)?.title ?? e.name, description: meta.get(e.name)?.description ?? "" }));
+    return { root: f.root, inbox: listFolder(f.inbox), outbox: listFolder(f.outbox), policies, jobs: this.jobs().map((j) => ({ ...j, path: jobDir(f, j.job) })) };
+  }
+
   /** Opens a workspace file (or folder) with the system's default app, e.g. a saved report. */
   openFile(path: string): Promise<OpenResult> {
     return this.launch("open", path);
@@ -518,6 +627,11 @@ export class AssistantApp {
   private async launch(action: "open" | "reveal", path: string): Promise<OpenResult> {
     const p = openablePath(this.folders(), path);
     if (!p.ok) return p;
+    // "Open" runs the file's default program: only documents, images and folders, never
+    // shortcuts or programs that ended up in the workspace (e.g. inside an imported job folder).
+    if (action === "open" && statSync(p.path).isFile() && !OPENABLE.includes(extname(p.path).toLowerCase())) {
+      return { ok: false, error: "For safety, only documents and images open from MeritAI. Use Show in folder for other files." };
+    }
     try {
       await this.launcher(launchCommand(action, p.path));
       return { ok: true };
@@ -532,6 +646,11 @@ export class AssistantApp {
     ensureFolders(root);
     this.a.mem.updateSettings({ filesRoot: root });
     return this.folders();
+  }
+
+  /** True when the workspace is the default folder (the user never chose one). */
+  workspaceIsDefault(): boolean {
+    return !this.a.mem.settings().filesRoot;
   }
 
   resetFilesRoot(): Folders {
@@ -577,6 +696,42 @@ export class AssistantApp {
     }
     const result = await screenJob(this.a.engine, cat, this.folders(), job, { onProgress: this.progress });
     return { status: "done", job, summary: chatSummary(result) };
+  }
+
+  /**
+   * A new job from a form (a browser UI: bytes, no paths): the JD is saved as
+   * "Job description.<ext>" so screening finds it, applications go in "applications/".
+   * Submitting the form is the owner's OK, so no import question is asked.
+   */
+  async importJobFiles(job: string, jd: Upload | null, applications: Upload[]): Promise<{ job: string; summary: IngestSummary; refused: { name: string; reason: string }[] }> {
+    const uploads: Upload[] = [
+      ...(jd ? [{ name: jd.name, data: jd.data, relPath: `job/Job description${extname(jd.name).toLowerCase()}` }] : []),
+      ...applications.map((a) => ({ name: a.name, data: a.data, relPath: `job/applications/${a.name}` })),
+    ];
+    if (!uploads.length) throw new Error("add a job description or at least one application");
+    const staged = stageUploads(uploads, MAX_ATTACH_BYTES);
+    try {
+      const refused = staged.refused.map((r) => ({ name: r.label.replace(/^job\/(applications\/)?/, ""), reason: r.reason }));
+      if (!staged.folders.length) return { job, summary: { job, applications: 0, newApplications: 0, unreadable: [], duplicates: [], jdFiles: [], truncated: false }, refused };
+      const r = await this.importJob(staged.folders[0].path, job);
+      return { ...r, refused };
+    } finally {
+      rmSync(staged.dir, { recursive: true, force: true });
+    }
+  }
+
+  /**
+   * The current screening state of a job (no new evaluations): the ingest summary, the
+   * criteria (null before any are drafted; possibly not confirmed yet), ranked candidates.
+   */
+  async screenResults(job: string): Promise<JobResults> {
+    const cat = this.a.catalog();
+    const rubric = cat.latestRubric(job);
+    if (!rubric || !rubric.confirmed) {
+      const ingest = await ingestJob(cat, this.folders(), job, () => {});
+      return { job, rubric: rubric ?? null, ingest, evaluatedThisRun: 0, failed: [], remaining: ingest.applications, ranked: [] };
+    }
+    return screenJob(this.a.engine, cat, this.folders(), job, { limit: 0 });
   }
 
   /** Saves a screening report from existing results to the Outbox; returns the file paths. */

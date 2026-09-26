@@ -1,4 +1,4 @@
-import { readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, extname } from "node:path";
 import type { ClientTool, ToolOutcome } from "../engine/types";
 import { resolveInside, sanitizeStem, type Folders } from "./folders";
@@ -23,6 +23,28 @@ export function listInbox(f: Folders): InboxEntry[] {
       return { name: d.name, size: s.size, modified: s.mtime, readable: READABLE.includes(extname(d.name).toLowerCase()) };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export interface FolderEntry {
+  name: string;
+  /** Absolute path (for openFile / revealFile). */
+  path: string;
+  size: number;
+  modified: string;
+  readable: boolean;
+}
+
+/** Top-level files of a workspace folder, newest first (a UI's file lists). */
+export function listFolder(dir: string): FolderEntry[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((d) => d.isFile() && !d.name.startsWith("~$") && !d.name.startsWith("."))
+    .map((d) => {
+      const path = join(dir, d.name);
+      const s = statSync(path);
+      return { name: d.name, path, size: s.size, modified: s.mtime.toISOString(), readable: READABLE.includes(extname(d.name).toLowerCase()) };
+    })
+    .sort((a, b) => b.modified.localeCompare(a.modified));
 }
 
 /**

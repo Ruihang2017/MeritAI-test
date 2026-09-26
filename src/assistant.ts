@@ -22,6 +22,7 @@ import { reminderTools, todayLocal } from "./business/reminders";
 import { leavingTools } from "./business/leaving";
 import { parentalLeaveTools } from "./business/parentalLeave";
 import { basePrompt, type ReplyFormat } from "./basePrompt";
+import { FakeEngine } from "./engine/fakeEngine";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -57,6 +58,8 @@ export function createAssistant(opts: {
   /** Reply formatting: "plain" (default, raw-text terminal) or "markdown" (a chat UI that renders it). */
   format?: ReplyFormat;
   clientVersion?: string;
+  /** "codex" (default): the real engine. "fake": scripted replies with the real tools, for UI work without the model (src/engine/fakeEngine.ts). */
+  engine?: "codex" | "fake";
   onLog?: (line: string) => void;
   /** Progress of long-running tools (e.g. bulk screening), for the UI. */
   onProgress?: Progress;
@@ -91,7 +94,21 @@ export function createAssistant(opts: {
     return reg.db;
   };
 
-  const engine = new AppServerEngine({
+  const tools = () => [
+    ...memoryTools({ mem, confirm: opts.confirm }),
+    ...businessTools({ store: business, confirm: opts.confirm }),
+    ...policyTools(folders),
+    ...onboardingTools(business),
+    ...registerTools({ register, business, confirm: opts.confirm }),
+    ...leavingTools(business),
+    ...parentalLeaveTools(todayLocal),
+    ...reminderTools({ register, business }),
+    officialSourcesTool(() => engine),
+    ...fileTools(folders),
+    ...screeningTools({ engine: () => engine, folders, catalog, onProgress: opts.onProgress }),
+  ];
+
+  const engine: Engine = opts.engine === "fake" ? new FakeEngine({ tools, codexHome, ...(process.env.FX_FAKE_DELAY_MS ? { delayMs: Number(process.env.FX_FAKE_DELAY_MS) } : {}) }) : new AppServerEngine({
     codexBin: process.env.CODEX_BIN ?? "codex",
     codexHome,
     workspace,
@@ -104,19 +121,7 @@ export function createAssistant(opts: {
         renderPolicyIndex(folders()),
         buildMemoryContext(mem, read("prompts/memory.md")),
       ].join("\n\n"),
-    tools: () => [
-      ...memoryTools({ mem, confirm: opts.confirm }),
-      ...businessTools({ store: business, confirm: opts.confirm }),
-      ...policyTools(folders),
-      ...onboardingTools(business),
-      ...registerTools({ register, business, confirm: opts.confirm }),
-      ...leavingTools(business),
-      ...parentalLeaveTools(todayLocal),
-      ...reminderTools({ register, business }),
-      officialSourcesTool(() => engine),
-      ...fileTools(folders),
-      ...screeningTools({ engine: () => engine, folders, catalog, onProgress: opts.onProgress }),
-    ],
+    tools,
     serviceTier: opts.serviceTier,
     clientVersion: opts.clientVersion ?? "0.4.0",
     onLog: opts.onLog,

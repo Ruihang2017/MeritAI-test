@@ -143,6 +143,8 @@ export interface Engine {
   steer(text: string): Promise<boolean>;
   /** User/assistant messages of the current session since it was started or resumed. */
   transcript(): TranscriptEntry[];
+  /** The stored messages of a conversation, from the start (a UI shows them after a resume). No model call. */
+  readTranscript(threadId: string): Promise<TranscriptEntry[]>;
   /**
    * One-off request in a throwaway conversation that is never written to disk,
    * sees nothing from the user's conversation, and has no client tools. Used for
