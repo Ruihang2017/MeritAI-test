@@ -1,5 +1,6 @@
 // Memory system checks: store unit checks, then live checks against the real app-server.
 // Uses a throwaway memory dir and synthetic users; real memory/ is untouched.
+import "./testHome"; // tests use codex_home_test/, not the user's codex_home/
 import { confirmText } from "../src/engine/types";
 import { join } from "node:path";
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";

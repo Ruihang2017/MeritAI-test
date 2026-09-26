@@ -1,4 +1,5 @@
 // End-to-end smoke test against the real app-server. Not part of the CLI.
+import "./testHome"; // tests use codex_home_test/, not the user's codex_home/
 import { resolve, join } from "node:path";
 import { existsSync, readFileSync, rmSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -6,13 +7,14 @@ import { AppServerEngine } from "../src/engine/appServer";
 import type { Engine, EngineEvent } from "../src/engine/types";
 import { createAssistant } from "../src/assistant";
 import { seedBusiness } from "./fixtures/business";
+import { codexHomeFor } from "../src/engine/codexHome";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const BASE = readFileSync(resolve(ROOT, "prompts/base.md"), "utf8");
 const make = (instr: string) =>
   new AppServerEngine({
     codexBin: "codex",
-    codexHome: resolve(ROOT, "codex_home"),
+    codexHome: codexHomeFor(ROOT),
     workspace: resolve(ROOT, "workspace"),
     baseInstructions: BASE,
     developerInstructions: instr,

@@ -1,5 +1,6 @@
 // File read/write checks: unit checks on guards, parsers and the docx writer,
 // then live checks against the real model. Synthetic fixtures in a temp dir.
+import "./testHome"; // tests use codex_home_test/, not the user's codex_home/
 import { join } from "node:path";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readdirSync, readFileSync, symlinkSync } from "node:fs";
 import { tmpdir, homedir } from "node:os";
@@ -131,6 +132,7 @@ record("unit: /files set guard", [
   ["refuses home root", throws(() => validateFilesRoot(homedir(), ctx))],
   ["refuses AppData", throws(() => validateFilesRoot(join(homedir(), "AppData", "Local", "x"), ctx))],
   ["refuses codex_home", throws(() => validateFilesRoot(join(ROOT, "codex_home"), ctx))],
+  ["refuses codex_home_test", throws(() => validateFilesRoot(join(ROOT, "codex_home_test"), ctx))],
   ["refuses Windows", throws(() => validateFilesRoot(process.env.SystemRoot ?? "C:\\Windows", ctx))],
   ["accepts a normal folder", !throws(() => validateFilesRoot(join(TMP, "elsewhere"), ctx))],
 ]);

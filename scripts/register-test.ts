@@ -1,6 +1,7 @@
 // Employee register checks (plan P2): store and validation (unit), then the chat flow
 // against the real model (add, record documents, refuse sensitive data, look up, leave,
 // delete, declined writes). Synthetic data only.
+import "./testHome"; // tests use codex_home_test/, not the user's codex_home/
 import { confirmText } from "../src/engine/types";
 import { join } from "node:path";
 import { mkdtempSync, rmSync } from "node:fs";

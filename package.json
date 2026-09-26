@@ -7,6 +7,7 @@
   "scripts": {
     "start": "tsx src/cli.ts",
     "login": "tsx src/cli.ts --login",
+    "login:test": "tsx scripts/login-test.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p web",
     "gen:protocol": "codex app-server generate-ts --experimental --out src/protocol",
     "e2e": "tsx scripts/e2e.ts",

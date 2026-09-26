@@ -1,6 +1,7 @@
 // Voice checks (plan C): GPT-Live + client delegation to the HR assistant.
 // A synthetic microphone streams Windows-TTS questions (then silence) in real time.
 // Needs VOICE_OPENAI_API_KEY in .env, ffmpeg on PATH, and Windows speech voices.
+import "./testHome"; // tests use codex_home_test/, not the user's codex_home/
 import { join } from "node:path";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

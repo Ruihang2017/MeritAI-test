@@ -2,6 +2,7 @@ import { readFileSync, rmSync, statSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 import { createAssistant, ROOT, type Assistant } from "../assistant";
 import type { ReplyFormat } from "../basePrompt";
+import { allCodexHomes } from "../engine/codexHome";
 import { PendingConfirms } from "./confirms";
 import { launchCommand, openablePath, spawnLauncher, type Launcher, type OpenResult } from "./launch";
 import { stageUploads, type Upload } from "./uploads";
@@ -419,7 +420,7 @@ export class AssistantApp {
    */
   async attach(paths: string[]): Promise<AttachOutcome[]> {
     const out: AttachOutcome[] = [];
-    const forbidden = [this.a.paths.codexHome, this.a.paths.memoryRoot, join(this.a.paths.projectRoot, "src")];
+    const forbidden = [...allCodexHomes(this.a.paths.projectRoot), this.a.paths.memoryRoot, join(this.a.paths.projectRoot, "src")];
     for (const path of paths) {
       const r = attachToInbox(this.folders(), path, forbidden);
       if (r.kind === "file") {

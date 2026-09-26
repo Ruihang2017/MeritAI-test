@@ -102,6 +102,8 @@ Changes take effect from the next conversation (`/new`) or the next start.
 
 These run against the real model and use synthetic data only. Apart from `test:business`, the suites use a synthetic test business (`scripts/fixtures/business.ts`).
 
+Tests, `npm run eval` and the `ab:*` experiments use their own engine folder, `codex_home_test/` (gitignored), so their conversations never mix with yours. It has its own sign-in: run `npm run login:test` once (same account, a second device login). Our `config.toml` and skills are copied into it from `codex_home/` on every run.
+
 | Command | Covers |
 |---|---|
 | `npm run e2e` | Streaming, multi-turn, interrupt, no command execution |
@@ -129,7 +131,7 @@ After upgrading `codex`, run `npm run gen:protocol`, then all of the above.
 
 - **`files/`** is the business workspace: Jobs, Inbox, Outbox, Policies, and `.assistant/` with the business profile, the screening catalog and the employee register.
 - **`memory/`** holds per-user memory.
-- **`codex_home/sessions/`** holds conversation transcripts, which are deleted after 30 days.
+- **`codex_home/sessions/`** holds conversation transcripts, which are deleted after 30 days (the list of them is read from Codex's own index, `codex_home/state_5.sqlite`). Test and eval conversations go to `codex_home_test/` instead.
 
 All three are local and not in git. The chatbot is currently logged into a personal ChatGPT account, so **do not paste real candidate or employee data** until it uses an approved account.
 

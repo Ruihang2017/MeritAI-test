@@ -1,8 +1,10 @@
 // A/B: Codex's built-in base prompt vs our prompts/base.md, on office-style requests.
 // Each case runs in a fresh thread per variant. Writes full replies to a markdown report.
+import "./testHome"; // tests use codex_home_test/, not the user's codex_home/
 import { resolve } from "node:path";
 import { readFileSync, writeFileSync } from "node:fs";
 import { AppServerEngine } from "../src/engine/appServer";
+import { codexHomeFor } from "../src/engine/codexHome";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const read = (p: string) => readFileSync(resolve(ROOT, p), "utf8");
@@ -33,7 +35,7 @@ const rows: Row[] = [];
 
 for (const v of VARIANTS) {
   const e = new AppServerEngine({
-    codexBin: "codex", codexHome: resolve(ROOT, "codex_home"), workspace: resolve(ROOT, "workspace"),
+    codexBin: "codex", codexHome: codexHomeFor(ROOT), workspace: resolve(ROOT, "workspace"),
     baseInstructions: v.base, developerInstructions: DEV, clientVersion: "ab",
   });
   await e.start();

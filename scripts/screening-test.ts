@@ -1,5 +1,6 @@
 // Bulk screening checks (P1-P3): unit checks, the pipeline run by code, and the chat flow.
 // Synthetic resumes in a throwaway folder; real files/ is untouched.
+import "./testHome"; // tests use codex_home_test/, not the user's codex_home/
 import { join } from "node:path";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readdirSync, copyFileSync } from "node:fs";
 import { tmpdir } from "node:os";

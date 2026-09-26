@@ -1,8 +1,10 @@
 // A/B: standard vs "priority" (Fast) service tier. Variants are interleaved per rep
 // so both see the same network/server conditions. Fresh thread per request.
+import "./testHome"; // tests use codex_home_test/, not the user's codex_home/
 import { resolve } from "node:path";
 import { readFileSync } from "node:fs";
 import { AppServerEngine } from "../src/engine/appServer";
+import { codexHomeFor } from "../src/engine/codexHome";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const read = (p: string) => readFileSync(resolve(ROOT, p), "utf8");
@@ -18,7 +20,7 @@ const TIERS = ["default", "priority"] as const;
 const engines = new Map<string | undefined, AppServerEngine>();
 for (const t of TIERS) {
   const e = new AppServerEngine({
-    codexBin: "codex", codexHome: resolve(ROOT, "codex_home"), workspace: resolve(ROOT, "workspace"),
+    codexBin: "codex", codexHome: codexHomeFor(ROOT), workspace: resolve(ROOT, "workspace"),
     baseInstructions: read("prompts/base.md"), developerInstructions: read("prompts/developer.md"),
     serviceTier: t, clientVersion: "ab-tier",
   });

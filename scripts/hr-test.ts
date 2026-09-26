@@ -1,6 +1,7 @@
 // Broader HR scope checks (plan B): skill routing, bias handling in reviews,
 // ER escalation, termination drafts, wellbeing, policy + law, and no personal
 // data in work notes. Live against the real model; synthetic data only.
+import "./testHome"; // tests use codex_home_test/, not the user's codex_home/
 import { join } from "node:path";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

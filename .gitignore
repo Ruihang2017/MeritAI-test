@@ -21,3 +21,6 @@ eval/results/
 /web/dist/
 /workspace-demo/
 /memory-demo/
+
+# Test suites, evals and experiments (scripts/testHome.ts): its own sign-in and conversations.
+/codex_home_test/

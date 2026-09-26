@@ -1,6 +1,7 @@
 // Business profile, owner audience and drag-and-drop checks (plan P0): unit checks on the
 // profile store and attachment handling, then live checks against the real model.
 // Synthetic data only.
+import "./testHome"; // tests use codex_home_test/, not the user's codex_home/
 import { confirmText } from "../src/engine/types";
 import { join } from "node:path";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readdirSync } from "node:fs";

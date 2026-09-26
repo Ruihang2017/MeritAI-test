@@ -4,7 +4,8 @@
 import { join } from "node:path";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { ensureFolders } from "../src/files/folders";
+import { ensureFolders, validateFilesRoot } from "../src/files/folders";
+import { allCodexHomes, codexHomeFor } from "../src/engine/codexHome";
 import { BusinessStore, adviserLine, renderProfile, smallBusinessLine, EMPTY_PROFILE } from "../src/business/profile";
 import { CHECKLIST_URLS, TRAINING_AUTHORITIES, authoritiesFor, newStarterChecklist } from "../src/business/onboarding";
 import { leavingChecklist, leavingText, isApprenticeRole } from "../src/business/leaving";
@@ -563,6 +564,30 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["Windows: explorer, quoted verbatim", same(launchCommand("open", "C:\\a b\\R.docx", "win32"), { command: "explorer.exe", args: ['"C:\\a b\\R.docx"'], verbatim: true }) && same(launchCommand("reveal", "C:\\a b\\R.docx", "win32"), { command: "explorer.exe", args: ['/select,"C:\\a b\\R.docx"'], verbatim: true })],
     ["macOS open / open -R; Linux xdg-open (reveal: the folder)", same(launchCommand("reveal", "/u/R.docx", "darwin"), { command: "open", args: ["-R", "/u/R.docx"] }) && same(launchCommand("open", "/u/R.docx", "linux"), { command: "xdg-open", args: ["/u/R.docx"] }) && same(launchCommand("reveal", "/u/R.docx", "linux"), { command: "xdg-open", args: ["/u"] })],
   ], JSON.stringify({ launched, refused }).slice(0, 600));
+}
+
+// ------------------------------------------------------------ separate CODEX_HOME for tests
+{
+  const was = process.env.FX_CODEX_HOME;
+  delete process.env.FX_CODEX_HOME;
+  const product = codexHomeFor(ROOT);
+  process.env.FX_CODEX_HOME = "test";
+  const test = codexHomeFor(ROOT);
+  if (was === undefined) delete process.env.FX_CODEX_HOME;
+  else process.env.FX_CODEX_HOME = was;
+  const ctx = { projectRoot: ROOT, codexHome: product, memoryRoot: join(ROOT, "memory") };
+  const refused = (p: string) => {
+    try {
+      validateFilesRoot(p, ctx);
+      return false;
+    } catch {
+      return true;
+    }
+  };
+  record("separate CODEX_HOME for tests", [
+    ["default: codex_home/; FX_CODEX_HOME=test: codex_home_test/", product === join(ROOT, "codex_home") && test === join(ROOT, "codex_home_test")],
+    ["neither home can be the workspace (both hold credentials)", refused(join(ROOT, "codex_home_test")) && refused(join(ROOT, "codex_home", "x")) && allCodexHomes(ROOT).length === 2],
+  ]);
 }
 
 // ------------------------------------------------------------ attachments uploaded as bytes (a browser UI)

@@ -4,6 +4,7 @@
 // runs graded by a different judge model (or not graded) are re-graded without re-running.
 //
 //   npm run eval -- [--set core|regression|full] [--runs 2] [--concurrency 8] [--only <regex>] [--out eval/results/<name>] [--no-judge] [--rejudge-only]
+import "../scripts/testHome"; // tests use codex_home_test/, not the user's codex_home/
 import { confirmText } from "../src/engine/types";
 import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

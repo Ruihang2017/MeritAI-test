@@ -17,7 +17,7 @@ Users put a role's applications in **Jobs/<job>**, and loose documents in the **
   - a drive root;
   - the user profile root;
   - Windows, Program Files, ProgramData, AppData;
-  - `codex_home` (credentials), `memory/` and `src/`.
+  - `codex_home` and `codex_home_test` (credentials), `memory/` and `src/`.
 
 ## 2 Tools
 
@@ -42,7 +42,7 @@ A file dragged into the terminal arrives as its path: quoted if it has spaces, o
   - types: PDF, DOCX, TXT, MD, and images PNG, JPG, WEBP, GIF; at most 25 MB;
   - never overwrites: an identical file already there is reused, and a different file with the same name becomes `Name (2).ext`;
   - a file already in the Inbox is used in place;
-  - refused: other types, and anything inside `codex_home`, `memory/`, `src/` or `.assistant/`.
+  - refused: other types, and anything inside `codex_home` or `codex_home_test`, `memory/`, `src/` or `.assistant/`.
 - **The message:** each path is replaced with `[attached: "<name>" (in the Inbox)]`, and the model reads the file with `read_file`. Images are also sent as `localImage` input, so the model sees them directly. Tested: it read hours from a roster screenshot.
 - **Folders:** the CLI asks `[y/n]` to import the folder as a job (`importIntoJob`, the same code as `/import`). The path is replaced with `[imported folder as job "<job>" (N application file(s))]`.
 - **Refused or declined:** an unsupported file, or a folder the user chose not to import, is removed from the message with a note in the terminal. If nothing is left, nothing is sent to the model.

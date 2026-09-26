@@ -1,6 +1,7 @@
 import { mkdirSync, realpathSync, existsSync, statSync, readdirSync } from "node:fs";
 import { join, resolve, parse, dirname, sep, relative } from "node:path";
 import { homedir } from "node:os";
+import { allCodexHomes } from "../engine/codexHome";
 
 /**
  * Where users drop files for the assistant and where it saves documents:
@@ -160,7 +161,7 @@ export function validateFilesRoot(input: string, ctx: { projectRoot: string; cod
     [process.env.ProgramW6432, "Program Files"],
     [process.env.ProgramData, "ProgramData"],
     [join(home, "AppData"), "AppData"],
-    [ctx.codexHome, "the assistant's engine folder (contains credentials)"],
+    ...[ctx.codexHome, ...allCodexHomes(ctx.projectRoot)].map((d): [string, string] => [d, "the assistant's engine folder (contains credentials)"]),
     [ctx.memoryRoot, "the assistant's memory folder"],
     [join(ctx.projectRoot, "src"), "the assistant's source code"],
   ];

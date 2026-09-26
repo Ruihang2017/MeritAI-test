@@ -10,6 +10,8 @@ npm run eval:report -- --out eval/results/<name>
 npm run eval:compare -- --before eval/results/<old> --after eval/results/<new>
 ```
 
+Runs use `codex_home_test/` (its own sign-in: `npm run login:test` once), not the owner's `codex_home/`, so eval conversations never appear in the chat history.
+
 **Sets** (`eval/sets.ts`):
 
 - **`core`** (the default): 70 scenarios × 2 runs = 140 conversations plus 140 judge calls: 60 stratified scenarios plus 10 held-out checks for the round 1 fixes (`eval/scenarios/round1.ts`, new situations of the same kind, so the fixes are tested for generality). Sized to finish within one Codex 5-hour usage window (owner, 2026-09-26). It includes every category and business, the high-risk areas, and the `regression` set.

@@ -1,5 +1,6 @@
 // Hiring checks (plan P1): the new starter compliance checklist (unit), then offers,
 // contracts and onboarding against the real model. Synthetic data only.
+import "./testHome"; // tests use codex_home_test/, not the user's codex_home/
 import { join } from "node:path";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

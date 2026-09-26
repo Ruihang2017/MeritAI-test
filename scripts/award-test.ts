@@ -1,6 +1,7 @@
 // Award and pay checks (plan P4): the award-finder skill against the real model.
 // Assistive only: likely award and level with reasons and official sources, no pay
 // calculations, always the Fair Work tools to confirm. Synthetic data only.
+import "./testHome"; // tests use codex_home_test/, not the user's codex_home/
 import { confirmText } from "../src/engine/types";
 import { join } from "node:path";
 import { mkdtempSync, rmSync } from "node:fs";

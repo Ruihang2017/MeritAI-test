@@ -23,6 +23,7 @@ import { leavingTools } from "./business/leaving";
 import { parentalLeaveTools } from "./business/parentalLeave";
 import { basePrompt, type ReplyFormat } from "./basePrompt";
 import { FakeEngine } from "./engine/fakeEngine";
+import { codexHomeFor } from "./engine/codexHome";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -70,7 +71,7 @@ export function createAssistant(opts: {
 
   const memoryRoot = opts.memoryRoot ?? resolve(ROOT, "memory");
   const mem = new UserMemory(memoryRoot, opts.userId);
-  const codexHome = resolve(ROOT, "codex_home");
+  const codexHome = codexHomeFor(ROOT);
   const folders = () => ensureFolders(mem.settings().filesRoot ?? defaultFilesRoot(ROOT));
   const business = () => new BusinessStore(folders().data);
 
