@@ -4,7 +4,8 @@
  * server pushes events (reply streaming, confirmation questions, progress).
  * Type-only: the web app imports these types, never server code.
  */
-import type { AppEvent, AttachOutcome, ChecklistItem, FormNote, FormResult, LeavingItem, LeavingReason } from "../app/app";
+import type { AppEvent, AttachOutcome, ChecklistItem, FormNote, FormResult, LeavingItem, LeavingReason, JobResults, ScreenOutcome } from "../app/app";
+import type { IngestSummary } from "../screening/pipeline";
 import type { DocumentId, Employee } from "../business/register";
 import type { ConfirmRequest } from "../engine/types";
 import type { Reminder } from "../business/reminders";
@@ -28,7 +29,7 @@ export interface Methods {
   reminders: { params: void; result: Reminder[] };
   skills: { params: void; result: { name: string; description: string }[] };
   /** Files chosen or dropped in the browser (base64), copied to the Inbox or offered as a job import. */
-  attach: { params: { files: { name: string; base64: string; relPath?: string }[] }; result: AttachOutcome[] };
+  attach: { params: { files: (UploadFile & { relPath?: string })[] }; result: AttachOutcome[] };
   // ---- staff (M2): the register forms; submitting is the confirmation, delete asks again (destructive)
   staff: { params: { includeLeft: boolean }; result: StaffRow[] };
   addEmployee: { params: { details: EmployeeFields; mayNeedVisaCheck: boolean; apprentice: boolean; constructionSite: boolean }; result: FormResult<{ employee: Employee; checklist: ChecklistItem[] }> };
@@ -36,6 +37,12 @@ export interface Methods {
   recordDocuments: { params: { id: number; documents: DocumentId[]; date: string }; result: FormResult<{ employee: Employee }> };
   markLeft: { params: { id: number; leftDate: string; reason: LeavingReason }; result: FormResult<{ employee: Employee; checklist: LeavingItem[] }> };
   removeEmployee: { params: { id: number }; result: FormResult<{ removed: boolean }> };
+  // ---- hiring (M3): screening runs in the app; criteria are confirmed through a `confirm` dialog; progress arrives as events
+  jobs: { params: void; result: { job: string; files: number; criteria: string }[] };
+  createJob: { params: { job: string; jd: UploadFile | null; applications: UploadFile[] }; result: { job: string; summary: IngestSummary; refused: { name: string; reason: string }[] } };
+  screen: { params: { job: string }; result: ScreenOutcome };
+  screenResults: { params: { job: string }; result: JobResults };
+  report: { params: { job: string; format: "docx" | "xlsx" | "both" }; result: string[] };
   // ---- files, profile, memory, settings (M3/M4)
   files: { params: void; result: WorkspaceFiles };
   profile: { params: void; result: { exists: boolean; profile: BusinessProfile; policies: { id: string; title: string; description: string }[] } };
@@ -68,6 +75,12 @@ export interface ShellState {
   attention: { overdue: number; soon: number };
   /** Open questions (after a reconnect the UI shows them again). */
   confirms: { id: string; req: ConfirmRequest }[];
+}
+
+/** A file sent from the browser (base64). */
+export interface UploadFile {
+  name: string;
+  base64: string;
 }
 
 export interface FileRow {

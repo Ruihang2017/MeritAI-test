@@ -89,8 +89,42 @@ export class FakeEngine implements Engine {
   transcript(): TranscriptEntry[] {
     return [...this.log];
   }
-  async runEphemeral(_prompt: string, opts: { outputSchema?: object }): Promise<EphemeralResult> {
+  async runEphemeral(prompt: string, opts: { outputSchema?: object }): Promise<EphemeralResult> {
     const props = (opts.outputSchema as { properties?: Record<string, unknown> } | undefined)?.properties ?? {};
+    // Screening (src/screening): demo criteria, a deterministic evaluation per resume, a short comparison.
+    if ("role" in props && "criteria" in props) {
+      const role = /Job description:\s*\n+\s*#*\s*(.+)/.exec(prompt)?.[1]?.trim().slice(0, 60) || "The role";
+      const criteria = [
+        { id: "E1", type: "essential", text: "Relevant experience in similar work (demo criterion)" },
+        { id: "E2", type: "essential", text: "Can work the hours the job needs (demo criterion)" },
+        { id: "E3", type: "essential", text: "Clear, reliable communication (demo criterion)" },
+        { id: "D1", type: "desirable", text: "A relevant certificate or training (demo criterion)" },
+        { id: "D2", type: "desirable", text: "Has trained or supervised others (demo criterion)" },
+      ];
+      return { text: JSON.stringify({ role, criteria }), webSearches: [] };
+    }
+    if ("is_resume" in props) {
+      const ids = ((props.criteria as { items?: { properties?: { id?: { enum?: string[] } } } })?.items?.properties?.id?.enum ?? []) as string[];
+      const resume = /<resume>\n([\s\S]*)\n<\/resume>/.exec(prompt)?.[1] ?? "";
+      let h = 0;
+      for (const ch of resume) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+      const statuses = ["met", "partly", "not_evidenced"] as const;
+      const isResume = resume.trim().length > 40;
+      const injected = /ignore (all )?(previous|prior) instructions|rank (this|me)( candidate)? first/i.test(resume);
+      return {
+        text: JSON.stringify({
+          is_resume: isResume,
+          summary: isResume ? `(Demo evaluation, not a real assessment.) ${resume.replace(/\s+/g, " ").slice(0, 90)}…` : "This file doesn't look like a resume.",
+          criteria: ids.map((id, i) => ({ id, status: isResume ? statuses[(h >> (i * 2)) % 3] : "not_evidenced", evidence: isResume ? "Demo evidence from the fake engine." : "" })),
+          strengths: isResume ? ["Demo strength"] : [],
+          gaps: isResume ? ["Demo gap"] : [],
+          questions: isResume ? ["Demo interview question"] : [],
+          flags: { suspicious_instructions: injected, different_role: isResume && h % 7 === 0 },
+        }),
+        webSearches: [],
+      };
+    }
+    if ("overview" in props) return { text: JSON.stringify({ overview: "(Demo comparison from the fake engine.)", notes: [] }), webSearches: [] };
     // search_official_sources expects {answer, sources}; session summaries expect {items}.
     if ("answer" in props)
       return {

@@ -11,6 +11,7 @@ import { Icon } from "./components/Icon";
 import { AppBar, AttentionPanel, Nav, type Page } from "./components/Shell";
 import { StaffPage } from "./components/Staff";
 import { FilesPage, MemoryPage, ProfilePage, SettingsPage } from "./components/Pages";
+import { HiringPage } from "./components/Hiring";
 
 export function App() {
   const api = useMemo(() => Api.fromLocation(), []);
@@ -47,8 +48,11 @@ function Shell({ api }: { api: Api }) {
   const turnsRef = useRef(turns);
   turnsRef.current = turns;
   const restored = useRef(false);
+  const pageRef = useRef<Page>("conversations");
+  pageRef.current = page;
   const [dialog, setDialog] = useState<{ id: string; req: ConfirmRequest } | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
+  const [lastProgress, setLastProgress] = useState<string | null>(null);
   const [login, setLogin] = useState<{ url: string | null; code: string | null; message: string } | null>(null);
 
   const refresh = useCallback(async () => {
@@ -115,7 +119,8 @@ function Shell({ api }: { api: Api }) {
             setState((s) => (s ? { ...s, confirms: s.confirms.filter((c) => c.id !== m.id) } : s));
             break;
           case "progress":
-            setToast(m.message);
+            setLastProgress(m.message);
+            if (pageRef.current !== "hiring") setToast(m.message);
             break;
           case "login":
             setLogin({ url: m.url, code: m.code, message: m.message });
@@ -219,7 +224,7 @@ function Shell({ api }: { api: Api }) {
         {page === "profile" && <ProfilePage api={api} onAsk={() => void send("Set up my business profile", undefined, [], "setup")} onChanged={() => void refresh()} />}
         {page === "memory" && <MemoryPage api={api} />}
         {page === "settings" && <SettingsPage api={api} login={login} onChanged={() => void refresh()} />}
-        {page === "hiring" && <Later page={page} />}
+        {page === "hiring" && <HiringPage api={api} progress={lastProgress} onAsk={(t) => (setDraft(t), setPage("conversations"))} />}
         {showPanel && <AttentionPanel reminders={reminders} onAsk={(t) => void send(t)} />}
       </div>
       {attentionOpen && !showPanel && (
@@ -266,33 +271,5 @@ function Shell({ api }: { api: Api }) {
         </div>
       )}
     </div>
-  );
-}
-
-const PAGE_NAMES: Record<Page, string> = {
-  conversations: "Conversations",
-  staff: "Staff",
-  hiring: "Hiring",
-  profile: "Profile & policies",
-  files: "Files",
-  memory: "Memory",
-  settings: "Settings",
-};
-
-function Later({ page }: { page: Page }) {
-  return (
-    <main className="main">
-      <div className="page-h">
-        <h1 className="h1" style={{ fontSize: 20 }}>
-          {PAGE_NAMES[page]}
-        </h1>
-      </div>
-      <div className="center dots">
-        <div className="card empty-card">
-          <b>Coming in a later milestone</b>
-          <span className="meta">This page is designed and will be built next. Meanwhile, ask the adviser in Conversations: it can do all of this already.</span>
-        </div>
-      </div>
-    </main>
   );
 }

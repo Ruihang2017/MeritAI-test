@@ -1,5 +1,5 @@
 import { readFileSync, rmSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, extname, join } from "node:path";
 import { createAssistant, ROOT, type Assistant } from "../assistant";
 import type { ReplyFormat } from "../basePrompt";
 import { PendingConfirms } from "./confirms";
@@ -24,7 +24,7 @@ import { newStarterChecklist, type ChecklistItem, type EmploymentType } from "..
 import { isApprenticeRole, leavingChecklist, LEAVING_REASONS, smallBusinessOf, type LeavingItem, type LeavingReason } from "../business/leaving";
 import { remindersFor, type Reminder } from "../business/reminders";
 import { looksLikePayCalculation, PAY_GUARD_WARNING } from "../business/payGuard";
-import { formatCriteria, ingestJob, jdFromFolder, proposeCriteria, purgeMissingJobs, screenJob, type IngestSummary, type Progress } from "../screening/pipeline";
+import { formatCriteria, ingestJob, jdFromFolder, proposeCriteria, purgeMissingJobs, screenJob, type IngestSummary, type Progress, type ScreenResult } from "../screening/pipeline";
 import { chatSummary, saveReports } from "../screening/report";
 import { LiveSession } from "../voice/liveSession";
 import { VoiceBridge } from "../voice/bridge";
@@ -75,6 +75,9 @@ export type AttachOutcome =
   | { path: string; kind: "not-imported" }
   | { path: string; kind: "refused"; reason: string }
   | { path: string; kind: "error"; message: string };
+
+/** A job's screening state for a UI: like ScreenResult, but the criteria may not exist yet. */
+export type JobResults = Omit<ScreenResult, "rubric"> & { rubric: ScreenResult["rubric"] | null };
 
 export type ScreenOutcome =
   | { status: "no-jd"; job: string }
@@ -604,6 +607,42 @@ export class AssistantApp {
     }
     const result = await screenJob(this.a.engine, cat, this.folders(), job, { onProgress: this.progress });
     return { status: "done", job, summary: chatSummary(result) };
+  }
+
+  /**
+   * A new job from a form (a browser UI: bytes, no paths): the JD is saved as
+   * "Job description.<ext>" so screening finds it, applications go in "applications/".
+   * Submitting the form is the owner's OK, so no import question is asked.
+   */
+  async importJobFiles(job: string, jd: Upload | null, applications: Upload[]): Promise<{ job: string; summary: IngestSummary; refused: { name: string; reason: string }[] }> {
+    const uploads: Upload[] = [
+      ...(jd ? [{ name: jd.name, data: jd.data, relPath: `job/Job description${extname(jd.name).toLowerCase()}` }] : []),
+      ...applications.map((a) => ({ name: a.name, data: a.data, relPath: `job/applications/${a.name}` })),
+    ];
+    if (!uploads.length) throw new Error("add a job description or at least one application");
+    const staged = stageUploads(uploads, MAX_ATTACH_BYTES);
+    try {
+      const refused = staged.refused.map((r) => ({ name: r.label.replace(/^job\/(applications\/)?/, ""), reason: r.reason }));
+      if (!staged.folders.length) return { job, summary: { job, applications: 0, newApplications: 0, unreadable: [], duplicates: [], jdFiles: [], truncated: false }, refused };
+      const r = await this.importJob(staged.folders[0].path, job);
+      return { ...r, refused };
+    } finally {
+      rmSync(staged.dir, { recursive: true, force: true });
+    }
+  }
+
+  /**
+   * The current screening state of a job (no new evaluations): the ingest summary, the
+   * criteria (null before any are drafted; possibly not confirmed yet), ranked candidates.
+   */
+  async screenResults(job: string): Promise<JobResults> {
+    const cat = this.a.catalog();
+    const rubric = cat.latestRubric(job);
+    if (!rubric || !rubric.confirmed) {
+      const ingest = await ingestJob(cat, this.folders(), job, () => {});
+      return { job, rubric: rubric ?? null, ingest, evaluatedThisRun: 0, failed: [], remaining: ingest.applications, ranked: [] };
+    }
+    return screenJob(this.a.engine, cat, this.folders(), job, { limit: 0 });
   }
 
   /** Saves a screening report from existing results to the Outbox; returns the file paths. */

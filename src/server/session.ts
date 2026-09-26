@@ -118,6 +118,26 @@ export class UiSession {
       return this.app.markLeft(int(p.id), str(p.leftDate, "leftDate", 10), p.reason);
     },
     removeEmployee: async (p) => this.app.removeEmployee(int(p?.id)),
+    jobs: async () => this.app.jobs().map(({ job, files, criteria }) => ({ job, files, criteria })),
+    createJob: async (p) => {
+      const job = str(p?.job, "job", 80).trim();
+      if (!job) throw new Error("give the job a name");
+      const file = (u: unknown) => {
+        const x = obj(u, "file");
+        return { name: str(x.name, "name", 300), data: Buffer.from(str(x.base64, "base64", 70_000_000), "base64") };
+      };
+      if (!Array.isArray(p?.applications) || p.applications.length > 200) throw new Error("applications must be a list (at most 200)");
+      return this.app.importJobFiles(job, p.jd ? file(p.jd) : null, p.applications.map(file));
+    },
+    screen: async (p) => {
+      this.busyCheck();
+      return this.app.screen(this.jobName(p?.job));
+    },
+    screenResults: async (p) => this.app.screenResults(this.jobName(p?.job)),
+    report: async (p) => {
+      if (!["docx", "xlsx", "both"].includes(p?.format)) throw new Error("format must be docx, xlsx or both");
+      return this.app.report(this.jobName(p.job), p.format);
+    },
     files: async () => this.app.workspaceFiles(),
     profile: async () => {
       const p = this.app.profile();
@@ -173,6 +193,13 @@ export class UiSession {
   }
 
   private tier: "fast" | "standard" | null = null;
+
+  /** Only an existing job's name (it becomes a folder name in the app). */
+  private jobName(v: unknown): string {
+    const job = str(v, "job", 80);
+    if (!this.app.jobs().some((j) => j.job === job)) throw new Error(`no job called "${job}"`);
+    return job;
+  }
 
   private async settings(): Promise<Settings> {
     const info = this.app.sessionInfo();
