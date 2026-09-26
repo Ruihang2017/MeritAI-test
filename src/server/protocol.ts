@@ -4,7 +4,8 @@
  * server pushes events (reply streaming, confirmation questions, progress).
  * Type-only: the web app imports these types, never server code.
  */
-import type { AppEvent, AttachOutcome } from "../app/app";
+import type { AppEvent, AttachOutcome, ChecklistItem, FormNote, FormResult, LeavingItem, LeavingReason } from "../app/app";
+import type { DocumentId, Employee } from "../business/register";
 import type { ConfirmRequest } from "../engine/types";
 import type { Reminder } from "../business/reminders";
 import type { SessionRecord } from "../memory/store";
@@ -27,6 +28,13 @@ export interface Methods {
   skills: { params: void; result: { name: string; description: string }[] };
   /** Files chosen or dropped in the browser (base64), copied to the Inbox or offered as a job import. */
   attach: { params: { files: { name: string; base64: string; relPath?: string }[] }; result: AttachOutcome[] };
+  // ---- staff (M2): the register forms; submitting is the confirmation, delete asks again (destructive)
+  staff: { params: { includeLeft: boolean }; result: StaffRow[] };
+  addEmployee: { params: { details: EmployeeFields; mayNeedVisaCheck: boolean; apprentice: boolean; constructionSite: boolean }; result: FormResult<{ employee: Employee; checklist: ChecklistItem[] }> };
+  updateEmployee: { params: { id: number; changes: Partial<EmployeeFields> }; result: FormResult<{ employee: Employee; notes: FormNote[] }> };
+  recordDocuments: { params: { id: number; documents: DocumentId[]; date: string }; result: FormResult<{ employee: Employee }> };
+  markLeft: { params: { id: number; leftDate: string; reason: LeavingReason }; result: FormResult<{ employee: Employee; checklist: LeavingItem[] }> };
+  removeEmployee: { params: { id: number }; result: FormResult<{ removed: boolean }> };
   openFile: { params: { path: string }; result: { ok: true } | { ok: false; error: string } };
   revealFile: { params: { path: string }; result: { ok: true } | { ok: false; error: string } };
 }
@@ -50,7 +58,29 @@ export interface ShellState {
   confirms: { id: string; req: ConfirmRequest }[];
 }
 
-export type ClientMessage = { [M in Method]: { id: number; method: M; params: Methods[M]["params"] } }[Method];
+/** The work details a form can set (the register refuses personal data such as TFN or date of birth). */
+export interface EmployeeFields {
+  name: string;
+  role: string;
+  employmentType: "full-time" | "part-time" | "casual" | "fixed-term";
+  startDate: string;
+  endDate?: string | null;
+  award?: string | null;
+  classification?: string | null;
+  probationEnd?: string | null;
+  visaExpiry?: string | null;
+  notes?: string | null;
+}
+
+/** An employee with what the Staff page shows next to them. */
+export type StaffRow = Employee & {
+  /** The earliest reminder for this person (or their last day once they left). */
+  next: { text: string; due: string; tone: "red" | "amber" | "n" } | null;
+  /** Starting documents expected for them, recorded or not (with when each is due). */
+  documentsExpected: { id: DocumentId; label: string; timing: string; recorded: string | null }[];
+};
+
+export type ClientMessage ={ [M in Method]: { id: number; method: M; params: Methods[M]["params"] } }[Method];
 
 export type ServerEvent =
   | { event: "turn"; turnId: string; ev: AppEvent }

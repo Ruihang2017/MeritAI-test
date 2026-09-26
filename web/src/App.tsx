@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Reminder } from "../../src/business/reminders";
 import type { SessionRecord } from "../../src/memory/store";
 import type { ShellState } from "../../src/server/protocol";
+import type { ConfirmRequest } from "../../src/engine/types";
+import { fmtDatesIn } from "./format";
 import { Api, type Connection } from "./api";
 import { addConfirm, applyEvent, setConfirm, turnsFromTranscript, type Turn } from "./conversation";
 import { ConversationPage } from "./components/Conversation";
@@ -44,6 +46,8 @@ function Shell({ api }: { api: Api }) {
   const turnsRef = useRef(turns);
   turnsRef.current = turns;
   const restored = useRef(false);
+  const [dialog, setDialog] = useState<{ id: string; req: ConfirmRequest } | null>(null);
+  const [draft, setDraft] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -95,16 +99,16 @@ function Shell({ api }: { api: Api }) {
             setTurns((ts) => ts.map((t) => (t.id === m.turnId && t.status === "running" ? applyEvent(t, { type: "turn_end", status: m.error ? "failed" : "completed", ...(m.error ? { error: m.error } : {}) }) : t)));
             void refresh();
             break;
-          case "confirm":
-            setTurns((ts) => {
-              const i = ts.map((t) => t.status).lastIndexOf("running");
-              const at = i >= 0 ? i : ts.length - 1;
-              if (at < 0) return ts;
-              return ts.map((t, j) => (j === at ? addConfirm(t, m.id, m.req) : t));
-            });
+          case "confirm": {
+            // During a reply the question is a card in it; otherwise (e.g. deleting from the Staff page) a dialog.
+            const i = turnsRef.current.map((t) => t.status).lastIndexOf("running");
+            if (i >= 0) setTurns((ts) => ts.map((t, j) => (j === i ? addConfirm(t, m.id, m.req) : t)));
+            else setDialog({ id: m.id, req: m.req });
             setState((s) => (s ? { ...s, confirms: [...s.confirms.filter((c) => c.id !== m.id), { id: m.id, req: m.req }] } : s));
             break;
+          }
           case "confirmWithdrawn":
+            setDialog((d) => (d?.id === m.id ? null : d));
             setTurns((ts) => ts.map((t) => setConfirm(t, m.id, "withdrawn")));
             setState((s) => (s ? { ...s, confirms: s.confirms.filter((c) => c.id !== m.id) } : s));
             break;
@@ -201,9 +205,11 @@ function Shell({ api }: { api: Api }) {
             onNew={() => void newConversation()}
             onResume={(id) => void resume(id)}
             resumedTitle={resumedTitle}
+            draft={draft}
+            onDraftUsed={() => setDraft(null)}
           />
         )}
-        {page === "staff" && <StaffPage api={api} onAsk={(t) => void send(t)} onChanged={() => void refresh()} />}
+        {page === "staff" && <StaffPage api={api} onAsk={(t) => (setDraft(t), setPage("conversations"))} onChanged={() => void refresh()} />}
         {page !== "conversations" && page !== "staff" && <Later page={page} />}
         {showPanel && <AttentionPanel reminders={reminders} onAsk={(t) => void send(t)} />}
       </div>
@@ -212,6 +218,31 @@ function Shell({ api }: { api: Api }) {
           <div className="scrim fill" onClick={() => setAttentionOpen(false)} />
           <div className="attention-drawer">
             <AttentionPanel reminders={reminders} onClose={() => setAttentionOpen(false)} onAsk={(t) => (setAttentionOpen(false), void send(t))} />
+          </div>
+        </>
+      )}
+      {dialog && (
+        <>
+          <div className="scrim fill" />
+          <div className="modal dialog" role="alertdialog" aria-modal="true" aria-label={dialog.req.title}>
+            <h2 className="h2" style={{ fontSize: 19 }}>
+              {fmtDatesIn(dialog.req.title)}
+            </h2>
+            {dialog.req.items?.length ? (
+              <ul className="items-plain">
+                {dialog.req.items.map((it, i) => (
+                  <li key={i}>{fmtDatesIn(it)}</li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="row-wrap">
+              <button type="button" className={`btn lg ${dialog.req.destructive ? "d" : "p"}`} onClick={() => (void answer(dialog.id, true), setDialog(null))}>
+                {dialog.req.destructive ? "Yes, delete" : "Yes"}
+              </button>
+              <button type="button" className="btn lg" autoFocus onClick={() => (void answer(dialog.id, false), setDialog(null))}>
+                {dialog.req.destructive ? "Keep" : "No"}
+              </button>
+            </div>
           </div>
         </>
       )}

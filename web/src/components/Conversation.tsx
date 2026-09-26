@@ -29,6 +29,9 @@ export function ConversationPage(props: {
   onNew: () => void;
   onResume: (threadId: string) => void;
   resumedTitle: string | null;
+  /** Text to put in the composer (e.g. "Ask the adviser" from the Staff page). */
+  draft: string | null;
+  onDraftUsed: () => void;
 }) {
   const { api, state, turns } = props;
   const running = turns.some((t) => t.status === "running");
@@ -105,7 +108,7 @@ export function ConversationPage(props: {
       </div>
 
       <div className="composer-wrap">
-        <Composer ref={composer} api={api} running={running} waiting={waiting} onSend={props.onSend} onStop={props.onStop} disabled={!state?.account.loggedIn} />
+        <Composer ref={composer} api={api} running={running} waiting={waiting} onSend={props.onSend} onStop={props.onStop} disabled={!state?.account.loggedIn} draft={props.draft} onDraftUsed={props.onDraftUsed} />
         <div className="foot">Replies can be wrong. Only a receipt means something was saved.</div>
       </div>
 
@@ -332,8 +335,8 @@ export interface ComposerHandle {
 }
 
 
-const Composer = forwardRef<ComposerHandle, { api: Api; running: boolean; waiting: boolean; disabled: boolean; onSend: (text: string, skill?: string, attachments?: string[]) => void; onStop: () => void }>(
-  function Composer({ api, running, waiting, disabled, onSend, onStop }, ref) {
+const Composer = forwardRef<ComposerHandle, { api: Api; running: boolean; waiting: boolean; disabled: boolean; onSend: (text: string, skill?: string, attachments?: string[]) => void; onStop: () => void; draft: string | null; onDraftUsed: () => void }>(
+  function Composer({ api, running, waiting, disabled, onSend, onStop, draft, onDraftUsed }, ref) {
     const [text, setText] = useState("");
     const [attached, setAttached] = useState<{ name: string; note: string; ok: boolean }[]>([]);
     const [uploading, setUploading] = useState(false);
@@ -343,6 +346,16 @@ const Composer = forwardRef<ComposerHandle, { api: Api; running: boolean; waitin
     const [warnPending, setWarnPending] = useState(false);
     const input = useRef<HTMLInputElement>(null);
     const area = useRef<HTMLTextAreaElement>(null);
+
+    useEffect(() => {
+      if (!draft) return;
+      setText(draft);
+      onDraftUsed();
+      setTimeout(() => {
+        area.current?.focus();
+        area.current?.setSelectionRange(draft.length, draft.length);
+      }, 0);
+    }, [draft, onDraftUsed]);
 
     const addFiles = async (files: File[]) => {
       if (!files.length) return;

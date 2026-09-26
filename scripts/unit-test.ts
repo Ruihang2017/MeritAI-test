@@ -21,9 +21,9 @@ import { basePrompt, MARKDOWN_SWAPS } from "../src/basePrompt";
 import { MAX_ATTACH_BYTES } from "../src/files/attach";
 import { correctUrl, transcriptOf } from "../src/engine/appServer";
 import { WebSocket } from "ws";
-import { UiSession } from "../src/server/session";
+import { UiSession, withoutName } from "../src/server/session";
 import { startUiServer, staticFile } from "../src/server/server";
-import type { ServerEvent, ShellState } from "../src/server/protocol";
+import type { Method, Methods, ServerEvent, ShellState } from "../src/server/protocol";
 import { parentalChecklist, serviceEligible, PARENTAL_URLS } from "../src/business/parentalLeave";
 import { confirmText, type Confirm, type ConfirmContext, type ConfirmRequest } from "../src/engine/types";
 
@@ -291,6 +291,40 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["socket: no token, other origin, other host refused", noToken === "403" && badOrigin === "403" && badHost === "403"],
     ["static: files inside dist only; routes get index.html", staticFile(dist, "/assets/a.js") === join(dist, "assets", "a.js") && staticFile(dist, "/../package.json") === null && staticFile(dist, "/%2e%2e/%2e%2e/package.json") === null && staticFile(dist, "/staff") === join(dist, "index.html") && staticFile(dist, "/missing.js") === null],
   ], JSON.stringify({ good, noToken, badOrigin, badHost, events: events.length, t2End }).slice(0, 600));
+}
+
+// ------------------------------------------------------------ browser UI: Staff page methods (M2)
+{
+  const f = ensureFolders(join(TMP, "ui-staff"));
+  const session = new UiSession({ engine: "fake" });
+  const app = new AssistantApp({ userId: "unit-staff", memoryRoot: join(TMP, "ui-staff-mem"), filesRoot: f.root, engine: "fake", ui: { confirm: session.confirm } });
+  session.attach(app);
+  let answer = false;
+  session.subscribe((e) => e.event === "confirm" && void session.handle({ id: 0, method: "answerConfirm", params: { id: e.id, yes: answer } }));
+  const call = <M extends Method>(method: M, params: Methods[M]["params"]) => session.handle({ id: 1, method, params } as never) as Promise<Methods[M]["result"]>;
+  const refuses = (p: Promise<unknown>) => p.then(() => false, () => true);
+  const added = await call("addEmployee", { details: { name: "Marco Silva", role: "Cleaner", employmentType: "casual", startDate: "2026-09-21" }, mayNeedVisaCheck: true, apprentice: false, constructionSite: false });
+  const pii = await call("addEmployee", { details: { name: "Jo Lee", role: "Cleaner", employmentType: "casual", startDate: "2026-09-21", notes: "TFN 123 456 782" }, mayNeedVisaCheck: false, apprentice: false, constructionSite: false });
+  const id = added.ok ? added.employee.id : 0;
+  const rows = await call("staff", { includeLeft: false });
+  const docs = await call("recordDocuments", { id, documents: ["contract", "ceis"], date: "2026-09-21" });
+  const badDoc = await refuses(call("recordDocuments", { id, documents: ["tfn", "passport" as never], date: "2026-09-21" }));
+  const badId = await refuses(call("updateEmployee", { id: "1" as never, changes: { role: "x" } }));
+  const badReason = await refuses(call("markLeft", { id, leftDate: "2026-10-09", reason: "fired" as never }));
+  const after = (await call("staff", { includeLeft: false }))[0];
+  answer = false;
+  const kept = await call("removeEmployee", { id });
+  answer = true;
+  const gone = await call("removeEmployee", { id });
+  record("browser UI: staff methods", [
+    ["add returns the checklist (CEIS for a casual, VEVO when unknown)", added.ok && /Casual Employment Information Statement/.test(added.checklist.map((i) => i.task).join(" ")) && /VEVO/.test(added.checklist.map((i) => i.task).join(" "))],
+    ["personal data refused with a reason for the form", !pii.ok && /sensitive personal data/.test(pii.error)],
+    ["rows: expected documents with timing, next date without the name", rows[0]?.documentsExpected.some((d) => d.id === "ceis" && !d.recorded && d.timing.length > 0) && rows[0]?.next !== null && !rows[0]!.next!.text.includes("Marco Silva")],
+    ["record documents: recorded dates show on the row", docs.ok && after.documentsExpected.filter((d) => d.recorded === "2026-09-21").length === 2],
+    ["bad ids, document ids and reasons refused before the app", badDoc && badId && badReason],
+    ["delete asks (destructive): no keeps, yes removes", kept.ok && !kept.removed && gone.ok && gone.removed && (await call("staff", { includeLeft: true })).length === 0],
+    ["withoutName", withoutName("Probation ends 2026-10-02: Leo Tran (Cleaner)", "Leo Tran") === "Probation ends 2026-10-02" && withoutName("Starting paperwork not recorded in the register for Priya Nair (Cleaner)", "Priya Nair") === "Starting paperwork not recorded in the register"],
+  ], JSON.stringify({ added: added.ok, pii, rows: rows[0]?.next }).slice(0, 500));
 }
 
 // ------------------------------------------------------------ shortened links corrected, others left flagged
