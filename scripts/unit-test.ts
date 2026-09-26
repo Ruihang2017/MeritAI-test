@@ -49,6 +49,11 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   const text = leavingText({ reason: "resignation", apprentice: false, states: [] });
   const casual = leavingChecklist({ reason: "resignation", apprentice: false, states: ["QLD"], casual: true }).map((x) => x.task).join(" | ");
   const ftcis = newStarterChecklist({ employmentType: "fixed-term", mayNeedVisaCheck: false, smallBusiness: true }).map((x) => x.task).join(" | ");
+  const casualStart = newStarterChecklist({ employmentType: "casual", mayNeedVisaCheck: false, smallBusiness: true }).map((x) => x.task).join(" | ");
+  const tasks = (o: Parameters<typeof leavingChecklist>[0]) => leavingChecklist(o).map((x) => x.task).join(" | ");
+  const sbDismiss = tasks({ reason: "dismissal", apprentice: false, states: ["NSW"], smallBusiness: true });
+  const bigDismiss = tasks({ reason: "dismissal", apprentice: false, states: ["NSW"], smallBusiness: false });
+  const unknownDismiss = tasks({ reason: "dismissal", apprentice: false, states: ["NSW"], smallBusiness: null });
   record("leaving checklist", [
     ["final pay timing (award, most within 7 days)", /within 7 days/.test(resign) && /at least monthly/.test(resign)],
     ["annual leave with loading; personal leave not paid out", /annual leave with annual leave loading/.test(resign) && /personal\/carer's leave is not paid out/.test(resign)],
@@ -62,6 +67,10 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["casual: no annual leave payout, no NES notice", /no paid annual leave/.test(casual) && !/annual leave with annual leave loading/.test(casual) && /don't get notice of termination/.test(casual) && /within 7 days/.test(casual)],
     ["final pay deadline must be stated, not only 'check the award'", /State the final pay deadline in the answer itself/.test(text)],
     ["FTCIS: when the contract is entered into", /when you enter into the fixed-term contract/.test(ftcis)],
+    ["Payday Super: 7 business days on the final pay", /Payday Super[^|]*7 business days/.test(resign) && /old quarterly/.test(resign)],
+    ["small business dismissal: the Code (warning, chance to improve)", /Small Business Fair Dismissal Code/.test(sbDismiss) && /warn them/.test(sbDismiss) && /reasonable chance to improve/.test(sbDismiss)],
+    ["the Code: not for resignations or 15+ employees; unknown size → conditional", !/Fair Dismissal Code/.test(resign) && !/Fair Dismissal Code/.test(bigDismiss) && /If the business has fewer than 15 employees/.test(unknownDismiss)],
+    ["casual new starter: NES leave casuals still get", /10 days' paid family and domestic violence leave/.test(casualStart) && /unpaid carer's leave/.test(casualStart) && !/10 days' paid family/.test(ftcis)],
   ]);
 }
 

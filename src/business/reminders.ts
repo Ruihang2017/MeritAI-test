@@ -119,7 +119,7 @@ export function computeReminders(opts: {
         title: `Probation ends ${e.probationEnd}: ${who}`,
         detail: apprentice
           ? "An apprentice's or trainee's probation follows their training contract and the state training authority's rules: check with the authority before extending or ending it, then confirm the outcome in writing."
-          : "Probation is set by the business, not by law, so this is not a legal deadline; good practice is to hold the review and confirm the outcome in writing before the end date. Employment usually continues if nothing is done.",
+          : "Probation is set by the business, not by law, so this is not a legal deadline; good practice is to hold the review and confirm the outcome in writing before the end date. Employment usually continues if nothing is done. Probation does not change unfair dismissal rules: protection generally starts after 6 months of employment (12 months with a small business employer).",
         employeeId: e.id,
         source: SRC.probation,
       });

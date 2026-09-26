@@ -46,6 +46,8 @@ const S = {
   atoLeaving: { title: "ATO: When a worker leaves your business", url: "https://www.ato.gov.au/businesses-and-organisations/hiring-and-paying-your-workers/engaging-a-worker/when-a-worker-leaves-your-business" },
   separation: { title: "Services Australia: Employment Separation Certificates for employers", url: "https://www.servicesaustralia.gov.au/employment-separation-certificates-for-employers" },
   casual: { title: "Fair Work: Casual employees", url: "https://www.fairwork.gov.au/starting-employment/types-of-employees/casual-employees" },
+  paydaySuper: { title: "ATO: Payment deadlines for Payday Super", url: "https://www.ato.gov.au/businesses-and-organisations/super-for-employers/paying-super-on-payday/payment-deadlines-for-payday-super" },
+  unfairDismissal: { title: "Fair Work: Unfair dismissal (Small Business Fair Dismissal Code)", url: "https://www.fairwork.gov.au/ending-employment/help-with-termination/unfair-dismissal" },
 };
 export { S as SOURCES };
 
@@ -164,6 +166,11 @@ export function newStarterChecklist(opts: {
       task: `Give the Casual Employment Information Statement (CEIS) at the same time as the FWIS. ${later}`,
       why: "Required for every casual employee; it explains casual employment and the pathway to permanent work.",
       source: S.ceis,
+    }, {
+      when: "on or before day one",
+      task: "Know what casuals get: a casual loading instead of paid annual and personal leave, but under the NES they still get 10 days' paid family and domestic violence leave a year, 2 days' unpaid carer's leave and 2 days' unpaid compassionate leave per occasion, and unpaid community service leave; long service leave depends on state law. Contracts and leave decisions must not leave these out.",
+      why: "These NES entitlements apply to casual employees too.",
+      source: S.casual,
     });
   }
   if (type === "fixed-term") {
@@ -209,8 +216,8 @@ export function newStarterChecklist(opts: {
     {
       when: "ongoing",
       task: "Pay super so it reaches the fund within 7 business days after each payday (20 business days for the first contribution for a new employee).",
-      why: "Payday super applies from 1 July 2026.",
-      source: S.superChoice,
+      why: "Payday Super applies from 1 July 2026; the old quarterly due dates no longer apply.",
+      source: S.paydaySuper,
     },
     {
       when: "ongoing",

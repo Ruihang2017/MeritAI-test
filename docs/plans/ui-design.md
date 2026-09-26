@@ -33,7 +33,7 @@ Colour follows the blue reference screenshot (colour only; layout and type are o
 | `blue-100` | `#DCE6FA` | Active nav background, user message bubble |
 | `blue-50` | `#EEF3FC` | Tool activity group, info banners, new-field highlight |
 | `slate-200` | `#CBD4E1` | Workspace bar background |
-| `ground` | `#F4F6F9` | Page background |
+| `ground` | `#EEF2F7` | Page background (deepened after the design review so white cards separate) |
 | `surface` | `#FFFFFF` | Cards, panels, composer |
 | `border` | `#D9DEE7` | Card and input borders |
 | `divider` | `#E7EAF0` | Row separators |
@@ -65,12 +65,12 @@ Minimum window 1024×700; designed at 1440×900; must also work at 1280×800.
 
 - **App bar** (48 px, `slate-200`):
   - business name (from the profile; "Your business" before setup) and the "Sample data" pill;
-  - status pills with a dot and a word: **Assistant** (Ready / Working / Not signed in: `account()`), **Speed** (Fast / Standard: the tier), **Workspace** (the files root folder name, full path in a tooltip: `folders()`).
+  - status pills with a dot and a word: **Adviser** (Ready / Working / Offline / Not signed in / Usage limit: `account()`), **Speed** (Fast / Standard: the tier), **Workspace** (the files root folder name, full path in a tooltip: `folders()`).
 - **Nav** (264 px, collapsible to 64 px icons):
   - primary "New conversation" button;
   - one list, no group headings (owner, 2026-09-26): Conversations, Staff, Hiring, Profile & policies, Files; a divider; Memory, Settings;
   - count badge on Conversations only when a confirm card is waiting; red badge on Staff when reminders are overdue;
-  - **Recent**: the latest 5 conversations (title + relative time: `history()`), "All conversations";
+  - **Recent**: the latest 3 conversations (title + relative time: `history()`), "All conversations";
   - footer: signed-in account line.
 - **Attention panel** (360 px): reminders (§5.2). Shown on Conversations; other pages show an "Attention · N" button instead (Staff shows each person's next date in its table). Below 1280 px it becomes an overlay drawer.
 - **Keyboard:** Ctrl+N new conversation, Ctrl+K quick switch (pages, employees, jobs, guides), Esc stops a running reply, Enter sends, Shift+Enter new line.
@@ -170,7 +170,7 @@ Data: `memories()` → preferences (text, explicit / proposed, date), task notes
 
 Data: `account()`, `login()`, `setTier()`, `setFilesRoot()` / `resetFilesRoot()`, `microphones()` / `setMicrophone()`.
 
-- **Account:** signed-in line, sign in / out (the login prompt shows a code and link).
+- **Account:** signed-in line, sign in / out (device code sign-in: the code, a Copy button and the sign-in link; see first run).
 - **Speed:** Fast / Standard, with the one-line trade-off.
 - **Workspace folder:** path, change, reset to default.
 - **Voice:** microphone, "about US$0.05 a minute, billed to the voice API key", "stops after 60 s of silence".
@@ -178,7 +178,7 @@ Data: `account()`, `login()`, `setTier()`, `setFilesRoot()` / `resetFilesRoot()`
 
 ### 5.9 First run
 
-1. **Sign in** (ChatGPT account) with a short explanation.
+1. **Sign in** (ChatGPT account) with a short explanation. The engine uses the device code flow (`chatgptDeviceCode`): show the sign-in link and the code in large mono with Copy, a waiting line with Cancel, and move on by itself when sign-in completes.
 2. **Workspace:** default folder or choose one; explains Inbox / Outbox.
 3. **Business setup conversation** (`setup()`): chat on the left, the profile filling in on the right with new fields highlighted, confirm card (kind `setup` / `profile`). "Skip for now" is always available; skipping shows a setup banner on the conversation page.
 
@@ -209,7 +209,7 @@ Data: `history()` → title, started; `resume(record)`.
 | **6.6 Banners** | pay calculation (amber), unverified links (amber, lists URLs), DRAFT letter note (neutral), setup incomplete (blue), sample data (amber pill), error (red, with retry) |
 | **6.7 File card and attachment chip** | attached, reused ("already in Inbox"), image, refused (with reason), import offered |
 | **6.8 Reminder card** | overdue, due this week, later; with and without employee; with source |
-| **6.9 Status pill** | dot + word: Ready, Working, Signed out, Fast, Standard |
+| **6.9 Status pill** | dot + word: Ready, Working, Offline, Not signed in, Usage limit, Fast, Standard |
 | **6.10 Band pill** | Strong, Partial, Weak, Not a resume |
 | **6.11 Document status** | recorded (date), not recorded yet (timing rule), not needed |
 | **6.12 Empty states** | one per page, with one action |
@@ -243,3 +243,26 @@ Mobile layouts, dark mode, Chinese interface chrome, multi-business switching, n
 2. Direct register and profile forms: **agreed** (owner, 2026-09-26) and designed as the main path. Built in the application layer on branch `app/ui-ready` (`addEmployee`, `updateEmployee`, `recordDocuments`, `markLeft`, `removeEmployee`, `updateProfile`; see `docs/architecture.md` there).
 3. Hiring shows **candidate names** by default (current behaviour); Candidate A/B/C only on request.
 4. The canvas is built in one pass (all four rounds of §8) and reviewed together.
+
+## 11 Design review and rules added (2026-09-26)
+
+The canvas was reviewed by an independent reviewer (all boards rendered and checked, text contrast checked by script). Fixes made and the rules they set:
+
+| Rule | Detail |
+|---|---|
+| Layers, not decoration | Ground `#EEF2F7`; nav and Attention panel on `#FAFBFD` with a 1 px border; cards, composer and drawers white; each page header is a white band with a soft edge. A fine dot grid (1 px, 24 px apart) only where there is no work: the new-conversation greeting, first run, empty states and the drop overlay. No photos or illustrations behind working content |
+| Targets | Buttons 44 px, dense actions 36 px, icon buttons 44 px; checkboxes and radios: the whole row with its label, at least 36 px high |
+| App bar width | Nothing in the app bar wraps. Below 1440 px it shortens: Attention shows only the overdue count, Search only the icon and Ctrl K |
+| Collapsed nav | Icons keep their count badges; each icon has a tooltip with its name (and count); the avatar stays at the bottom |
+| Drawers and scrims | Read-only detail drawers (employee, candidate) are 440 px, sit beside the list with no scrim, and clicking another row swaps them. Forms (480 px drawers), dialogs, quick switch and the Attention overlay drawer are modal: scrim, focus kept inside, Esc closes |
+| Attention button | Every page without the panel shows "Attention · 1 overdue · 1 this week" in the app bar (not in page headers); the panel as a drawer has a close button; its footnote is pinned |
+| Names | MeritAI is the product and the sender name on messages; in copy the assistant is "the adviser"; the app bar pill reads "Adviser: Ready / Working / Offline / Not signed in / Usage limit until …" |
+| Dates | The UI reformats every `YYYY-MM-DD` it receives (confirm items, receipts, tool summaries, reminder titles) as "Fri 9 Oct", with the year only when it is not this year |
+| Button order | The action first, the safe answer next to it (as on confirm cards); destructive actions red; "Mark as left instead" as a separate text action |
+| Colour | Red only for overdue, destructive and errors; "needs a job description" and similar are amber |
+| First run | App bar shows only the logo, "Your business", sample data and sign-in state; the nav hides Recent |
+| Recent | The latest 3 conversations in the nav (height), including at 1280 x 800; the rest in Conversations |
+
+New states drawn after the review: usage limit (full page) and "when the adviser can't answer" (limit, not starting, sign-in expired, what still works), sending while a card waits, guides menu, conversation menu, quick switch, Attention drawer, staff row menu / edit / delete / after adding / after recording / people who left / loading, hiring new job / more to screen / report saved / flagged candidate, files Inbox, voice states, dialogs, empty and error states.
+
+Needs app or core work, shown on the canvas as designed but not built yet: voice Mute (the voice API has only stop), sign-in details as data (`login()` passes one text line today; the sign-in page needs the link and the code separately), the usage-limit reset time (shown only if the engine reports it), reformatting dates on the client, register write forms (built on 2026-09-26), everything on the Later board.

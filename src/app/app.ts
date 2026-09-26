@@ -21,7 +21,7 @@ import type { DocumentId, Employee } from "../business/register";
 import { checkDocuments, checkEmployeeChanges, checkNewEmployee, fixedTermEndChanged, FIXED_TERM_OWNER_NOTE, type FormNote } from "../business/registerOps";
 import { checkProfilePatch } from "../business/tools";
 import { newStarterChecklist, type ChecklistItem, type EmploymentType } from "../business/onboarding";
-import { isApprenticeRole, leavingChecklist, LEAVING_REASONS, type LeavingItem, type LeavingReason } from "../business/leaving";
+import { isApprenticeRole, leavingChecklist, LEAVING_REASONS, smallBusinessOf, type LeavingItem, type LeavingReason } from "../business/leaving";
 import { remindersFor, type Reminder } from "../business/reminders";
 import { looksLikePayCalculation, PAY_GUARD_WARNING } from "../business/payGuard";
 import { formatCriteria, ingestJob, jdFromFolder, proposeCriteria, purgeMissingJobs, screenJob, type IngestSummary, type Progress } from "../screening/pipeline";
@@ -460,7 +460,8 @@ export class AssistantApp {
     if (!c.ok) return { ok: false, error: c.error };
     if (!c.changes.leftDate) return { ok: false, error: "leftDate is required (YYYY-MM-DD)" };
     const employee = this.a.register().update(c.current.id, c.changes);
-    const checklist = leavingChecklist({ reason, apprentice: isApprenticeRole(employee.role), casual: employee.employmentType === "casual", states: this.a.business().get().states });
+    const p = this.a.business().get();
+    const checklist = leavingChecklist({ reason, apprentice: isApprenticeRole(employee.role), casual: employee.employmentType === "casual", states: p.states, smallBusiness: smallBusinessOf(p.headcount) });
     return { ok: true, employee, lines: c.lines, checklist };
   }
 

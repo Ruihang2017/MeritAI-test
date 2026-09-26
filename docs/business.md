@@ -236,6 +236,19 @@ Deferred to a later round (owner to decide, see the conversation of 2026-09-26):
 - procedural fairness in warning letters;
 - state schemes.
 
+### Round 3 (2026-09-26, legal knowledge; not yet evaluated with the model)
+
+Chosen by the owner from the round 2 list (★1-★5). Facts checked on ato.gov.au and fairwork.gov.au on 2026-09-26 (the Code from Fair Work's copy of the Small Business Fair Dismissal Code).
+
+| Topic | Change |
+|---|---|
+| **Payday Super** (from 1 July 2026): super guarantee must reach the fund within 7 business days after payday (20 for a new employee's first contribution) | Leaving checklist: a separate super item with the deadline. The new starter item now cites the ATO's payment deadlines page. `developer.md`: never give the old quarterly due dates |
+| **Casual leave entitlements** (NES): 10 days of paid family and domestic violence leave a year; 2 days of unpaid carer's leave and 2 of unpaid compassionate leave per occasion; unpaid community service leave | New starter checklist for casuals lists them. `developer.md`: never leave them out of a casual contract or answer |
+| **Small Business Fair Dismissal Code** | Leaving checklist, reason "dismissal": with fewer than 15 employees (or unknown size, worded conditionally), except for serious misconduct: <br>• give a valid reason; <br>• warn, preferably in writing; <br>• let them respond; <br>• give a reasonable chance to improve; <br>• keep the evidence. <br>`developer.md` says so whenever an owner wants to dismiss |
+| **Fair process in letters** | `developer.md` and `difficult-conversation`: the meeting invitation comes first (the concerns, no decision made, a chance to respond, a support person). The outcome letter is a separate draft for after their response. An apprentice stand-down doesn't change the training contract |
+| **Unsupported impressions in reviews** | `performance-review`: only concerns with a work-related example go in. Impressions are listed as "needs an example before it can go in" |
+| **Family and domestic violence leave on pay slips** | `developer.md`: must not appear on pay slips (record it as ordinary hours or another pay item). Keep it confidential and check payroll settings |
+
 ## 10 Tests
 
 `npm run test:business`:
