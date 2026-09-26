@@ -1,3 +1,4 @@
+import type * as React from "react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -5,7 +6,7 @@ import type { AttachOutcome } from "../../../src/app/app";
 import type { SessionRecord } from "../../../src/memory/store";
 import type { ShellState } from "../../../src/server/protocol";
 import type { Api } from "../api";
-import { sources, type Block, type Turn } from "../conversation";
+import { flaggedLinks, isOfficial, sources, UNREPORTED, type Block, type Turn } from "../conversation";
 import { dayLabel, fmtDatesIn, fmtTime } from "../format";
 import { Icon } from "./Icon";
 
@@ -101,14 +102,14 @@ export function ConversationPage(props: {
         <div className="thread-in">
           {turns.length === 0 && <Welcome resumed={props.resumedTitle} onPick={(t) => props.onSend(t)} demo={state?.engine === "fake"} />}
           {turns.map((t, i) => (
-            <TurnView key={t.id} turn={t} showDay={i === 0 || dayLabel(turns[i - 1].at) !== dayLabel(t.at)} onAnswer={props.onAnswer} api={api} />
+            <TurnView key={t.id} turn={t} showDay={i === 0 || dayLabel(turns[i - 1].at) !== dayLabel(t.at)} onAnswer={props.onAnswer} api={api} domains={state?.officialDomains ?? []} />
           ))}
           <div ref={bottom} />
         </div>
       </div>
 
       <div className="composer-wrap">
-        <Composer ref={composer} api={api} running={running} waiting={waiting} onSend={props.onSend} onStop={props.onStop} disabled={!state?.account.loggedIn} draft={props.draft} onDraftUsed={props.onDraftUsed} />
+        <Composer ref={composer} api={api} running={running} waiting={waiting} onSend={props.onSend} onStop={props.onStop} disabled={!state?.account.loggedIn} draft={props.draft} onDraftUsed={props.onDraftUsed} pending={state?.attachments ?? []} />
         <div className="foot">Replies can be wrong. Only a receipt means something was saved.</div>
       </div>
 
@@ -152,9 +153,10 @@ function Welcome({ resumed, onPick, demo }: { resumed: string | null; onPick: (t
   );
 }
 
-function TurnView({ turn, showDay, onAnswer, api }: { turn: Turn; showDay: boolean; onAnswer: (id: string, yes: boolean) => void; api: Api }) {
+function TurnView({ turn, showDay, onAnswer, api, domains }: { turn: Turn; showDay: boolean; onAnswer: (id: string, yes: boolean) => void; api: Api; domains: string[] }) {
   const [stepsOpen, setStepsOpen] = useState(false);
-  const src = sources(turn);
+  const src = sources(turn, domains);
+  const flagged = flaggedLinks(turn);
   const files = turn.steps.flatMap((s) => s.files ?? []);
   return (
     <>
@@ -165,6 +167,7 @@ function TurnView({ turn, showDay, onAnswer, api }: { turn: Turn; showDay: boole
           <span />
         </div>
       )}
+      {(turn.user.text || turn.user.attachments.length > 0) && (
       <div className="you">
         <span className="meta">You · {fmtTime(turn.at)}</span>
         {turn.user.attachments.map((a) => (
@@ -173,8 +176,9 @@ function TurnView({ turn, showDay, onAnswer, api }: { turn: Turn; showDay: boole
             <b style={{ color: "#1B1F27", fontWeight: 600 }}>{a}</b> in Inbox
           </span>
         ))}
-        <div className="bubble">{turn.user.text}</div>
+        {turn.user.text && <div className="bubble">{turn.user.text}</div>}
       </div>
+      )}
       <div className="adviser">
         <span className="av" aria-hidden="true">
           M
@@ -204,7 +208,7 @@ function TurnView({ turn, showDay, onAnswer, api }: { turn: Turn; showDay: boole
             </div>
           )}
           {turn.blocks.map((b, i) => (
-            <BlockView key={i} block={b} onAnswer={onAnswer} running={turn.status === "running"} last={i === turn.blocks.length - 1} />
+            <BlockView key={i} block={b} onAnswer={onAnswer} running={turn.status === "running"} last={i === turn.blocks.length - 1} linkState={(u) => (flagged.has(u) ? "unverified" : isOfficial(u, domains) ? "ok" : "other")} />
           ))}
           {turn.status === "running" && turn.blocks.length === 0 && (
             <div className="thinking">
@@ -244,12 +248,12 @@ function TurnView({ turn, showDay, onAnswer, api }: { turn: Turn; showDay: boole
   );
 }
 
-function BlockView({ block: b, onAnswer, running, last }: { block: Block; onAnswer: (id: string, yes: boolean) => void; running: boolean; last: boolean }) {
+function BlockView({ block: b, onAnswer, running, last, linkState }: { block: Block; onAnswer: (id: string, yes: boolean) => void; running: boolean; last: boolean; linkState: (url: string) => LinkState }) {
   switch (b.kind) {
     case "text":
       return (
         <div className="md">
-          <Markdown remarkPlugins={[remarkGfm]} skipHtml components={{ a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer noopener">{children}</a> }}>
+          <Markdown remarkPlugins={[remarkGfm]} skipHtml components={{ a: ({ href, children }) => <SafeLink href={href ?? ""} state={linkState(href ?? "")}>{children}</SafeLink>, img: ({ alt }) => <span className="meta">[image{alt ? `: ${alt}` : ""}]</span> }}>
             {fmtDatesIn(b.text)}
           </Markdown>
           {!b.done && running && last && <span className="caret" />}
@@ -282,11 +286,11 @@ function BlockView({ block: b, onAnswer, running, last }: { block: Block; onAnsw
             </div>
           )}
           {b.state === "yes" && (
-            <div className="receipt">
+            <div className={`receipt${b.receipt === UNREPORTED || !b.receipt ? " off" : ""}`}>
               <Icon name="check" size={18} stroke={2.2} />
               <span>
-                <b>{b.receipt ? `Saved to the ${KIND_LABEL[b.req.kind] ?? b.req.kind}` : "Saving…"}</b>
-                {b.receipt ? ` · ${receiptDetail(b.receipt)}` : ""}
+                <b>{b.receipt === UNREPORTED ? "You said yes" : b.receipt ? `Saved to the ${KIND_LABEL[b.req.kind] ?? b.req.kind}` : "Saving…"}</b>
+                {b.receipt === UNREPORTED ? ". No save was reported: check the reply, or the page it belongs to." : b.receipt ? ` · ${receiptDetail(b.receipt)}` : ""}
               </span>
             </div>
           )}
@@ -332,6 +336,29 @@ function BlockView({ block: b, onAnswer, running, last }: { block: Block; onAnsw
   }
 }
 
+/** A link in a reply: clickable only for official sources not flagged; otherwise the text and the real site, not clickable. */
+type LinkState = "ok" | "unverified" | "other";
+
+function SafeLink({ href, state, children }: { href: string; state: LinkState; children: React.ReactNode }) {
+  if (state === "ok")
+    return (
+      <a href={href} target="_blank" rel="noreferrer noopener" title={href}>
+        {children}
+      </a>
+    );
+  let host = href;
+  try {
+    host = new URL(href).host;
+  } catch {
+    /* not a URL: show as given */
+  }
+  return (
+    <span className="unlinked" title={href}>
+      {children} <span className="meta">({host}: {state === "unverified" ? "not checked, no source returned this page" : "not an official source"})</span>
+    </span>
+  );
+}
+
 /** "register: updated [3] Priya Nair" → "Priya Nair updated". */
 function receiptDetail(summary: string): string {
   const s = summary.replace(/^[a-z ]+:\s*/i, "").replace(/\[\d+\]\s*/, "");
@@ -344,8 +371,8 @@ export interface ComposerHandle {
 }
 
 
-const Composer = forwardRef<ComposerHandle, { api: Api; running: boolean; waiting: boolean; disabled: boolean; onSend: (text: string, skill?: string, attachments?: string[]) => void; onStop: () => void; draft: string | null; onDraftUsed: () => void }>(
-  function Composer({ api, running, waiting, disabled, onSend, onStop, draft, onDraftUsed }, ref) {
+const Composer = forwardRef<ComposerHandle, { api: Api; running: boolean; waiting: boolean; disabled: boolean; onSend: (text: string, skill?: string, attachments?: string[]) => void; onStop: () => void; draft: string | null; onDraftUsed: () => void; pending: string[] }>(
+  function Composer({ api, running, waiting, disabled, onSend, onStop, draft, onDraftUsed, pending }, ref) {
     const [text, setText] = useState("");
     const [attached, setAttached] = useState<{ name: string; note: string; ok: boolean }[]>([]);
     const [uploading, setUploading] = useState(false);
@@ -366,6 +393,16 @@ const Composer = forwardRef<ComposerHandle, { api: Api; running: boolean; waitin
       }, 0);
     }, [draft, onDraftUsed]);
 
+    // Files attached on the server (e.g. uploaded from the Files page) show too; removing one takes it off the next message.
+    const [hidden, setHidden] = useState<Set<string>>(new Set());
+    const pendingKey = pending.join(" ");
+    useEffect(() => setHidden(new Set()), [pendingKey]);
+    const chips = [...attached, ...pending.filter((n) => !hidden.has(n) && !attached.some((a) => a.name === n)).map((name) => ({ name, note: "in Inbox", ok: true }))];
+    const remove = async (a: { name: string; ok: boolean }) => {
+      setAttached((xs) => xs.filter((x) => x !== a && x.name !== a.name));
+      setHidden((h) => new Set([...h, a.name]));
+      if (a.ok) await api.call("detach", { name: a.name }).catch(() => null);
+    };
     const addFiles = async (files: File[]) => {
       if (!files.length) return;
       setUploading(true);
@@ -397,8 +434,9 @@ const Composer = forwardRef<ComposerHandle, { api: Api; running: boolean; waitin
         setWarnPending(true);
         return;
       }
-      onSend(t, skill ?? undefined, attached.filter((x) => x.ok).map((x) => x.name));
+      onSend(t, skill ?? undefined, [...new Set([...attached.filter((x) => x.ok).map((x) => x.name), ...pending])]);
       setText("");
+      setHidden(new Set(pending));
       setAttached([]);
       setSkill(null);
       setWarnPending(false);
@@ -417,7 +455,7 @@ const Composer = forwardRef<ComposerHandle, { api: Api; running: boolean; waitin
             </button>
           </div>
         )}
-        {(attached.length > 0 || uploading || skill) && (
+        {(chips.length > 0 || uploading || skill) && (
           <div className="row-wrap">
             {skill && (
               <span className="chip" style={{ background: "#EEF3FC", color: "#1446A6" }}>
@@ -428,11 +466,11 @@ const Composer = forwardRef<ComposerHandle, { api: Api; running: boolean; waitin
                 </button>
               </span>
             )}
-            {attached.map((a, i) => (
+            {chips.map((a, i) => (
               <span key={i} className="chip" style={a.ok ? undefined : { background: "#FCE8E6", color: "#7A1C15", borderColor: "#F1B8B2" }}>
                 <Icon name="file" size={15} />
                 <b style={{ fontWeight: 600 }}>{a.name}</b> {a.note}
-                <button type="button" className="x" aria-label="Remove attachment" onClick={() => setAttached(attached.filter((_, j) => j !== i))}>
+                <button type="button" className="x" aria-label="Remove attachment" onClick={() => void remove(a)}>
                   <Icon name="close" size={14} />
                 </button>
               </span>

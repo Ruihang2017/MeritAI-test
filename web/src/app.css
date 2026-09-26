@@ -1312,3 +1312,7 @@ button:disabled {
   color: #5f6878;
   flex-shrink: 0;
 }
+.unlinked {
+  text-decoration: underline dotted #a8b1c0;
+  text-underline-offset: 2px;
+}

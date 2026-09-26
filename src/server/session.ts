@@ -1,21 +1,33 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
 import type { AppEvent, AssistantApp } from "../app/app";
 import type { Confirm, ConfirmRequest } from "../engine/types";
 import { DOCUMENTS } from "../business/register";
 import { LEAVING_REASONS } from "../business/leaving";
+import { OFFICIAL_DOMAINS } from "../research/officialSources";
 import type { ClientMessage, Method, Methods, ServerEvent, Settings, ShellState } from "./protocol";
 
 /**
  * Connects UI messages to one AssistantApp: an allowlist of methods, the reply
  * stream as events, and confirmation questions answered from the browser.
  * No network code here (server.ts does that), so it is unit-tested directly.
+ *
+ * - One operation at a time (a reply, screening, an import, a report, switching
+ *   conversation or workspace, sign-in); others are refused until it ends.
+ * - Each question carries where it came from: a reply (its turnId), or a form action
+ *   (null: the UI shows a dialog). Requests run in an async context that says so;
+ *   tool calls of the real engine arrive outside it and belong to the running reply.
  */
 export class UiSession {
   private app!: AssistantApp;
   private readonly listeners = new Set<(ev: ServerEvent) => void>();
-  private readonly waiting = new Map<string, { req: ConfirmRequest; resolve: (yes: boolean) => void }>();
+  private readonly waiting = new Map<string, { req: ConfirmRequest; turnId: string | null; resolve: (yes: boolean) => void }>();
+  private readonly origin = new AsyncLocalStorage<{ turnId: string | null }>();
   private turn: string | null = null;
+  private op: string | null = null;
+  private tier: "fast" | "standard" | null = null;
+  private limit: { resetAt: string | null } | null = null;
 
   constructor(private readonly opts: { engine: "codex" | "fake" }) {}
 
@@ -23,7 +35,9 @@ export class UiSession {
   readonly confirm: Confirm = (req, ctx) =>
     new Promise<boolean>((resolve) => {
       const id = ctx?.id ?? randomUUID();
-      this.waiting.set(id, { req, resolve });
+      const store = this.origin.getStore();
+      const turnId = store ? store.turnId : this.turn;
+      this.waiting.set(id, { req, turnId, resolve });
       ctx?.signal.addEventListener(
         "abort",
         () => {
@@ -32,7 +46,7 @@ export class UiSession {
         },
         { once: true },
       );
-      this.emit({ event: "confirm", id, req });
+      this.emit({ event: "confirm", id, req, turnId });
     });
 
   readonly progress = (message: string) => this.emit({ event: "progress", message });
@@ -55,7 +69,27 @@ export class UiSession {
   async handle(msg: ClientMessage): Promise<unknown> {
     const fn = this.handlers[msg.method as Method] as ((p: unknown) => Promise<unknown>) | undefined;
     if (!fn || !Object.hasOwn(this.handlers, msg.method)) throw new Error(`unknown method: ${String(msg.method)}`);
-    return fn(msg.params);
+    // Questions asked while handling a request (delete, screening criteria, imports) are not part of a reply.
+    return this.origin.run({ turnId: null }, () => fn(msg.params));
+  }
+
+  /** What is running now, if anything (a reply or another operation). */
+  private running(): string | null {
+    if (this.turn || this.app.isBusy()) return "A reply is still running.";
+    if (this.op) return `${this.op} is still running.`;
+    return null;
+  }
+
+  /** Runs one operation that must not overlap with a reply or another operation. */
+  private async exclusive<T>(name: string, f: () => Promise<T>): Promise<T> {
+    const busy = this.running();
+    if (busy) throw new Error(busy);
+    this.op = name;
+    try {
+      return await f();
+    } finally {
+      this.op = null;
+    }
   }
 
   private readonly handlers: { [M in Method]: (p: Methods[M]["params"]) => Promise<Methods[M]["result"]> } = {
@@ -63,10 +97,12 @@ export class UiSession {
     send: async (p) => {
       const text = str(p?.text, "text", 20_000);
       const skill = p?.skill === undefined ? undefined : str(p.skill, "skill", 80);
-      if (this.turn || this.app.isBusy()) throw new Error("A reply is still running.");
       const turnId = str(p?.turnId, "turnId", 100);
+      const busy = this.running();
+      if (busy) throw new Error(busy);
       this.turn = turnId;
-      void this.run(turnId, p.mode === "setup" ? this.app.setup() : this.app.send(text, skill ? { skill } : {}));
+      // The reply's own questions (fake engine tools) belong to this turn.
+      this.origin.run({ turnId }, () => void this.run(turnId, p.mode === "setup" ? this.app.setup() : this.app.send(text, skill ? { skill } : {})));
       return { turnId };
     },
     stop: async () => {
@@ -79,31 +115,33 @@ export class UiSession {
       if (!w) return { ok: false };
       this.waiting.delete(id);
       w.resolve(p.yes === true);
+      // Other tabs close the same question.
+      this.emit({ event: "confirmAnswered", id, yes: p.yes === true });
       return { ok: true };
     },
-    newConversation: async () => {
-      this.busyCheck();
-      await this.app.newConversation();
-      return null;
-    },
+    newConversation: async () =>
+      this.exclusive("Starting a new conversation", async () => {
+        await this.app.newConversation();
+        return null;
+      }),
     history: async () => this.app.history(),
-    resume: async (p) => {
-      this.busyCheck();
-      const threadId = str(p?.threadId, "threadId", 100);
-      const record = (await this.app.history()).find((r) => r.threadId === threadId);
-      if (!record) throw new Error("That conversation is no longer stored.");
-      const r = await this.app.resume(record);
-      return { alreadyOpen: r.alreadyOpen };
-    },
+    resume: async (p) =>
+      this.exclusive("Opening a conversation", async () => {
+        const threadId = str(p?.threadId, "threadId", 100);
+        const record = (await this.app.history()).find((r) => r.threadId === threadId);
+        if (!record) throw new Error("That conversation is no longer stored.");
+        const r = await this.app.resume(record);
+        return { alreadyOpen: r.alreadyOpen };
+      }),
     transcript: async () => this.app.conversation(),
     reminders: async () => this.app.reminders(),
     skills: async () => this.app.skills().map((s) => ({ name: s.name, description: s.description })),
     attach: async (p) => {
       if (!Array.isArray(p?.files) || p.files.length > 200) throw new Error("files must be a list (at most 200)");
-      return this.app.attachBytes(
-        p.files.map((f) => ({ name: str(f?.name, "name", 300), data: Buffer.from(str(f?.base64, "base64", 70_000_000), "base64"), ...(f?.relPath ? { relPath: str(f.relPath, "relPath", 1000) } : {}) })),
-      );
+      const files = p.files.map((f) => ({ name: str(f?.name, "name", 300), data: Buffer.from(str(f?.base64, "base64", 70_000_000), "base64"), ...(f?.relPath ? { relPath: str(f.relPath, "relPath", 1000) } : {}) }));
+      return this.exclusive("Adding files", () => this.app.attachBytes(files));
     },
+    detach: async (p) => ({ detached: this.app.detach(str(p?.name, "name", 300)) }),
     staff: async (p) => this.app.staffOverview(p?.includeLeft === true),
     addEmployee: async (p) =>
       this.app.addEmployee(obj(p?.details, "details"), { mayNeedVisaCheck: p?.mayNeedVisaCheck !== false, apprentice: p?.apprentice === true ? true : undefined, constructionSite: p?.constructionSite === true }),
@@ -126,16 +164,19 @@ export class UiSession {
         return { name: str(x.name, "name", 300), data: Buffer.from(str(x.base64, "base64", 70_000_000), "base64") };
       };
       if (!Array.isArray(p?.applications) || p.applications.length > 200) throw new Error("applications must be a list (at most 200)");
-      return this.app.importJobFiles(job, p.jd ? file(p.jd) : null, p.applications.map(file));
+      const jd = p.jd ? file(p.jd) : null;
+      const apps = p.applications.map(file);
+      return this.exclusive("Importing applications", () => this.app.importJobFiles(job, jd, apps));
     },
     screen: async (p) => {
-      this.busyCheck();
-      return this.app.screen(this.jobName(p?.job));
+      const job = this.jobName(p?.job);
+      return this.exclusive(`Screening "${job}"`, () => this.app.screen(job));
     },
     screenResults: async (p) => this.app.screenResults(this.jobName(p?.job)),
     report: async (p) => {
       if (!["docx", "xlsx", "both"].includes(p?.format)) throw new Error("format must be docx, xlsx or both");
-      return this.app.report(this.jobName(p.job), p.format);
+      const job = this.jobName(p.job);
+      return this.exclusive("Writing the report", () => this.app.report(job, p.format));
     },
     files: async () => this.app.workspaceFiles(),
     profile: async () => {
@@ -152,32 +193,29 @@ export class UiSession {
       this.tier = p.tier;
       return this.settings();
     },
-    setWorkspace: async (p) => {
-      this.busyCheck();
-      if (p?.path === null) this.app.resetFilesRoot();
-      else this.app.setFilesRoot(str(p?.path, "path", 1000));
-      return this.settings();
-    },
-    login: async () => {
-      try {
-        await this.app.login((message) => {
-          const url = /https?:\/\/\S+/.exec(message)?.[0]?.replace(/[.,;]$/, "") ?? null;
-          const code = /code:?\s*([A-Z0-9]{3,}(?:-[A-Z0-9]{3,})*)/i.exec(message)?.[1] ?? null;
-          this.emit({ event: "login", url, code, message });
-        });
-        if ((await this.app.account()).loggedIn) await this.app.openSession();
-        return { ok: true };
-      } catch (e) {
-        return { ok: false, error: (e as Error).message };
-      }
-    },
+    setWorkspace: async (p) =>
+      this.exclusive("Changing the workspace", async () => {
+        if (p?.path === null) this.app.resetFilesRoot();
+        else this.app.setFilesRoot(str(p?.path, "path", 1000));
+        return this.settings();
+      }),
+    login: async () =>
+      this.exclusive("Signing in", async () => {
+        try {
+          await this.app.login((message) => {
+            const url = /https?:\/\/\S+/.exec(message)?.[0]?.replace(/[.,;]$/, "") ?? null;
+            const code = /code:?\s*([A-Z0-9]{3,}(?:-[A-Z0-9]{3,})*)/i.exec(message)?.[1] ?? null;
+            this.emit({ event: "login", url, code, message });
+          });
+          if ((await this.app.account()).loggedIn) await this.app.openSession();
+          return { ok: true };
+        } catch (e) {
+          return { ok: false, error: (e as Error).message };
+        }
+      }),
     openFile: async (p) => this.app.openFile(str(p?.path, "path", 2000)),
     revealFile: async (p) => this.app.revealFile(str(p?.path, "path", 2000)),
   };
-
-  private busyCheck(): void {
-    if (this.turn || this.app.isBusy()) throw new Error("A reply is still running.");
-  }
 
   private async run(turnId: string, events: AsyncIterable<AppEvent>): Promise<void> {
     let error: string | undefined;
@@ -194,9 +232,6 @@ export class UiSession {
       this.emit({ event: "turnDone", turnId, ...(error ? { error } : {}) });
     }
   }
-
-  private tier: "fast" | "standard" | null = null;
-  private limit: { resetAt: string | null } | null = null;
 
   /** Only an existing job's name (it becomes a folder name in the app). */
   private jobName(v: unknown): string {
@@ -229,13 +264,17 @@ export class UiSession {
       business: { name: p.profile.tradingName ?? p.profile.legalName ?? "Your business", needsSetup: this.app.needsSetup() },
       workspace: basename(f.root),
       workspacePath: f.root,
-      busy: this.turn !== null || this.app.isBusy(),
+      busy: this.running() !== null,
+      turnId: this.turn,
+      operation: this.op,
       tier: this.app.sessionInfo()?.serviceTier ?? null,
       hasConversation: this.app.hasConversation(),
       title,
       attention: this.app.attentionSummary(),
       usageLimit: this.limit,
-      confirms: [...this.waiting].map(([id, w]) => ({ id, req: w.req })),
+      attachments: this.app.pendingAttachments(),
+      officialDomains: OFFICIAL_DOMAINS,
+      confirms: [...this.waiting].map(([id, w]) => ({ id, req: w.req, turnId: w.turnId })),
     };
   }
 }

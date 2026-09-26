@@ -30,6 +30,8 @@ export interface Methods {
   skills: { params: void; result: { name: string; description: string }[] };
   /** Files chosen or dropped in the browser (base64), copied to the Inbox or offered as a job import. */
   attach: { params: { files: (UploadFile & { relPath?: string })[] }; result: AttachOutcome[] };
+  /** Takes a file back off the next message (it stays in the Inbox). */
+  detach: { params: { name: string }; result: { detached: boolean } };
   // ---- staff (M2): the register forms; submitting is the confirmation, delete asks again (destructive)
   staff: { params: { includeLeft: boolean }; result: StaffRow[] };
   addEmployee: { params: { details: EmployeeFields; mayNeedVisaCheck: boolean; apprentice: boolean; constructionSite: boolean }; result: FormResult<{ employee: Employee; checklist: ChecklistItem[] }> };
@@ -67,6 +69,10 @@ export interface ShellState {
   workspace: string;
   workspacePath: string;
   busy: boolean;
+  /** The reply running now (after a page reload the UI follows it again). */
+  turnId: string | null;
+  /** Another operation running now (screening, an import, ...), as words. */
+  operation: string | null;
   tier: string | null;
   hasConversation: boolean;
   /** The current conversation's title, when it has one. */
@@ -75,8 +81,12 @@ export interface ShellState {
   attention: { overdue: number; soon: number };
   /** Set when the last reply hit the ChatGPT plan usage limit (cleared by the next reply that works). */
   usageLimit: { resetAt: string | null } | null;
-  /** Open questions (after a reconnect the UI shows them again). */
-  confirms: { id: string; req: ConfirmRequest }[];
+  /** Files attached for the next message. */
+  attachments: string[];
+  /** Links to these sites (and their subdomains) are shown as official sources; other links are not clickable. */
+  officialDomains: string[];
+  /** Open questions (after a reconnect the UI shows them again); turnId null = not part of a reply (a dialog). */
+  confirms: { id: string; req: ConfirmRequest; turnId: string | null }[];
 }
 
 /** A file sent from the browser (base64). */
@@ -134,7 +144,9 @@ export type ServerEvent =
   | { event: "turn"; turnId: string; ev: AppEvent }
   /** The reply ended (after its turn_end), or failed before it started. */
   | { event: "turnDone"; turnId: string; error?: string }
-  | { event: "confirm"; id: string; req: ConfirmRequest }
+  | { event: "confirm"; id: string; req: ConfirmRequest; turnId: string | null }
+  /** Answered (in any tab): other tabs close it. */
+  | { event: "confirmAnswered"; id: string; yes: boolean }
   | { event: "confirmWithdrawn"; id: string }
   | { event: "progress"; message: string }
   /** Sign-in: open `url` and enter `code` (parsed from the engine prompt; `message` is the full text). */

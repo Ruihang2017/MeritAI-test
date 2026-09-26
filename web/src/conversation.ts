@@ -25,6 +25,29 @@ export interface Turn {
   status: "running" | "completed" | "interrupted" | "failed";
 }
 
+/** The tool activity that confirms a save, per kind of question (the tools' own display lines). */
+const RECEIPT: Partial<Record<ConfirmRequest["kind"], RegExp>> = {
+  register: /^register: (added|updated|deleted|\d+ item\(s\) recorded)/,
+  profile: /^profile saved/,
+  setup: /^profile saved/,
+  memory: /^memory saved/,
+};
+/** Receipt value for a "yes" whose save was never reported. */
+export const UNREPORTED = "\u0000unreported";
+
+/** Links to these domains (and subdomains) are official sources. */
+export function isOfficial(url: string, domains: string[]): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return new URL(url).protocol === "https:" && domains.some((d) => host === d || host.endsWith(`.${d}`));
+  } catch {
+    return false;
+  }
+}
+
+/** Links flagged as unverified in this turn. */
+export const flaggedLinks = (turn: Turn) => new Set(turn.blocks.flatMap((b) => (b.kind === "unverified" ? b.urls : [])));
+
 /** Applies one streamed event to a turn (returns a new turn). */
 export function applyEvent(turn: Turn, ev: AppEvent): Turn {
   const t: Turn = { ...turn, blocks: [...turn.blocks], steps: [...turn.steps] };
@@ -41,11 +64,9 @@ export function applyEvent(turn: Turn, ev: AppEvent): Turn {
       break;
     case "tool_activity": {
       t.steps.push({ summary: ev.summary, ...(ev.files ? { files: ev.files } : {}) });
-      // A register or profile change right after a "yes" is the receipt for that card.
-      const open = [...t.blocks].reverse().find((b): b is Extract<Block, { kind: "confirm" }> => b.kind === "confirm" && b.state === "yes" && !b.receipt);
-      if (open && /updated|added|saved|removed|recorded/i.test(ev.summary)) {
-        t.blocks = t.blocks.map((b) => (b === open ? { ...open, receipt: ev.summary } : b));
-      }
+      // The tool's own "saved" line for a card answered yes is its receipt; only the matching kind counts.
+      const open = [...t.blocks].reverse().find((b): b is Extract<Block, { kind: "confirm" }> => b.kind === "confirm" && b.state === "yes" && !b.receipt && RECEIPT[b.req.kind]?.test(ev.summary) === true);
+      if (open) t.blocks = t.blocks.map((b) => (b === open ? { ...open, receipt: ev.summary } : b));
       break;
     }
     case "skill_loaded":
@@ -69,7 +90,8 @@ export function applyEvent(turn: Turn, ev: AppEvent): Turn {
       break;
     case "turn_end":
       t.status = ev.status;
-      t.blocks = t.blocks.map((b) => (b.kind === "text" && !b.done ? { ...b, done: true } : b));
+      // A "yes" with no save reported by the end of the reply is not shown as saved.
+      t.blocks = t.blocks.map((b) => (b.kind === "text" && !b.done ? { ...b, done: true } : b.kind === "confirm" && b.state === "yes" && !b.receipt ? { ...b, receipt: UNREPORTED } : b));
       if (ev.status === "failed" && ev.error && !t.blocks.some((b) => b.kind === "error" || b.kind === "limit")) t.blocks.push({ kind: "error", message: ev.error });
       break;
     case "usage":
@@ -107,16 +129,16 @@ export function setConfirm(turn: Turn, id: string, state: "yes" | "no" | "withdr
   return { ...turn, blocks: turn.blocks.map((b) => (b.kind === "confirm" && b.id === id && b.state === "open" ? { ...b, state } : b)) };
 }
 
-/** Markdown links in the reply, for the sources row (unverified ones left out). */
-export function sources(turn: Turn): { title: string; url: string }[] {
-  const flagged = new Set(turn.blocks.flatMap((b) => (b.kind === "unverified" ? b.urls : [])));
+/** Official links in the reply, for the sources row (unverified and other sites left out). */
+export function sources(turn: Turn, domains: string[]): { title: string; url: string }[] {
+  const flagged = flaggedLinks(turn);
   const seen = new Set<string>();
   const out: { title: string; url: string }[] = [];
   for (const b of turn.blocks) {
     if (b.kind !== "text") continue;
     for (const m of b.text.matchAll(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g)) {
       const url = m[2];
-      if (flagged.has(url) || seen.has(url)) continue;
+      if (flagged.has(url) || seen.has(url) || !isOfficial(url, domains)) continue;
       seen.add(url);
       out.push({ title: m[1], url });
     }

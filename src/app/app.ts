@@ -379,6 +379,22 @@ export class AssistantApp {
   // ------------------------------------------------------------------ attachments (drag and drop)
 
   /** Attachments waiting for the next message. */
+  /** Names of the files attached for the next message (a UI shows them as chips). */
+  pendingAttachments(): string[] {
+    return this.pending.notes.flatMap((n) => {
+      const m = /^\[attached: "([^"]+)"/.exec(n);
+      return m ? [m[1]] : [];
+    });
+  }
+
+  /** Takes a file back off the next message (the file stays in the Inbox). */
+  detach(name: string): boolean {
+    const before = this.pending.notes.length;
+    this.pending.notes = this.pending.notes.filter((n) => !n.startsWith(`[attached: "${name}"`));
+    this.pending.images = this.pending.images.filter((p) => basename(p) !== name);
+    return this.pending.notes.length < before;
+  }
+
   hasPendingAttachments(): boolean {
     return this.pending.notes.length > 0;
   }

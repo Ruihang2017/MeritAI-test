@@ -404,6 +404,55 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   ], JSON.stringify({ created: created.summary, asked, screened: screened.status }).slice(0, 500));
 }
 
+// ------------------------------------------------------------ browser UI: review fixes (question origin, one operation at a time, detach, open allowlist)
+{
+  process.env.FX_FAKE_DELAY_MS = "3";
+  const f = ensureFolders(join(TMP, "ui-review"));
+  writeFileSync(join(f.inbox, "evil.lnk"), "not a real shortcut");
+  writeFileSync(join(f.inbox, "notes.md"), "# notes");
+  new Register(f.data).add(normaliseEmployee({ name: "Priya Nair", role: "Cleaner", employmentType: "part-time", startDate: "2025-01-06" }, true));
+  const session = new UiSession({ engine: "fake" });
+  const app = new AssistantApp({ userId: "unit-review", memoryRoot: join(TMP, "ui-review-mem"), filesRoot: f.root, engine: "fake", ui: { confirm: session.confirm }, launcher: async () => ({ ok: true }) as never });
+  session.attach(app);
+  await app.start();
+  await app.openSession();
+  const events: ServerEvent[] = [];
+  session.subscribe((e) => events.push(e));
+  const call = <M extends Method>(method: M, params: Methods[M]["params"]) => session.handle({ id: 1, method, params } as never) as Promise<Methods[M]["result"]>;
+  const until = (p: () => boolean) => new Promise<void>((ok) => { const t = setInterval(() => p() && (clearInterval(t), ok()), 5); });
+  // A reply's question carries its turnId; the state shows the running turn.
+  await call("send", { text: "Priya is resigning, last day 9 Oct", turnId: "r1" });
+  await until(() => events.some((e) => e.event === "confirm"));
+  const replyQ = events.find((e) => e.event === "confirm") as Extract<ServerEvent, { event: "confirm" }>;
+  const during = await call("state", undefined);
+  const busyOp = await call("newConversation", undefined).then(() => false, () => true);
+  await call("answerConfirm", { id: replyQ.id, yes: false });
+  await until(() => events.some((e) => e.event === "turnDone"));
+  // A form's question (delete) has no turn.
+  const deleting = call("removeEmployee", { id: 1 });
+  await until(() => events.filter((e) => e.event === "confirm").length === 2);
+  const formQ = events.filter((e) => e.event === "confirm")[1] as Extract<ServerEvent, { event: "confirm" }>;
+  await call("answerConfirm", { id: formQ.id, yes: false });
+  await deleting;
+  const answered = events.some((e) => e.event === "confirmAnswered" && e.id === formQ.id && e.yes === false);
+  // Attach, list, detach.
+  await call("attach", { files: [{ name: "cv.md", base64: Buffer.from("# cv (synthetic)").toString("base64") }] });
+  const pendingBefore = (await call("state", undefined)).attachments;
+  const detached = await call("detach", { name: "cv.md" });
+  const pendingAfter = (await call("state", undefined)).attachments;
+  const lnk = await call("openFile", { path: join(f.inbox, "evil.lnk") });
+  const md = await call("openFile", { path: join(f.inbox, "notes.md") });
+  await app.close();
+  record("browser UI: review fixes", [
+    ["a reply's question carries its turnId; the state shows the running turn", replyQ.turnId === "r1" && during.turnId === "r1" && during.confirms[0]?.turnId === "r1"],
+    ["one operation at a time: new conversation refused during a reply", busyOp],
+    ["a form's question has no turn (a dialog), answered → broadcast to other tabs", formQ.turnId === null && answered],
+    ["attachments listed in the state and detached", pendingBefore.includes("cv.md") && detached.detached && pendingAfter.length === 0],
+    ["open: documents only (a .lnk refused), markdown allowed", !lnk.ok && md.ok],
+    ["official domains in the state", (await Promise.resolve(during.officialDomains)).includes("fairwork.gov.au")],
+  ], JSON.stringify({ replyQ: replyQ.turnId, during: during.turnId, formQ: formQ.turnId, pendingBefore, lnk }).slice(0, 500));
+}
+
 // ------------------------------------------------------------ usage limit (the engine's error text → a structured event for the UI)
 {
   // Wording seen in the round 4 evaluation log (2026-09-26).

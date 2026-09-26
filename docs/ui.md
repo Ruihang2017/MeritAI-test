@@ -33,7 +33,9 @@ Other web pages in the same browser can reach `localhost`, so the server:
 - answers only allowlisted methods, with parameters checked (ids, document ids, leaving reasons, job names, sizes); business checks stay in the app layer;
 - serves static files only from `web/dist` (no path traversal), with a Content Security Policy (`self` only, plus Google Fonts), `nosniff`, no referrer, no framing.
 
-Markdown in replies is rendered without raw HTML; links open in a new tab with `noopener`.
+Markdown in replies is rendered without raw HTML or images. Only links to official sites (`OFFICIAL_DOMAINS`, sent in the state) that were not flagged are clickable (new tab, `noopener`); other links show their text and real site, not clickable, so a link planted through a resume cannot pass as a source. The source chips list official links only. "Open" starts documents, images and folders only (never shortcuts or programs in the workspace); "Show in folder" works for any file. The Vite dev server serves only `web/` and denies `codex_home`, memory, workspaces and sqlite files.
+
+**Consistency:** one operation at a time (a reply, screening, an import, a report, switching conversation or workspace, sign-in); another is refused with what is running. Each question says where it came from: a reply (its turnId; a card in that reply) or a form action (a dialog); answers are broadcast (`confirmAnswered`) so other tabs close them. A receipt shows only when the tool reports that kind of save; a "yes" with no save reported says so, not "Saved". After a page reload the running reply is followed again (Stop works) and its full text is reloaded when it ends. Removing an attachment chip takes the file off the next message (`detach`).
 
 ## 3 Protocol (`src/server/protocol.ts`)
 

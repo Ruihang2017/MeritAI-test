@@ -84,14 +84,17 @@ function Shell({ api }: { api: Api }) {
           if (entries.length && !turnsRef.current.length) setTurns(turnsFromTranscript(entries, new Date()));
         }
       }
-      // Questions still open on the server (e.g. after a reload) are shown again.
-      if (s.confirms.length)
-        setTurns((ts) => {
-          if (!ts.length) return ts;
-          let last = ts[ts.length - 1];
-          for (const c of s.confirms) if (!ts.some((t) => t.blocks.some((b) => b.kind === "confirm" && b.id === c.id))) last = addConfirm(last, c.id, c.req);
-          return [...ts.slice(0, -1), last];
-        });
+      // A reply still running on the server (e.g. after a reload): follow it again (its events and Stop).
+      if (s.turnId && !turnsRef.current.some((t) => t.id === s.turnId)) {
+        const id = s.turnId;
+        setTurns((ts) => (ts.some((t) => t.id === id) ? ts : [...ts, { id, at: new Date(), user: { text: "", attachments: [] }, steps: [], blocks: [], status: "running" }]));
+      }
+      // Questions still open on the server are shown again: in their reply, or as a dialog.
+      for (const c of s.confirms) {
+        const inTurn = c.turnId && turnsRef.current.some((t) => t.id === c.turnId);
+        if (inTurn || (c.turnId && c.turnId === s.turnId)) setTurns((ts) => ts.map((t) => (t.id === c.turnId ? addConfirm(t, c.id, c.req) : t)));
+        else setDialog((d) => d ?? { id: c.id, req: c.req });
+      }
       api.call("reminders").then(setReminders, () => null);
       api.call("history").then(setRecent, () => null);
     } catch {
@@ -118,18 +121,27 @@ function Shell({ api }: { api: Api }) {
           case "turn":
             setTurns((ts) => ts.map((t) => (t.id === m.turnId ? applyEvent(t, m.ev) : t)));
             break;
-          case "turnDone":
+          case "turnDone": {
             setTurns((ts) => ts.map((t) => (t.id === m.turnId && t.status === "running" ? applyEvent(t, { type: "turn_end", status: m.error ? "failed" : "completed", ...(m.error ? { error: m.error } : {}) }) : t)));
+            // A reply followed after a page reload missed its start: show the stored conversation instead.
+            const followed = turnsRef.current.find((t) => t.id === m.turnId && !t.user.text && !t.user.attachments.length);
+            if (followed) api.call("transcript").then((entries) => entries.length && setTurns(turnsFromTranscript(entries, followed.at)), () => null);
             void refresh();
             break;
+          }
           case "confirm": {
-            // During a reply the question is a card in it; otherwise (e.g. deleting from the Staff page) a dialog.
-            const i = turnsRef.current.map((t) => t.status).lastIndexOf("running");
-            if (i >= 0) setTurns((ts) => ts.map((t, j) => (j === i ? addConfirm(t, m.id, m.req) : t)));
+            // A reply's question is a card in that reply; any other (delete from Staff, screening criteria) a dialog.
+            if (m.turnId && turnsRef.current.some((t) => t.id === m.turnId)) setTurns((ts) => ts.map((t) => (t.id === m.turnId ? addConfirm(t, m.id, m.req) : t)));
             else setDialog({ id: m.id, req: m.req });
-            setState((s) => (s ? { ...s, confirms: [...s.confirms.filter((c) => c.id !== m.id), { id: m.id, req: m.req }] } : s));
+            setState((s) => (s ? { ...s, confirms: [...s.confirms.filter((c) => c.id !== m.id), { id: m.id, req: m.req, turnId: m.turnId }] } : s));
             break;
           }
+          case "confirmAnswered":
+            // Answered here or in another tab.
+            setDialog((d) => (d?.id === m.id ? null : d));
+            setTurns((ts) => ts.map((t) => setConfirm(t, m.id, m.yes ? "yes" : "no")));
+            setState((s) => (s ? { ...s, confirms: s.confirms.filter((c) => c.id !== m.id) } : s));
+            break;
           case "confirmWithdrawn":
             setDialog((d) => (d?.id === m.id ? null : d));
             setTurns((ts) => ts.map((t) => setConfirm(t, m.id, "withdrawn")));
