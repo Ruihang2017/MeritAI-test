@@ -130,6 +130,8 @@ export class AssistantApp {
     clientVersion?: string;
     /** Starts the system's open / reveal command (openFile, revealFile); tests pass a fake. */
     launcher?: Launcher;
+    /** "fake": scripted replies with the real tools (UI work without the model). */
+    engine?: "codex" | "fake";
   }) {
     this.userId = opts.userId;
     this.launcher = opts.launcher ?? spawnLauncher;
@@ -151,6 +153,7 @@ export class AssistantApp {
       format: opts.format,
       memoryRoot: opts.memoryRoot,
       clientVersion: opts.clientVersion,
+      engine: opts.engine,
       onLog: opts.ui.log,
       onProgress: opts.ui.progress,
     });

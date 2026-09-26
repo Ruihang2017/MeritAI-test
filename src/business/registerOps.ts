@@ -9,10 +9,31 @@ import { DOCUMENTS, normaliseEmployee, type DocumentId, type Employee, type Empl
 export type Checked<T> = ({ ok: true } & T) | { ok: false; error: string; duplicate?: Employee };
 
 /** One line per field that will be set, for confirmations and receipts. */
-export const describeFields = (o: Record<string, unknown>) =>
+/** Plain labels for the owner (confirmations, receipts): "Last day" rather than leftDate. */
+const LABELS: Record<string, string> = {
+  name: "Name",
+  role: "Role",
+  employmentType: "Employment type",
+  startDate: "Start date",
+  endDate: "Contract end date",
+  award: "Award",
+  classification: "Classification",
+  probationEnd: "Probation ends",
+  visaExpiry: "Visa or work rights expire",
+  status: "Status",
+  leftDate: "Last day",
+  notes: "Notes",
+};
+
+/** One line per field; with `current`, a change shows "old → new". */
+export const describeFields = (o: Record<string, unknown>, current?: Record<string, unknown>) =>
   Object.entries(o)
     .filter(([, v]) => v !== undefined)
-    .map(([k, v]) => `${k}: ${v === null ? "(cleared)" : String(v)}`);
+    .map(([k, v]) => {
+      const now = v === null ? "(cleared)" : String(v);
+      const was = current?.[k];
+      return `${LABELS[k] ?? k}: ${was !== undefined && was !== null && String(was) !== now ? `${String(was)} → ${now}` : now}`;
+    });
 
 export function checkNewEmployee(register: Register, raw: unknown): Checked<{ input: EmployeeInput; lines: string[] }> {
   let input: EmployeeInput;
@@ -36,7 +57,7 @@ export function checkEmployeeChanges(register: Register, id: number, raw: unknow
     return { ok: false, error: (err as Error).message };
   }
   if (!Object.keys(changes).length) return { ok: false, error: "nothing to change" };
-  return { ok: true, current, changes, lines: describeFields(changes) };
+  return { ok: true, current, changes, lines: describeFields(changes, current as unknown as Record<string, unknown>) };
 }
 
 export function checkDocuments(register: Register, id: number, documents: unknown, date: unknown): Checked<{ current: Employee; docs: DocumentId[]; date: string; lines: string[] }> {

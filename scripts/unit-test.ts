@@ -20,6 +20,10 @@ import { ROOT } from "../src/assistant";
 import { basePrompt, MARKDOWN_SWAPS } from "../src/basePrompt";
 import { MAX_ATTACH_BYTES } from "../src/files/attach";
 import { correctUrl } from "../src/engine/appServer";
+import { WebSocket } from "ws";
+import { UiSession } from "../src/server/session";
+import { startUiServer, staticFile } from "../src/server/server";
+import type { ServerEvent, ShellState } from "../src/server/protocol";
 import { parentalChecklist, serviceEligible, PARENTAL_URLS } from "../src/business/parentalLeave";
 import { confirmText, type Confirm, type ConfirmContext, type ConfirmRequest } from "../src/engine/types";
 
@@ -222,6 +226,71 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["visa check: VEVO for organisations, save the PDF", /save the VEVO result \(PDF\)/.test(txt(newStarterChecklist({ employmentType: "casual", mayNeedVisaCheck: true, smallBusiness: true }))) && isOfficialUrl("https://immi.homeaffairs.gov.au/visas/already-have-a-visa/check-visa-details-and-conditions/check-conditions-online/for-organisations")],
     ["leaving a sponsored worker: tell Home Affairs within 28 days; not for others", /within 28 calendar days/.test(txt(leavingChecklist({ reason: "resignation", apprentice: false, states: ["NSW"], sponsored: true }))) && !/Home Affairs/.test(txt(leavingChecklist({ reason: "resignation", apprentice: false, states: ["NSW"] })))],
   ], txt(app).slice(0, 600));
+}
+
+// ------------------------------------------------------------ browser UI: session (allowlist, reply events, confirmations) and server security
+{
+  process.env.FX_FAKE_DELAY_MS = "2";
+  const f = ensureFolders(join(TMP, "ui-files"));
+  new Register(f.data).add(normaliseEmployee({ name: "Priya Nair", role: "Cleaner", employmentType: "part-time", startDate: "2025-01-06" }, true));
+  const session = new UiSession({ engine: "fake" });
+  const app = new AssistantApp({ userId: "unit-ui", memoryRoot: join(TMP, "ui-mem"), filesRoot: f.root, format: "markdown", engine: "fake", ui: { confirm: session.confirm } });
+  session.attach(app);
+  await app.start();
+  await app.openSession();
+  const events: ServerEvent[] = [];
+  session.subscribe((e) => {
+    events.push(e);
+    // Answer the register question the way a user clicks "Yes, save".
+    if (e.event === "confirm") void session.handle({ id: 0, method: "answerConfirm", params: { id: e.id, yes: true } });
+  });
+  const refused = async (m: string) => session.handle({ id: 1, method: m, params: undefined } as never).then(() => false, () => true);
+  const done = (turnId: string) => new Promise<void>((ok) => { const t = setInterval(() => events.some((e) => e.event === "turnDone" && e.turnId === turnId) && (clearInterval(t), ok()), 5); });
+  await session.handle({ id: 2, method: "send", params: { text: "Priya is resigning, last day 9 Oct", turnId: "t1" } });
+  await done("t1");
+  const turn = events.flatMap((e) => (e.event === "turn" && e.turnId === "t1" ? [e.ev] : []));
+  const busyRefused = await (async () => {
+    await session.handle({ id: 3, method: "send", params: { text: "hello there, tell me about demo mode", turnId: "t2" } });
+    return session.handle({ id: 4, method: "send", params: { text: "again", turnId: "t3" } }).then(() => false, () => true);
+  })();
+  await new Promise((r) => setTimeout(r, 20));
+  await session.handle({ id: 5, method: "stop", params: undefined });
+  await done("t2");
+  const t2End = events.find((e) => e.event === "turn" && e.turnId === "t2" && e.ev.type === "turn_end");
+  const state = await session.handle({ id: 6, method: "state", params: undefined }) as ShellState;
+
+  const ui = await startUiServer({ session, staticDir: join(TMP, "no-dist") });
+  const tryWs = (path: string, headers: Record<string, string>) =>
+    new Promise<string>((r) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${ui.port}${path}`, { headers });
+      ws.on("open", () => (ws.close(), r("open")));
+      ws.on("unexpected-response", (_q, res) => r(String(res.statusCode)));
+      ws.on("error", (e) => r(e.message));
+    });
+  const own = { Origin: `http://127.0.0.1:${ui.port}` };
+  const good = await tryWs(`/ws?t=${ui.token}`, own);
+  const noToken = await tryWs("/ws", own);
+  const badOrigin = await tryWs(`/ws?t=${ui.token}`, { Origin: "https://evil.example" });
+  const badHost = await tryWs(`/ws?t=${ui.token}`, { ...own, Host: `evil.example:${ui.port}` });
+  await ui.close();
+  const dist = join(TMP, "dist");
+  mkdirSync(join(dist, "assets"), { recursive: true });
+  writeFileSync(join(dist, "index.html"), "<html></html>");
+  writeFileSync(join(dist, "assets", "a.js"), "");
+  await app.close();
+
+  record("browser UI server", [
+    ["unknown and inherited methods refused", (await refused("rm")) && (await refused("constructor")) && (await refused("__proto__"))],
+    ["reply streams as turn events, ends with turn_end", turn.some((e) => e.type === "text_delta") && turn.at(-1)?.type === "turn_end"],
+    ["register question pushed, answered from the UI, saved", events.some((e) => e.event === "confirm" && e.req.kind === "register") && app.staff(true).find((x) => x.name === "Priya Nair")?.status === "left"],
+    ["tool activity and sources come through", turn.some((e) => e.type === "tool_activity" && /leaving checklist/.test(e.summary))],
+    ["a second send while busy is refused", busyRefused],
+    ["stop ends the reply as interrupted", t2End?.event === "turn" && t2End.ev.type === "turn_end" && t2End.ev.status === "interrupted"],
+    ["state: fake engine, business name, no open questions", state.engine === "fake" && state.business.name === "Your business" && state.confirms.length === 0 && !state.busy],
+    ["socket: token + own origin accepted", good === "open"],
+    ["socket: no token, other origin, other host refused", noToken === "403" && badOrigin === "403" && badHost === "403"],
+    ["static: files inside dist only; routes get index.html", staticFile(dist, "/assets/a.js") === join(dist, "assets", "a.js") && staticFile(dist, "/../package.json") === null && staticFile(dist, "/%2e%2e/%2e%2e/package.json") === null && staticFile(dist, "/staff") === join(dist, "index.html") && staticFile(dist, "/missing.js") === null],
+  ], JSON.stringify({ good, noToken, badOrigin, badHost, events: events.length, t2End }).slice(0, 600));
 }
 
 // ------------------------------------------------------------ shortened links corrected, others left flagged
