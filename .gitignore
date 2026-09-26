@@ -5,14 +5,16 @@ codex_home/*
 !codex_home/config.toml
 !codex_home/skills/
 codex_home/skills/.system/
-workspace/*
+/workspace/*
 # Per-user runtime memory (preferences, work notes, session index).
-memory/
+/memory/
 # Local secrets
 .env
 # User files (Plan A default location)
-files/
+/files/
 # Evaluation results (synthetic data; large)
 eval/results/
 # Crash dumps from Git Bash
 *.stackdump
+# Agent worktrees
+.claude/worktrees/
