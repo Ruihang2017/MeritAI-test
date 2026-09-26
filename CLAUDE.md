@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-A CLI HR adviser for small business owners with no HR department ("tells them what to do and gets it done"). It covers the business profile, recruitment, onboarding, performance, difficult conversations / ER and offboarding. It is an internal POC, tested by the Coates HR team playing small business owners. TypeScript (Node 22+, `tsx`), wrapping a local `codex app-server` over stdio JSON-RPC. User docs: `README.md`. Design (as built): `docs/architecture.md` (layers, AssistantApp API), `docs/business.md` (profile, policies, hiring, register, reminders, award), `docs/screening.md`, `docs/memory.md`, `docs/research.md`, `docs/files.md`, `docs/voice.md`; manual test script: `docs/manual-test.md`. Agreed plans not yet built: `docs/plans/`.
+A CLI and browser-UI (MeritAI) HR adviser for small business owners with no HR department ("tells them what to do and gets it done"). It covers the business profile, recruitment, onboarding, performance, difficult conversations / ER and offboarding. It is an internal POC, tested by the Coates HR team playing small business owners. TypeScript (Node 22+, `tsx`), wrapping a local `codex app-server` over stdio JSON-RPC. User docs: `README.md`. Design (as built): `docs/architecture.md` (layers, AssistantApp API), `docs/business.md` (profile, policies, hiring, register, reminders, award), `docs/screening.md`, `docs/memory.md`, `docs/research.md`, `docs/files.md`, `docs/voice.md`, `docs/ui.md` (browser UI); manual test script: `docs/manual-test.md`. Agreed plans not yet built: `docs/plans/`.
 
 ## How we work
 
@@ -14,6 +14,8 @@ A CLI HR adviser for small business owners with no HR department ("tells them wh
 
 ```
 src/cli.ts                 terminal front end only: parses commands, renders data and events, answers confirmations
+src/server/                browser UI back end: main.ts (npm run ui), server.ts (127.0.0.1, token, Origin/Host checks, static web/dist), session.ts (method allowlist → AssistantApp), protocol.ts (types shared with web/)
+web/                       browser UI (React + Vite): components per page, tokens.css from the design canvas; see docs/ui.md
 src/app/app.ts             AssistantApp: the UI-independent application layer (session flows, attachments, screening, voice, guards); every front end uses it. See docs/architecture.md
 src/app/                   confirms.ts (pending, cancellable confirmations), uploads.ts (attachments as bytes → staging), launch.ts (open / reveal workspace files); form methods for the register and profile live in app.ts
 src/assistant.ts           createAssistant(): the one place the engine, prompts, business profile, policies, memory and tools are wired (the CLI and all tests use it)
@@ -21,6 +23,7 @@ src/basePrompt.ts          prompts/base.md for a reply format: plain (as the fil
 src/engine/rpc.ts          JSON-RPC over the app-server's stdio
 src/engine/appServer.ts    Engine implementation: threads, streaming, interrupt, client tools, ephemeral runs, resume
 src/engine/types.ts        engine-agnostic interface (ClientTool, EngineEvent, ...)
+src/engine/fakeEngine.ts   scripted engine for UI work without the model (FX_ENGINE=fake / npm run ui:fake): calls the real tools
 src/business/              profile.ts (business profile store + rendering), tools.ts (update_business_profile), policies.ts (Policies/ index + read_policy), onboarding.ts (new_starter_checklist: official items + verified URLs), register.ts + registerTools.ts + registerOps.ts (employee register, SQLite; checks shared by the tools and the forms), reminders.ts (compliance reminders + get_reminders), leaving.ts (leaving_checklist), parentalLeave.ts (parental_leave_checklist), payGuard.ts (flags pay arithmetic in replies)
 src/memory/                store.ts, context.ts, tools.ts, summarize.ts
 src/research/              officialSources.ts: isolated official-site research tool + OFFICIAL_DOMAINS allowlist
@@ -63,6 +66,7 @@ scripts/                   e2e, skills-test, memory-test, research-test, files-t
 | 2026-09-26 | Evaluation sized to one Codex 5-hour window: core set 70 scenarios (60 + 10 held-out round 1 checks) × 2 runs (owner); the full 200 only occasionally. Round 1 fixes from the first 114 runs (apprentices, leaving checklist, fixed-term limits, reminder wording, small business status, casual definition, accountant is not a legal referral, no pretext rejections); see docs/business.md §9. Deferred (owner to decide): overseas staff, under-18 employees, candidate document language |
 | 2026-09-26 | Evaluation before more features (owner): ~200 realistic owner scenarios, 9 synthetic businesses of different industries, states and sizes, 3 runs each, no voice; hard checks + a stronger judge model (gpt-6-sol: cheaper than astra, owner 2026-09-26); the owner covers the ChatGPT quota. Product code frozen during an evaluation run; fixes come after the report |
 | 2026-09-25 | Screening: bulk screening is a code-run workflow (judgement by the model, control flow by code). Folders: `Jobs/<job>/` (JD + applications, any subfolders), `Inbox/` (loose), `Outbox/`. Catalog: SQLite per files root; parse and evaluation cached by content hash; deleting a job folder purges its data. The user confirms the criteria first. Evaluation is blind, isolated, fixed schema; ranking is rule-based. Results go to the chat by default; a report only on request: Word (top 10) by default, Excel (everyone) only when asked (owner, 2026-09-25). Limits: 20 per run, 20 parallel (owner's POC setting). Reports show candidate names; Candidate A/B/C only on request |
+| 2026-09-26 | Frontend (owner): browser version first, desktop shell (Electron or Tauri) chosen later; the core stays TypeScript. React + Vite in `web/`, one local WebSocket to `src/server/` (127.0.0.1, one-time token, Origin and Host checks, method allowlist), one AssistantApp per process like the CLI. A fake engine (scripted, real tools, demo workspace with synthetic data) for UI work without Codex quota. Built M1–M4 on 2026-09-27 (`docs/ui.md`); voice in the browser and the shell are still open (`docs/plans/frontend.md`) |
 
 ## Constraints
 

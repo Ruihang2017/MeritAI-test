@@ -3,7 +3,7 @@
 The terminal is one front end. Everything a front end needs lives below it, so a desktop or web UI can be added without re-implementing behaviour.
 
 ```
-front ends      src/cli.ts (terminal)              [later: desktop UI, e.g. Electron/Tauri + this Node process]
+front ends      src/cli.ts (terminal)   src/server/ + web/ (browser UI, docs/ui.md)   [later: a desktop shell around the browser UI]
                     │ renders data and events, asks yes/no, reads input
 application     src/app/app.ts  AssistantApp       session flows, attachments, screening, voice, guards
                     │
@@ -22,20 +22,21 @@ engine          src/engine (Engine interface; AppServerEngine = local codex app-
   - In voice mode, questions are still declined at once and reported through `onConfirmSkipped`.
 - **Everything a turn produces is an `AppEvent`:**
   - the engine events: text deltas and done, tool activity, skill loaded, unverified links, links corrected, usage, errors, turn end;
-  - plus app warnings (`pay_calculation`).
+  - plus app events: warnings (`pay_calculation`) and `usage_limit` (the ChatGPT plan ran out; `resetAt` when the engine says).
   - `tool_activity` carries `files` (absolute paths) when a tool saved something, so a UI can offer "open".
 
 ## 2 AssistantApp API
 
 | Area | Methods |
 |---|---|
-| Account and session | `start()`, `login(onPrompt)`, `account()`, `openSession()` (with retention cleanup), `sessionInfo()`, `newConversation()` (saves work notes), `history()`, `resume(record)` (with the current memory), `hasConversation()`, `saveNotes()`, `close()` |
+| Account and session | `start()`, `login(onPrompt)`, `account()`, `openSession()` (with retention cleanup), `sessionInfo()`, `newConversation()` (saves work notes), `history()`, `resume(record)` (with the current memory), `conversation()` (the current conversation's messages from the start, via `Engine.readTranscript`; no model call), `hasConversation()`, `saveNotes()`, `close()` |
 | Conversation | `send(text, {skill, title})` → `AsyncIterable<AppEvent>`, `stop()` (also declines open confirmations), `isBusy()`, `setup()`, `remember(text)`, `skills()`, `resolveSkill(prefix)`, `setTier(name)` |
 | Confirmations | `pendingConfirms()` → `{id, req}[]`, `cancelPendingConfirms()` → how many were withdrawn |
 | Attachments | `attach(paths)` (files copied to the Inbox; folders offered as a job import), `attachBytes(files)` (a browser UI: `{name, data, relPath?}[]`, see below), `takeDroppedPaths(line)` (terminals: paths inside typed text), `hasPendingAttachments()`; attachments go with the next `send` |
 | Business | `needsSetup()`, `profile()`, `staff(includeLeft)`, `reminders()` |
 | Forms (no model) | `updateProfile(changes)`, `addEmployee(details, {mayNeedVisaCheck, apprentice})` → + new starter checklist, `updateEmployee(id, changes)` → + notes (fixed-term limits), `recordDocuments(id, docs, date)`, `markLeft(id, leftDate, reason)` → + leaving checklist, `removeEmployee(id)` (destructive confirm). Each returns `FormResult`: `{ok: true, lines, ...}` for the receipt or `{ok: false, error}` to show by the form. Same validation as the chat tools; submitting is the confirmation |
 | Memory | `memories()`, `forget(id)` |
+| Browser UI helpers | `workspaceFiles()` (Inbox, Outbox, Policies with titles, jobs), `workspaceIsDefault()`, `importJobFiles(job, jd, applications)` (a form: bytes, the JD saved as "Job description", no import question), `screenResults(job)` (the job's state without new evaluations; the criteria may be null) |
 | Files and jobs | `folders()`, `files()`, `setFilesRoot(path)`, `resetFilesRoot()`, `jobs()`, `importJob(path, job)`, `screen(job)` → `no-jd` / `not-confirmed` / `done` + summary, `report(job, format)` → saved paths, `openFile(path)` / `revealFile(path)` → `{ok: true}` or `{ok: false, error}` |
 | Voice | `microphones()`, `setMicrophone(device)`, `startVoice(handlers, audio?)` → controller with `stop()`. Handlers: `onRequest`, `onEvent`, `onSaid`, `onConfirmSkipped`, `onError`, `onEnded({reason, byUser, billedSeconds})`. `audio` defaults to the local mic and speaker (ffmpeg/ffplay); a UI can pass its own PCM16 24 kHz source and sink |
 
@@ -63,7 +64,7 @@ Constructor options:
 - **Formatting (provided):** `format: "markdown"` swaps the two raw-text lines of `prompts/base.md` for a rule allowing GitHub-flavoured markdown (headings, lists, bold, links to tool-returned URLs), in `src/basePrompt.ts`. `base.md` itself stays the plain version, and an edit that breaks the swap fails loudly. The UI still has to render the markdown safely, for example with no raw HTML.
 - **Uploads, opening files, cancellable confirmations (provided):** `attachBytes`, `openFile` / `revealFile`, and the confirmation id, signal and `pendingConfirms()`. The UI still decides how to show them.
 - **Audio:** for a browser-based UI, pass `audio` from the UI instead of ffmpeg.
-- **Transport:** how the UI talks to this Node process (Electron IPC, a local WebSocket, ...) is not chosen yet; the API above is plain async methods and callbacks.
+- **Transport (browser UI, decided 2026-09-26):** one local WebSocket (`src/server/`, see `docs/ui.md`). A desktop shell can keep it or use its own IPC; the API above is plain async methods and callbacks.
 - **Identity and multi-user:** one `AssistantApp` per user and process (desktop). A shared web server would also need authentication, and one app-server per user, before real data is used (see the constraints in `CLAUDE.md`).
 
 ## 4 Tests

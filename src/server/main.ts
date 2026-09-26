@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { cpSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { userInfo } from "node:os";
-import { AssistantApp } from "../app/app";
+import { AssistantApp, TIERS } from "../app/app";
 import { ROOT } from "../assistant";
 import { BusinessStore } from "../business/profile";
 import { Register } from "../business/register";
@@ -61,12 +61,18 @@ function demoWorkspace(): { filesRoot: string; memoryRoot: string } {
   return { filesRoot, memoryRoot };
 }
 
+/** As in the CLI: --tier beats FX_TIER; default fast (priority). */
+const tierName = value("--tier") ?? process.env.FX_TIER ?? "fast";
+const serviceTier = TIERS[tierName.toLowerCase()];
+if (!serviceTier) throw new Error(`unknown tier "${tierName}" (use fast or standard)`);
+
 const session = new UiSession({ engine: fake ? "fake" : "codex" });
 const demo = fake ? demoWorkspace() : null;
 const app = new AssistantApp({
   userId: fake ? "demo" : userId(),
   ui: { confirm: session.confirm, progress: session.progress },
   format: "markdown",
+  serviceTier,
   engine: fake ? "fake" : "codex",
   ...(demo ?? {}),
 });

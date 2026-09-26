@@ -1,0 +1,80 @@
+# Browser UI (MeritAI, as built)
+
+The same assistant as the CLI, in the browser, on this computer only. Built on 2026-09-26/27 (plan: `docs/plans/frontend.md`; design: `docs/plans/ui-design.md` and the design canvas). No desktop shell yet (Electron or Tauri comes later and reuses all of this).
+
+```
+browser  http://127.0.0.1:<port>/?t=<token>
+  web/          React 19 + TypeScript + Vite; plain CSS with the canvas tokens (web/src/tokens.css)
+     │  one WebSocket (/ws), JSON messages; types in src/server/protocol.ts (the web app imports types only)
+src/server/     main.ts (start), server.ts (HTTP + WebSocket, local security), session.ts (method allowlist → AssistantApp)
+     │
+AssistantApp (unchanged layering: behaviour stays in the app layer, the UI only renders)
+     │
+engine: codex app-server (default) or FakeEngine (FX_ENGINE=fake / --fake)
+```
+
+## 1 Run
+
+| Command | What |
+|---|---|
+| `npm run ui:build` | Builds `web/` into `web/dist` (needed before `npm run ui`) |
+| `npm run ui` | Real engine; same user, memory and workspace as the CLI (`--user`, `FX_USER`, `--tier`, `FX_TIER` as in the CLI); opens the browser |
+| `npm run ui:fake` | Fake engine and a demo workspace (`workspace-demo/`, `memory-demo/`, gitignored) seeded with the synthetic Wattle Lane Cleaning business, its policies and three synthetic employees |
+| `npm run ui:dev` | Vite dev server with hot reload (5173) proxying `/ws` to the server (5174), fake engine |
+
+Options: `--no-open`, `--port <n>`; demo: `--fresh` (an empty demo workspace, for the first-run screens), `FX_FAKE_SIGNED_OUT=1` (start signed out), `FX_FAKE_DELAY_MS` (streaming speed; tests use 0–2).
+
+## 2 Local security
+
+Other web pages in the same browser can reach `localhost`, so the server:
+- listens on 127.0.0.1 only;
+- makes a random token at each start; the socket needs it (`/ws?t=`). The page moves it from the address bar to `sessionStorage`;
+- accepts the socket only from its own Origin (or the Vite dev server in dev mode) and only with Host `127.0.0.1` or `localhost` (DNS rebinding);
+- answers only allowlisted methods, with parameters checked (ids, document ids, leaving reasons, job names, sizes); business checks stay in the app layer;
+- serves static files only from `web/dist` (no path traversal), with a Content Security Policy (`self` only, plus Google Fonts), `nosniff`, no referrer, no framing.
+
+Markdown in replies is rendered without raw HTML; links open in a new tab with `noopener`.
+
+## 3 Protocol (`src/server/protocol.ts`)
+
+Requests `{id, method, params}` → `{id, result}` or `{id, error}`. Pushed events:
+
+| Event | When |
+|---|---|
+| `turn {turnId, ev}` | Every `AppEvent` of a reply; the UI chooses the `turnId` (so no event arrives before it knows it) |
+| `turnDone {turnId, error?}` | The reply ended |
+| `confirm {id, req}` / `confirmWithdrawn {id}` | A structured question (`ConfirmRequest`); answered with `answerConfirm`. During a reply it is a card in it; otherwise (delete, screening criteria) a dialog |
+| `progress {message}` | Long work (screening, imports) |
+| `login {url, code, message}` | Sign-in: the device-code link and code, parsed from the engine's prompt |
+
+Methods: `state` (shell snapshot: account, business, workspace, busy, attention counts, usage limit, open questions), `send` (`mode: "setup"` runs the setup interview), `stop`, `answerConfirm`, `newConversation`, `history`, `resume`, `transcript`, `reminders`, `skills`, `attach`; Staff: `staff`, `addEmployee`, `updateEmployee`, `recordDocuments`, `markLeft`, `removeEmployee`; Hiring: `jobs`, `createJob`, `screen`, `screenResults`, `report`; `files`, `profile`, `updateProfile`, `memories`, `forget`, `settings`, `setTier`, `setWorkspace`, `login`, `openFile`, `revealFile`.
+
+## 4 Pages
+
+| Page | What it does |
+|---|---|
+| Conversations | Streaming markdown; the steps of a reply; confirm cards with receipts; official sources as chips; warnings (pay calculation, unverified links), errors, usage limit; stop (Esc); new conversation; history and resume (earlier messages shown again, also after a page reload); attachments (button or drag and drop into the Inbox); guides picker; "a change is waiting" when sending over an open card |
+| Attention | Reminders panel (≥ 1280 px) or an app-bar button and drawer on other pages |
+| Staff | Register table (search, type, people who left), row menu, detail drawer (dates, starting documents with timing), add and edit forms (errors shown by the form, e.g. personal data refused), new starter checklist after adding, fixed-term note after an end-date change, record documents, mark as left with the leaving checklist, delete (destructive dialog); "Ask the adviser" prefills the composer |
+| Hiring | Jobs, new job (JD + applications; submitting is the OK), steps, criteria confirmed in a dialog, results table (band, scores, flags), candidate drawer (criteria verdicts and evidence, strengths, gaps, questions, flags explained), Report menu (Word top 10, Excel everyone, candidate emails with the adviser) |
+| Profile & policies | Profile view and form (only changed fields sent; receipt "old → new"); policies list; set up with the adviser |
+| Files | Inbox, Outbox, Jobs, Policies; open, show in folder, ask about it; upload to the Inbox |
+| Memory | Preferences and work notes; forget (with a dialog) |
+| Settings | Account and sign-in (device code), speed, workspace folder, about |
+| First run | Sign in (device code with copy) → workspace folder → business (set up with the adviser, fill in the form, or skip) |
+
+Dates show as "Fri 9 Oct" (the year only when not this year), also inside replies and reminder titles, but never inside URLs.
+
+## 5 Fake engine (`src/engine/fakeEngine.ts`)
+
+For UI work without the model (the Codex quota is limited). Scripted replies picked by keywords call the **real** client tools, so confirmations, receipts, checklists and sources are the app's own. Scripts: someone resigning (register change to confirm), this week's reminders, final pay (official sources), "calculate" (pay warning), "link" (unverified link), "error", "limit" (usage limit), "remember …". Screening: demo criteria, a deterministic evaluation per resume (the hidden-instruction flag), a short comparison. It keeps the conversations of the process for history and resume. Never used unless asked.
+
+## 6 App-layer additions for the UI
+
+`conversation()` (the current conversation's messages from the start, via `Engine.readTranscript` = `thread/read` with turns; no model call), `workspaceFiles()`, `workspaceIsDefault()`, `importJobFiles(job, jd, applications)`, `screenResults(job)` (the job's state without new evaluations; criteria may not exist yet), the `usage_limit` AppEvent (`usageLimit()` reads the reset time from Codex's message), plain labels and "old → new" in register confirmations.
+
+## 7 Tests
+
+`npm run test:unit` (no model): the server protocol and local security (allowlist, token, Origin, Host, static paths), the reply stream, confirmations answered from the UI, stop, the Staff methods, files, profile, memory, settings, hiring with the fake engine, transcripts, usage-limit parsing. The pages were also checked in Chrome with the fake engine (all flows above), and the real engine was started to check the shell state, staff, settings and history without sending any message.
+
+Not built yet: voice in the browser (microphone as the audio source; paid, needs the owner's OK), the desktop shell, a real "Cancel" for sign-in, voice mute.

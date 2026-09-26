@@ -1,6 +1,6 @@
 # FX Chatbot (HR assistant POC)
 
-A CLI HR adviser for **small business owners with no HR department**. It tells them what to do and does as much of the work as it can. The AI engine is a local `codex app-server` with its own isolated configuration, running on the owner's own ChatGPT account. This is a proof of concept, tested internally by the HR team playing small business owners.
+An HR adviser for **small business owners with no HR department**, as a CLI and as a browser UI (MeritAI, `npm run ui`). It tells them what to do and does as much of the work as it can. The AI engine is a local `codex app-server` with its own isolated configuration, running on the owner's own ChatGPT account. This is a proof of concept, tested internally by the HR team playing small business owners.
 
 ## What it helps with
 
@@ -37,6 +37,19 @@ Environment variables:
 | `FX_SCREEN_LIMIT` / `FX_SCREEN_CONCURRENCY` | Resumes screened per run / in parallel (both default 20) |
 | `FX_VOICE_IDLE_SECONDS` | Voice mode stops by itself after this much silence (default 60) |
 | `OPENAI_API_KEY` | Log in with an API key instead of ChatGPT |
+
+### Browser UI (MeritAI)
+
+The same assistant in the browser, on this computer only (see `docs/ui.md`):
+
+```
+npm run ui:build     # once, and after UI changes
+npm run ui           # real engine: opens http://127.0.0.1:<port>/?t=<one-time key> (same account, memory and workspace as the CLI)
+npm run ui:fake      # demo: scripted replies, no model and no quota, a separate demo workspace with synthetic data
+npm run ui:dev       # UI development: hot reload, fake engine
+```
+
+Demo options: `FX_FAKE_SIGNED_OUT=1` starts signed out (the first-run screens); `npm run ui:fake -- --fresh` starts from an empty workspace. Voice is not in the browser UI yet.
 
 Voice mode reads `.env` (copy `.env.example`): `VOICE_OPENAI_API_KEY`, `VOICE_MODEL` (default `gpt-live-1`), `VOICE_NAME` (default `gleam`). It needs `ffmpeg` and `ffplay` on PATH. Voice is billed per minute to that key; it is not part of the ChatGPT subscription.
 
