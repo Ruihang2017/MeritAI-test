@@ -6,6 +6,8 @@ const ZH = /[一-鿿]/;
 /** Any good pay answer points to the official calculator (English or Chinese reply). */
 const PACT = /Pay and Conditions Tool|calculate\.fairwork\.gov\.au|Pay Calculator|薪酬和条件工具|薪资和条件工具|薪酬计算/i;
 const OFFICIAL = ["official sources:"];
+// The parental leave checklist carries checked official sources too.
+const PARENTAL = ["official sources:|parental leave checklist"];
 
 export const PAY_LEAVE: Scenario[] = [
   // ------------------------------------------------------------------ award and pay
@@ -284,7 +286,7 @@ export const PAY_LEAVE: Scenario[] = [
       "Aisha just told me she's pregnant, due in about 5 months. What parental leave does she get?",
       "Can you draft a short, warm email to her confirming what she's entitled to and the next steps?",
     ],
-    expect: { tools: ["policy:", ...OFFICIAL], mustMatch: [/18 weeks/] },
+    expect: { tools: ["policy:", ...PARENTAL], mustMatch: [/18 weeks/] },
     rubric: "Uses the Leave policy (18 weeks paid for the primary carer after 12 months' service, which Aisha has) plus the NES (up to 12 months unpaid, can request 12 more) and the government Parental Leave Pay (from official sources); notes notice requirements; the email is warm, factual, signed by Nathan Cole, and does not pry into health details.",
   },
   {
@@ -358,9 +360,10 @@ export const PAY_LEAVE: Scenario[] = [
     persona: "startup",
     category: "leave",
     title: "Request to extend unpaid parental leave",
-    turns: ["Jess is on parental leave and just emailed asking to extend her unpaid leave by another 6 months. Do I have to say yes?"],
-    expect: { tools: OFFICIAL },
-    rubric: "Under the NES an employee can request up to 12 more months; the employer must respond in writing within 21 days and can refuse only on reasonable business grounds after discussing it and genuinely trying to reach agreement (from official sources); suggests involving their HR adviser and offers to draft the reply.",
+    // Not a register employee on purpose: Jess (300 days' service) could not be on NES leave, which made the scenario contradict itself.
+    turns: ["Sophie has worked here for 4 years (I haven't added her to the register). She had her baby 10 months ago and has been on 12 months' unpaid parental leave since, and she just emailed asking to extend it by another 6 months. Do I have to say yes?"],
+    expect: { tools: PARENTAL },
+    rubric: "Sophie is eligible (4 years' service). Going beyond the first 12 months is a request: she can ask for up to 12 more months; the employer must respond in writing within 21 days and can refuse only on reasonable business grounds after discussing it and genuinely trying to reach agreement, with the reasons, any alternative and the Fair Work Commission dispute process in a refusal (from official sources); suggests involving their HR adviser and offers to draft the reply.",
   },
   {
     id: "lv-18",

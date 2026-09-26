@@ -18,8 +18,9 @@ import { policyTools, renderPolicyIndex } from "./business/policies";
 import { onboardingTools } from "./business/onboarding";
 import { Register } from "./business/register";
 import { registerTools } from "./business/registerTools";
-import { reminderTools } from "./business/reminders";
+import { reminderTools, todayLocal } from "./business/reminders";
 import { leavingTools } from "./business/leaving";
+import { parentalLeaveTools } from "./business/parentalLeave";
 import { basePrompt, type ReplyFormat } from "./basePrompt";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -110,6 +111,7 @@ export function createAssistant(opts: {
       ...onboardingTools(business),
       ...registerTools({ register, business, confirm: opts.confirm }),
       ...leavingTools(business),
+      ...parentalLeaveTools(todayLocal),
       ...reminderTools({ register, business }),
       officialSourcesTool(() => engine),
       ...fileTools(folders),

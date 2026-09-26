@@ -31,7 +31,7 @@ const SRC = {
   choice: { title: "Fair Work: Becoming a permanent employee", url: "https://www.fairwork.gov.au/starting-employment/types-of-employees/casual-employees/becoming-a-permanent-employee" },
   wages: { title: "Fair Work: Minimum wages", url: "https://www.fairwork.gov.au/pay-and-wages/minimum-wages" },
   fixedTerm: { title: "Fair Work: Fixed term contract employees", url: "https://www.fairwork.gov.au/starting-employment/types-of-employees/fixed-term-contract-employees" },
-  vevo: { title: "Home Affairs: VEVO", url: "https://www.homeaffairs.gov.au/Busi/visas-and-migration/visa-entitlement-verification-online-(vevo)" },
+  vevo: { title: "Home Affairs: VEVO for organisations", url: "https://immi.homeaffairs.gov.au/visas/already-have-a-visa/check-visa-details-and-conditions/check-conditions-online/for-organisations" },
   probation: { title: "Fair Work: Probation", url: "https://www.fairwork.gov.au/starting-employment/probation" },
   superChoice: { title: "ATO: Offer employees a choice of super fund", url: "https://www.ato.gov.au/businesses-and-organisations/super-for-employers/setting-up-super-for-your-business/offer-employees-a-choice-of-super-fund" },
 };
@@ -129,7 +129,7 @@ export function computeReminders(opts: {
       push({
         due: addDays(e.visaExpiry, -30),
         title: `Visa / work rights expire ${e.visaExpiry}: ${who}`,
-        detail: "Check their current work rights in VEVO before the expiry and keep a record. They cannot keep working without valid work rights.",
+        detail: "Check their current work rights in VEVO before the expiry (e.g. a new visa and its conditions) and save the VEVO result (PDF) as your record. They cannot keep working without valid work rights.",
         employeeId: e.id,
         source: SRC.vevo,
       });

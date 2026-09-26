@@ -236,7 +236,7 @@ Deferred to a later round (owner to decide, see the conversation of 2026-09-26):
 - procedural fairness in warning letters;
 - state schemes.
 
-### Round 3 (2026-09-26, legal knowledge; not yet evaluated with the model)
+### Round 3 (2026-09-26, legal knowledge)
 
 Chosen by the owner from the round 2 list (★1-★5). Facts checked on ato.gov.au and fairwork.gov.au on 2026-09-26 (the Code from Fair Work's copy of the Small Business Fair Dismissal Code).
 
@@ -248,6 +248,18 @@ Chosen by the owner from the round 2 list (★1-★5). Facts checked on ato.gov.
 | **Fair process in letters** | `developer.md` and `difficult-conversation`: the meeting invitation comes first (the concerns, no decision made, a chance to respond, a support person). The outcome letter is a separate draft for after their response. An apprentice stand-down doesn't change the training contract |
 | **Unsupported impressions in reviews** | `performance-review`: only concerns with a work-related example go in. Impressions are listed as "needs an example before it can go in" |
 | **Family and domestic violence leave on pay slips** | `developer.md`: must not appear on pay slips (record it as ordinary hours or another pay item). Keep it confidential and check payroll settings |
+
+Core evaluation after round 3 (70 × 2, `eval/results/round3`): 106 of 140 runs pass both the hard checks and the judge (round 1: 91); stable failures 14 → 8.
+
+### Round 4 (2026-09-26, from the round 3 evaluation)
+
+| Topic | Change |
+|---|---|
+| **Deductions from pay** (Fair Work "Deducting pay", checked 2026-09-26): only with the employee's written agreement *and* mainly for their benefit, or when a law, an order, the award or a registered agreement allows it | `developer.md`: the rule, and that the business's own costs (breakages, repairs, till shortfalls, required uniforms or tools) can't be deducted even with written consent. `employment-contract`: no "with written consent" version of such a clause; a deduction for notice not given only if the award allows it. Round 2's "draft first" had turned "without lawful authorisation" into consent-based clauses (con-10: 2/2 → 0/2). Targeted re-run of the 6 deduction scenarios plus a contract control, × 2: 13/14 (con-10 2/2; the one fail is unrelated) |
+| **Parental leave** (Fair Work parental leave pages and Services Australia's employer pages, checked 2026-09-26) | New `parental_leave_checklist(is_birth_parent, is_casual, start_date, expected_date)` (`src/business/parentalLeave.ts`), called by `developer.md` whenever an employee or their partner is expecting, on leave, extending or coming back. Items by stage (now, before, during, coming back), each with its official page: no discrimination or adverse action; safe job, no safe job leave and unpaid special parental leave (pregnant employee only); eligibility computed from the start date and the expected or actual birth date (12 months; casuals regular and systematic); notice (10 weeks, confirm 4 weeks before, evidence); 12 months unpaid plus a request for 12 more, flexible days (130 for a child from 1 July 2026); Parental Leave Pay (26 weeks from 1 July 2026, government-funded; the employer's Employer Determination, 14 days, PRODA, normal pay cycle); the ATO pays super on it; keeping in touch days (10), consultation, accrual; extensions (within 12 months by notice, beyond 12 months by request: written reply in 21 days, reasonable business grounds, what a refusal must contain); the return to work guarantee; breastfeeding. **Not eligible** (under 12 months of service): the NES-only items are left out and replaced by "leave by agreement or policy", and the tool text starts with that, because the model kept presenting NES rights anyway. The dated rules change on 1 July: re-check them then |
+| **Apprentices** (DEWR, Fair Work, Safe Work Australia, Apprenticeships Victoria and Queensland pages, checked 2026-09-26) | New starter checklist for an apprentice or trainee: contact an Apprentice Connect Australia Provider first (they organise the training contract, lodge it for registration and explain incentives); the training contract signed and registered within the state's time frame (e.g. within 14 days of starting in Victoria and Queensland); training time is paid time, and many awards require reimbursing fees and textbooks. New option `works_on_construction_sites` (tool) / `constructionSite` (form): a White Card before the first day on site, for anyone, not only apprentices. `dewr.gov.au` added to `OFFICIAL_DOMAINS` |
+| **Evaluation** | `tools` expectations accept alternatives (`"a|b"`): lv-09 and lv-17 pass with the parental leave checklist or official sources, off-03 with the leaving checklist or official sources (the checklists carry checked official links). lv-17 now describes an eligible employee (the register's Jess, 300 days' service, could not be on NES leave, so the scenario contradicted itself). Targeted re-run of 12 parental leave, apprentice and control scenarios × 2: 21/24 fully passing (onb-04 2/2, was 0/2 in round 3; con-05, r1-02 held), then lv-17 fixes: 1/2 (the miss left out the dispute process in a refusal) |
+| **Shortened links** | The model often wrote the ATO leaving page without its `-your-business` ending (a dead link). The engine now corrects a tool URL cut at a hyphen in its last segment (`links_corrected`, see `docs/research.md`); other unknown links stay flagged |
 
 ## 10 Tests
 

@@ -20,6 +20,7 @@ import { ROOT } from "../src/assistant";
 import { basePrompt, MARKDOWN_SWAPS } from "../src/basePrompt";
 import { MAX_ATTACH_BYTES } from "../src/files/attach";
 import { correctUrl } from "../src/engine/appServer";
+import { parentalChecklist, serviceEligible, PARENTAL_URLS } from "../src/business/parentalLeave";
 import { confirmText, type Confirm, type ConfirmContext, type ConfirmRequest } from "../src/engine/types";
 
 type Check = [string, boolean];
@@ -180,6 +181,47 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["markdown rule: headings, numbered lists, bold, links", /GitHub-flavoured markdown/.test(md) && /headings/.test(md) && /numbered lists/.test(md) && /\*\*bold\*\*/.test(md) && /\[text\]\(url\)/.test(md)],
     ["markdown: no raw-text rule left", !/raw text|plain-text|no bold or italics/.test(md)],
   ], changed.join("\n"));
+}
+
+// ------------------------------------------------------------ parental leave checklist (Fair Work / Services Australia, checked 2026-09-26)
+{
+  const txt = (xs: { task: string }[]) => xs.map((x) => x.task).join(" | ");
+  const today = "2026-09-26";
+  const preg = parentalChecklist({ birthParent: true, casual: false, startDate: "2025-01-10", expectedDate: "2026-12-01", today });
+  const partner = parentalChecklist({ birthParent: false, casual: false, startDate: null, expectedDate: null, today });
+  const newbie = parentalChecklist({ birthParent: true, casual: true, startDate: "2026-03-01", expectedDate: "2026-12-01", today });
+  record("parental leave checklist", [
+    ["eligible: 12 months by the expected date", serviceEligible({ startDate: "2025-01-10", expectedDate: "2026-12-01", today }) === true && /requirement is met/.test(txt(preg))],
+    ["not eligible yet: says so, protections still apply", /will NOT have 12 months/.test(txt(newbie)) && /regular and systematic/.test(txt(newbie))],
+    ["unknown start date: asks to check it", serviceEligible({ startDate: null, expectedDate: null, today }) === null && /Check their start date/.test(txt(partner))],
+    ["pregnant employee: safe job and special leave", /move them to a safe job/.test(txt(preg)) && /special parental leave/.test(txt(preg)) && !/move them to a safe job/.test(txt(partner))],
+    ["discrimination item first", /Do not cut their hours/.test(preg[0].task) && /Do not cut their hours/.test(partner[0].task)],
+    ["NES: 12 months + 12 more, 10 weeks notice, 130 flexible days", /12 months of unpaid parental leave/.test(txt(preg)) && /up to 12 more/.test(txt(preg)) && /10 weeks/.test(txt(preg)) && /130 days/.test(txt(preg))],
+    ["PLP: 26 weeks, Employer Determination 14 days, pay cycle; ATO pays super", /26 weeks/.test(txt(preg)) && /Employer Determination/.test(txt(preg)) && /14 days/.test(txt(preg)) && /normal pay cycle/.test(txt(preg)) && /paid by the ATO/.test(txt(preg))],
+    ["extension: within 12 months by notice; beyond: written reply in 21 days, reasonable business grounds", /no approval needed/.test(txt(preg)) && /within 21 days/.test(txt(preg)) && /reasonable business grounds/.test(txt(preg))],
+    ["not eligible: no NES-only items, leave by agreement or policy", /by agreement or under the business's own policy/.test(txt(newbie)) && !/21 days/.test(txt(newbie)) && !/130 days/.test(txt(newbie)) && !/job they had before the leave/.test(txt(newbie)) && /safe job/.test(txt(newbie)) && /26 weeks/.test(txt(newbie))],
+    ["replacement employees told: temporary, right to return", /temporary/.test(txt(preg)) && /right to return/.test(txt(preg)) && !/right to return to their job, and that the leave can end early/.test(txt(newbie))],
+    ["return to work guarantee and breastfeeding", /job they had before the leave/.test(txt(preg)) && /Breastfeeding/.test(txt(preg))],
+    ["every source official", PARENTAL_URLS.every(isOfficialUrl) && preg.every((i) => isOfficialUrl(i.source.url))],
+  ], txt(preg).slice(0, 600));
+}
+
+// ------------------------------------------------------------ apprentices and construction sites (round 4)
+{
+  const txt = (xs: { task: string }[]) => xs.map((x) => x.task).join(" | ");
+  const app = newStarterChecklist({ employmentType: "full-time", mayNeedVisaCheck: false, smallBusiness: true, apprentice: true, states: ["VIC"], constructionSite: true });
+  const hair = newStarterChecklist({ employmentType: "full-time", mayNeedVisaCheck: false, smallBusiness: true, apprentice: true, states: ["ACT"] });
+  const office = newStarterChecklist({ employmentType: "part-time", mayNeedVisaCheck: false, smallBusiness: true });
+  record("apprentice checklist", [
+    ["Apprentice Connect Australia Provider", /Apprentice Connect Australia Provider/.test(txt(app)) && /Apprentice Connect/.test(txt(hair))],
+    ["training contract within 14 days (VIC/QLD example)", /within 14 days of starting/.test(txt(app))],
+    ["training time paid; fees and textbooks per award", /paid time/.test(txt(app)) && /fees and textbooks/.test(txt(app))],
+    ["White Card only for construction sites", /White Card/.test(txt(app)) && !/White Card/.test(txt(hair)) && !/White Card/.test(txt(office))],
+    ["no apprentice items for others", !/Apprentice Connect/.test(txt(office))],
+    ["every source official", app.every((i) => isOfficialUrl(i.source.url))],
+    ["visa check: VEVO for organisations, save the PDF", /save the VEVO result \(PDF\)/.test(txt(newStarterChecklist({ employmentType: "casual", mayNeedVisaCheck: true, smallBusiness: true }))) && isOfficialUrl("https://immi.homeaffairs.gov.au/visas/already-have-a-visa/check-visa-details-and-conditions/check-conditions-online/for-organisations")],
+    ["leaving a sponsored worker: tell Home Affairs within 28 days; not for others", /within 28 calendar days/.test(txt(leavingChecklist({ reason: "resignation", apprentice: false, states: ["NSW"], sponsored: true }))) && !/Home Affairs/.test(txt(leavingChecklist({ reason: "resignation", apprentice: false, states: ["NSW"] })))],
+  ], txt(app).slice(0, 600));
 }
 
 // ------------------------------------------------------------ shortened links corrected, others left flagged

@@ -21,7 +21,7 @@ export type LeavingItem = Omit<ChecklistItem, "when"> & { when: "before the last
  * `smallBusiness`: fewer than 15 employees (null = unknown): a dismissal follows the Small Business Fair Dismissal Code.
  * (Fair Work, checked 2026-09-26.)
  */
-export function leavingChecklist(opts: { reason: LeavingReason; apprentice: boolean; states: string[]; casual?: boolean; smallBusiness?: boolean | null }): LeavingItem[] {
+export function leavingChecklist(opts: { reason: LeavingReason; apprentice: boolean; states: string[]; casual?: boolean; smallBusiness?: boolean | null; sponsored?: boolean }): LeavingItem[] {
   const items: LeavingItem[] = [];
   if (opts.reason === "dismissal" || opts.reason === "redundancy") {
     items.push({
@@ -96,6 +96,14 @@ export function leavingChecklist(opts: { reason: LeavingReason; apprentice: bool
       why: "Record-keeping and pay slip rules continue after employment ends.",
       source: S.records,
     },
+    ...(opts.sponsored
+      ? [{
+          when: "after they leave" as const,
+          task: "You sponsor their visa: tell Home Affairs within 28 calendar days that their employment has ended (or is expected to end), with the 'Notification of sponsor changes' form in ImmiAccount.",
+          why: "Notifying Home Affairs of changes within 28 days is a sponsor obligation; breaching sponsor obligations can bring sanctions.",
+          source: S.sponsorObligations,
+        }]
+      : []),
     {
       when: "after they leave",
       task: "If Services Australia or the former employee asks, complete an Employment Separation Certificate.",
@@ -127,7 +135,7 @@ export function formatLeaving(items: LeavingItem[]): string {
 }
 
 /** The checklist as tool text, with instructions for presenting it. */
-export function leavingText(opts: { reason: LeavingReason; apprentice: boolean; states: string[]; casual?: boolean; smallBusiness?: boolean | null }): string {
+export function leavingText(opts: { reason: LeavingReason; apprentice: boolean; states: string[]; casual?: boolean; smallBusiness?: boolean | null; sponsored?: boolean }): string {
   return (
     `Leaving checklist (${opts.reason}${opts.casual ? ", casual" : ""}${opts.apprentice ? ", apprentice/trainee" : ""}; official sources checked ${LEAVING_CHECKED_ON}):\n${formatLeaving(leavingChecklist(opts))}\n\n` +
     "Tell the owner these steps in plain language, keeping every item and its source link. " +
@@ -155,16 +163,17 @@ export function leavingTools(business: () => BusinessStore): ClientTool[] {
           reason: { type: "string", enum: LEAVING_REASONS },
           is_apprentice_or_trainee: { type: "boolean" },
           is_casual: { type: "boolean", description: "The person was a casual employee (casuals have no paid leave to pay out and no NES notice)." },
+          is_sponsored_visa: { type: "boolean", description: "true if the business sponsors their visa (e.g. Skills in Demand / 482); false if not or unknown." },
         },
-        required: ["reason", "is_apprentice_or_trainee", "is_casual"],
+        required: ["reason", "is_apprentice_or_trainee", "is_casual", "is_sponsored_visa"],
         additionalProperties: false,
       },
       handle: async (args) => {
-        const a = args as { reason?: string; is_apprentice_or_trainee?: boolean; is_casual?: boolean };
+        const a = args as { reason?: string; is_apprentice_or_trainee?: boolean; is_casual?: boolean; is_sponsored_visa?: boolean };
         const reason = (LEAVING_REASONS as string[]).includes(String(a.reason)) ? (a.reason as LeavingReason) : "other";
         return {
           success: true,
-          text: leavingText({ reason, apprentice: a.is_apprentice_or_trainee === true, casual: a.is_casual === true, states: business().get().states, smallBusiness: smallBusinessOf(business().get().headcount) }),
+          text: leavingText({ reason, apprentice: a.is_apprentice_or_trainee === true, casual: a.is_casual === true, sponsored: a.is_sponsored_visa === true, states: business().get().states, smallBusiness: smallBusinessOf(business().get().headcount) }),
           display: `leaving checklist: ${reason}`,
         };
       },

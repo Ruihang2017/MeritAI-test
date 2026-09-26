@@ -21,7 +21,7 @@ src/basePrompt.ts          prompts/base.md for a reply format: plain (as the fil
 src/engine/rpc.ts          JSON-RPC over the app-server's stdio
 src/engine/appServer.ts    Engine implementation: threads, streaming, interrupt, client tools, ephemeral runs, resume
 src/engine/types.ts        engine-agnostic interface (ClientTool, EngineEvent, ...)
-src/business/              profile.ts (business profile store + rendering), tools.ts (update_business_profile), policies.ts (Policies/ index + read_policy), onboarding.ts (new_starter_checklist: official items + verified URLs), register.ts + registerTools.ts + registerOps.ts (employee register, SQLite; checks shared by the tools and the forms), reminders.ts (compliance reminders + get_reminders), leaving.ts (leaving_checklist), payGuard.ts (flags pay arithmetic in replies)
+src/business/              profile.ts (business profile store + rendering), tools.ts (update_business_profile), policies.ts (Policies/ index + read_policy), onboarding.ts (new_starter_checklist: official items + verified URLs), register.ts + registerTools.ts + registerOps.ts (employee register, SQLite; checks shared by the tools and the forms), reminders.ts (compliance reminders + get_reminders), leaving.ts (leaving_checklist), parentalLeave.ts (parental_leave_checklist), payGuard.ts (flags pay arithmetic in replies)
 src/memory/                store.ts, context.ts, tools.ts, summarize.ts
 src/research/              officialSources.ts: isolated official-site research tool + OFFICIAL_DOMAINS allowlist
 src/voice/                 liveSession.ts (GPT-Live WebSocket), bridge.ts (delegation → Codex turn/steer), audio.ts (ffmpeg mic, ffplay speaker)

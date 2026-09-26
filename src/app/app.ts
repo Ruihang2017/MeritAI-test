@@ -420,7 +420,7 @@ export class AssistantApp {
   // confirmation, so there is no second yes/no, except for deleting.
 
   /** Adds an employee; returns the new starter checklist for them (from code, with official sources). */
-  addEmployee(details: unknown, opts: { mayNeedVisaCheck?: boolean; apprentice?: boolean } = {}): FormResult<{ employee: Employee; checklist: ChecklistItem[] }> {
+  addEmployee(details: unknown, opts: { mayNeedVisaCheck?: boolean; apprentice?: boolean; constructionSite?: boolean } = {}): FormResult<{ employee: Employee; checklist: ChecklistItem[] }> {
     const c = checkNewEmployee(this.a.register(), details);
     if (!c.ok) return { ok: false, error: c.error };
     const employee = this.a.register().add(c.input);
@@ -431,6 +431,7 @@ export class AssistantApp {
       mayNeedVisaCheck: opts.mayNeedVisaCheck ?? true,
       smallBusiness: p.headcount === null ? null : p.headcount < 15,
       apprentice: opts.apprentice ?? isApprenticeRole(employee.role),
+      constructionSite: opts.constructionSite ?? false,
       states: p.states,
     });
     return { ok: true, employee, lines: c.lines, checklist };

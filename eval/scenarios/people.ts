@@ -433,7 +433,7 @@ export const PEOPLE: Scenario[] = [
     category: "offboarding",
     title: "When is final pay due and what's in it?",
     turns: ["Hana finished up with us yesterday. When do I have to pay her final pay and what has to be in it?"],
-    expect: { tools: ["official sources:"] },
+    expect: { tools: ["official sources:|leaving checklist"] },
     rubric:
       "Looks up the rules: final pay within the required timeframe (within 7 days / on or before the next pay day, per the Fair Work rules and award), including outstanding wages, unused annual leave with any leave loading under the award, and other amounts owed; cites official sources; notes super is still payable on final wages.",
   },

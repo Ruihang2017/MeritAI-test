@@ -30,7 +30,8 @@ const S = {
   pact: { title: "Fair Work: Pay and Conditions Tool", url: "https://calculate.fairwork.gov.au/" },
   contractTool: { title: "business.gov.au: Employment Contract Tool", url: "https://employ.business.gov.au/" },
   fixedTerm: { title: "Fair Work: Fixed term contract employees", url: "https://www.fairwork.gov.au/starting-employment/types-of-employees/fixed-term-contract-employees" },
-  vevo: { title: "Home Affairs: Visa Entitlement Verification Online (VEVO)", url: "https://www.homeaffairs.gov.au/Busi/visas-and-migration/visa-entitlement-verification-online-(vevo)" },
+  vevo: { title: "Home Affairs: VEVO for organisations (checking work rights)", url: "https://immi.homeaffairs.gov.au/visas/already-have-a-visa/check-visa-details-and-conditions/check-conditions-online/for-organisations" },
+  sponsorObligations: { title: "Home Affairs: Sponsor obligations (notify changes within 28 days)", url: "https://immi.homeaffairs.gov.au/visas/employing-and-sponsoring-someone/existing-sponsors/standard-business-accredited-obligations" },
   fwis: { title: "Fair Work: Fair Work Information Statement", url: "https://www.fairwork.gov.au/employment-conditions/information-statements/fair-work-information-statement" },
   ceis: { title: "Fair Work: Casual Employment Information Statement", url: "https://www.fairwork.gov.au/employment-conditions/information-statements/casual-employment-information-statement" },
   ftcis: { title: "Fair Work: Fixed Term Contract Information Statement", url: "https://www.fairwork.gov.au/employment-conditions/information-statements/fixed-term-contract-information-statement" },
@@ -48,6 +49,9 @@ const S = {
   casual: { title: "Fair Work: Casual employees", url: "https://www.fairwork.gov.au/starting-employment/types-of-employees/casual-employees" },
   paydaySuper: { title: "ATO: Payment deadlines for Payday Super", url: "https://www.ato.gov.au/businesses-and-organisations/super-for-employers/paying-super-on-payday/payment-deadlines-for-payday-super" },
   unfairDismissal: { title: "Fair Work: Unfair dismissal (Small Business Fair Dismissal Code)", url: "https://www.fairwork.gov.au/ending-employment/help-with-termination/unfair-dismissal" },
+  apprenticeSupport: { title: "DEWR: Apprenticeship support (Apprentice Connect Australia Providers)", url: "https://www.dewr.gov.au/australian-apprenticeships/apprenticeship-support" },
+  apprenticeEntitlements: { title: "Fair Work: Apprentices (training time, fees and textbooks)", url: "https://www.fairwork.gov.au/starting-employment/types-of-employees/apprentices-and-trainees/apprentices" },
+  whiteCard: { title: "Safe Work Australia: Working on a construction site (White Card)", url: "https://www.safeworkaustralia.gov.au/safety-topic/industry-and-business/construction/working-construction-site" },
 };
 export { S as SOURCES };
 
@@ -85,6 +89,8 @@ export function newStarterChecklist(opts: {
   apprentice?: boolean;
   /** States where the business employs staff (for the training authority). */
   states?: string[];
+  /** They will do construction work on a construction site (a White Card is needed first). */
+  constructionSite?: boolean;
 }): ChecklistItem[] {
   const { employmentType: type } = opts;
   const items: ChecklistItem[] = [
@@ -125,14 +131,26 @@ export function newStarterChecklist(opts: {
     });
   }
   if (opts.apprentice) {
+    items.push({
+      when: "before start",
+      task: "Contact an Apprentice Connect Australia Provider (free, government-funded): they organise the training contract with you and the apprentice, lodge it with the state training authority for registration, and explain the employer incentives.",
+      why: "The Provider is the first point of contact for employers taking on an apprentice or trainee.",
+      source: S.apprenticeSupport,
+    });
     for (const a of authoritiesFor(opts.states ?? [])) {
       items.push({
         when: "before start",
-        task: `Sign a training contract with the apprentice or trainee and register it with the state training authority (${a.title}) within its time frame; arrange the training with a registered training organisation (e.g. TAFE).`,
+        task: `Sign the training contract with the apprentice or trainee and have it registered with the state training authority (${a.title}) within its time frame (e.g. in Victoria and Queensland it must be signed within 14 days of starting); arrange the training with a registered training organisation (e.g. TAFE).`,
         why: "Apprenticeships and traineeships must be registered with the state or territory training authority; the training contract sets rights and obligations, including its own probation and cancellation rules. Apprentice pay rates come from the award.",
         source: a,
       });
     }
+    items.push({
+      when: "first weeks",
+      task: "Pay for training: time at trade school or TAFE is paid time and counts as ordinary hours. Many awards also require reimbursing the training fees and textbooks: check the award.",
+      why: "Apprentice pay rates apply only with a registered training contract, and the award's apprentice entitlements come on top.",
+      source: S.apprenticeEntitlements,
+    });
     items.push({
       when: "before start",
       task: "Read Fair Work's guidance for apprentices and trainees (pay, training time, and what happens when the apprenticeship ends).",
@@ -140,10 +158,18 @@ export function newStarterChecklist(opts: {
       source: S.apprentices,
     });
   }
+  if (opts.constructionSite) {
+    items.push({
+      when: "before start",
+      task: "Check they hold a White Card (general construction induction); if not, they complete the course before their first day on a construction site.",
+      why: "Workers must have a White Card before they start working on a construction site; it is recognised Australia-wide.",
+      source: S.whiteCard,
+    });
+  }
   if (opts.mayNeedVisaCheck) {
     items.push({
       when: "before start",
-      task: "Check the person's right to work and any visa conditions (e.g. work hour limits) in VEVO, and keep a record of the check.",
+      task: "Check the person's right to work and any visa conditions (e.g. work hour limits) in VEVO, with their permission, and save the VEVO result (PDF) as your record. Roster them within their visa conditions.",
       why: "Employing someone without work rights, or in breach of their visa conditions, is an offence.",
       source: S.vevo,
     });
@@ -274,12 +300,13 @@ export function onboardingTools(business: () => BusinessStore): ClientTool[] {
             description: "true unless the user said the person is an Australian citizen or permanent resident.",
           },
           is_apprentice_or_trainee: { type: "boolean", description: "true for an apprentice or trainee (training contract)." },
+          works_on_construction_sites: { type: "boolean", description: "true if they will do construction work on a construction site (building, plumbing, electrical, landscaping construction...)." },
         },
-        required: ["employment_type", "may_need_visa_check", "is_apprentice_or_trainee"],
+        required: ["employment_type", "may_need_visa_check", "is_apprentice_or_trainee", "works_on_construction_sites"],
         additionalProperties: false,
       },
       handle: async (args) => {
-        const a = args as { employment_type?: string; may_need_visa_check?: boolean; is_apprentice_or_trainee?: boolean };
+        const a = args as { employment_type?: string; may_need_visa_check?: boolean; is_apprentice_or_trainee?: boolean; works_on_construction_sites?: boolean };
         const type = a.employment_type as EmploymentType;
         if (!["full-time", "part-time", "casual", "fixed-term"].includes(type)) return { success: false, text: "employment_type must be full-time, part-time, casual or fixed-term." };
         const p = business().get();
@@ -288,6 +315,7 @@ export function onboardingTools(business: () => BusinessStore): ClientTool[] {
           mayNeedVisaCheck: a.may_need_visa_check !== false,
           smallBusiness: p.headcount === null ? null : p.headcount < 15,
           apprentice: a.is_apprentice_or_trainee === true,
+          constructionSite: a.works_on_construction_sites === true,
           states: p.states,
         });
         return {
