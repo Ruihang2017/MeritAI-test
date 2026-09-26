@@ -30,6 +30,8 @@ export class FakeEngine implements Engine {
   private threadId: string = randomUUID();
   /** Conversations started in this process (a fake engine stores nothing on disk). */
   private readonly stored = new Map<string, Date>();
+  /** Every message of each conversation (readTranscript). */
+  private readonly threads = new Map<string, TranscriptEntry[]>();
 
   constructor(
     private readonly opts: {
@@ -76,6 +78,14 @@ export class FakeEngine implements Engine {
   async steer(): Promise<boolean> {
     return false;
   }
+  async readTranscript(threadId: string): Promise<TranscriptEntry[]> {
+    return [...(this.threads.get(threadId) ?? [])];
+  }
+  private thread(): TranscriptEntry[] {
+    let t = this.threads.get(this.threadId);
+    if (!t) this.threads.set(this.threadId, (t = []));
+    return t;
+  }
   transcript(): TranscriptEntry[] {
     return [...this.log];
   }
@@ -108,6 +118,7 @@ export class FakeEngine implements Engine {
     this.busy = true;
     this.stopRequested = false;
     this.log.push({ role: "user", text });
+    this.thread().push({ role: "user", text });
     const out: EngineEvent[] = [];
     const parts: string[] = [];
     let status: "completed" | "interrupted" | "failed" = "completed";
@@ -133,6 +144,7 @@ export class FakeEngine implements Engine {
       // Same guard as the real engine: links no tool returned are flagged; shortened ones corrected.
       const reply = parts.join("\n\n");
       this.log.push({ role: "assistant", text: reply });
+      this.thread().push({ role: "assistant", text: reply });
       const fixes: { from: string; to: string }[] = [];
       const unverified: string[] = [];
       for (const u of new Set(extractUrls(reply).filter((u) => !this.toolUrls.has(u)))) {

@@ -73,6 +73,25 @@ export function applyEvent(turn: Turn, ev: AppEvent): Turn {
   return t;
 }
 
+/**
+ * Rebuilds finished turns from stored messages (after a resume or a page reload).
+ * The app prefixes attachments as [attached: "name" (...)]; they become chips again.
+ */
+export function turnsFromTranscript(entries: { role: "user" | "assistant"; text: string }[], at: Date): Turn[] {
+  const turns: Turn[] = [];
+  for (const [i, e] of entries.entries()) {
+    if (e.role === "user") {
+      const attachments = [...e.text.matchAll(/\[attached: "([^"]+)"[^\]]*\]/g)].map((m) => m[1]);
+      const text = e.text.replace(/\[(attached|imported folder as job)[^\]]*\]\s*/g, "").trim();
+      turns.push({ id: `stored-${i}`, at, user: { text, attachments }, steps: [], blocks: [], status: "completed" });
+    } else {
+      if (!turns.length) turns.push({ id: `stored-${i}`, at, user: { text: "", attachments: [] }, steps: [], blocks: [], status: "completed" });
+      turns[turns.length - 1].blocks.push({ kind: "text", text: e.text, done: true });
+    }
+  }
+  return turns;
+}
+
 /** A confirmation question joins the running turn. */
 export function addConfirm(turn: Turn, id: string, req: ConfirmRequest): Turn {
   if (turn.blocks.some((b) => b.kind === "confirm" && b.id === id)) return turn;

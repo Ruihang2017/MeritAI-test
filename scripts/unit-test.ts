@@ -19,7 +19,7 @@ import { STAGING_PREFIX } from "../src/app/uploads";
 import { ROOT } from "../src/assistant";
 import { basePrompt, MARKDOWN_SWAPS } from "../src/basePrompt";
 import { MAX_ATTACH_BYTES } from "../src/files/attach";
-import { correctUrl } from "../src/engine/appServer";
+import { correctUrl, transcriptOf } from "../src/engine/appServer";
 import { WebSocket } from "ws";
 import { UiSession } from "../src/server/session";
 import { startUiServer, staticFile } from "../src/server/server";
@@ -305,6 +305,17 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["two candidates → no guess", correctUrl("https://www.fairwork.gov.au/leave/sick-and-carers", known) === null],
     ["unrelated URL stays flagged", correctUrl("https://example.com/when-a-worker-leaves", known) === null],
   ]);
+  // Stored turns → messages for a resumed conversation (thread/read): the resume <memory_update> is left out.
+  const items = [
+    { type: "userMessage", id: "1", clientId: null, content: [{ type: "text", text: "<memory_update>\nold\n</memory_update>", text_elements: [] }, { type: "text", text: "Priya resigned", text_elements: [] }] },
+    { type: "reasoning", id: "2", summary: [], content: [] },
+    { type: "agentMessage", id: "3", text: "Here's what to do.", phase: null, memoryCitation: null, delivery: null, questions: null },
+  ];
+  const tr = transcriptOf([{ items: items as never }]);
+  record("stored conversation transcript", [
+    ["user text without the memory update", tr[0]?.role === "user" && tr[0].text === "Priya resigned"],
+    ["assistant message kept, other items skipped", tr.length === 2 && tr[1].role === "assistant" && tr[1].text === "Here's what to do."],
+  ], JSON.stringify(tr));
 }
 
 // ------------------------------------------------------------ cancellable confirmations

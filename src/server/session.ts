@@ -93,6 +93,7 @@ export class UiSession {
       const r = await this.app.resume(record);
       return { alreadyOpen: r.alreadyOpen };
     },
+    transcript: async () => this.app.conversation(),
     reminders: async () => this.app.reminders(),
     skills: async () => this.app.skills().map((s) => ({ name: s.name, description: s.description })),
     attach: async (p) => {

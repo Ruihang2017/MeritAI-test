@@ -6,6 +6,7 @@ import type { LoginAccountResponse } from "../protocol/v2/LoginAccountResponse";
 import type { ThreadStartResponse } from "../protocol/v2/ThreadStartResponse";
 import type { ThreadResumeResponse } from "../protocol/v2/ThreadResumeResponse";
 import type { ThreadListResponse } from "../protocol/v2/ThreadListResponse";
+import type { ThreadReadResponse } from "../protocol/v2/ThreadReadResponse";
 import type { TurnStartResponse } from "../protocol/v2/TurnStartResponse";
 import type { ThreadItem } from "../protocol/v2/ThreadItem";
 import type { SkillsListResponse } from "../protocol/v2/SkillsListResponse";
@@ -272,6 +273,11 @@ export class AppServerEngine implements Engine {
     return [...this.log];
   }
 
+  async readTranscript(threadId: string): Promise<TranscriptEntry[]> {
+    const res = (await this.conn.request("thread/read", { threadId, includeTurns: true })) as ThreadReadResponse;
+    return transcriptOf(res.thread.turns ?? []);
+  }
+
   async listStoredSessions(): Promise<StoredSession[]> {
     const out: StoredSession[] = [];
     let cursor: string | null = null;
@@ -529,6 +535,25 @@ export class AppServerEngine implements Engine {
 }
 
 /** URLs in text, normalised (trailing punctuation removed) so tool output and replies compare equal. */
+/**
+ * User and assistant messages of stored turns (for a UI showing a resumed conversation).
+ * The <memory_update> sent on resume is an extra text input, left out here.
+ */
+export function transcriptOf(turns: { items: ThreadItem[] }[]): TranscriptEntry[] {
+  const out: TranscriptEntry[] = [];
+  for (const t of turns)
+    for (const it of t.items) {
+      if (it.type === "userMessage") {
+        const text = it.content
+          .flatMap((c) => (c.type === "text" && !c.text.startsWith("<memory_update>") ? [c.text] : []))
+          .join("\n")
+          .trim();
+        if (text) out.push({ role: "user", text });
+      } else if (it.type === "agentMessage" && it.text.trim()) out.push({ role: "assistant", text: it.text });
+    }
+  return out;
+}
+
 export function extractUrls(text: string): string[] {
   return [...text.matchAll(/https?:\/\/[^\s)\]>"'`]+/g)].map((m) => m[0].replace(/[.,;:!?]+$/, ""));
 }

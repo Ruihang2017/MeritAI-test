@@ -21,6 +21,8 @@ export interface Methods {
   newConversation: { params: void; result: null };
   history: { params: void; result: SessionRecord[] };
   resume: { params: { threadId: string }; result: { alreadyOpen: boolean } };
+  /** Messages of the current conversation from its start (after a resume or a page reload). */
+  transcript: { params: void; result: { role: "user" | "assistant"; text: string }[] };
   reminders: { params: void; result: Reminder[] };
   skills: { params: void; result: { name: string; description: string }[] };
   /** Files chosen or dropped in the browser (base64), copied to the Inbox or offered as a job import. */

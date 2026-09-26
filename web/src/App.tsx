@@ -3,7 +3,7 @@ import type { Reminder } from "../../src/business/reminders";
 import type { SessionRecord } from "../../src/memory/store";
 import type { ShellState } from "../../src/server/protocol";
 import { Api, type Connection } from "./api";
-import { addConfirm, applyEvent, setConfirm, type Turn } from "./conversation";
+import { addConfirm, applyEvent, setConfirm, turnsFromTranscript, type Turn } from "./conversation";
 import { ConversationPage } from "./components/Conversation";
 import { Icon } from "./components/Icon";
 import { AppBar, AttentionPanel, Nav, type Page } from "./components/Shell";
@@ -43,11 +43,20 @@ function Shell({ api }: { api: Api }) {
   const [error, setError] = useState<string | null>(null);
   const turnsRef = useRef(turns);
   turnsRef.current = turns;
+  const restored = useRef(false);
 
   const refresh = useCallback(async () => {
     try {
       const s = await api.call("state");
       setState(s);
+      // After a page reload the conversation is still open on the server: show its messages again.
+      if (!restored.current) {
+        restored.current = true;
+        if (s.hasConversation && !turnsRef.current.length) {
+          const entries = await api.call("transcript").catch(() => []);
+          if (entries.length && !turnsRef.current.length) setTurns(turnsFromTranscript(entries, new Date()));
+        }
+      }
       // Questions still open on the server (e.g. after a reload) are shown again.
       if (s.confirms.length)
         setTurns((ts) => {
@@ -153,8 +162,10 @@ function Shell({ api }: { api: Api }) {
       const r = await api.call("resume", { threadId });
       setPage("conversations");
       if (!r.alreadyOpen) {
-        setTurns([]);
-        setResumedTitle(recent.find((x) => x.threadId === threadId)?.title ?? "an earlier conversation");
+        const rec = recent.find((x) => x.threadId === threadId);
+        setResumedTitle(rec?.title ?? "an earlier conversation");
+        const entries = await api.call("transcript").catch(() => []);
+        setTurns(turnsFromTranscript(entries, rec ? new Date(rec.startedAt) : new Date()));
       }
       void refresh();
     } catch (e) {

@@ -128,7 +128,7 @@ function Welcome({ resumed, onPick, demo }: { resumed: string | null; onPick: (t
     return (
       <div className="welcome">
         <h1 className="h1">Continuing “{resumed}”</h1>
-        <p className="sub">The adviser remembers this conversation. Earlier messages aren't shown here yet.</p>
+        <p className="sub">The adviser remembers this conversation. Carry on where you left off.</p>
       </div>
     );
   const picks = demo

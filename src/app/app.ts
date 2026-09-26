@@ -8,7 +8,7 @@ import { stageUploads, type Upload } from "./uploads";
 export type { Upload } from "./uploads";
 export type { Launcher, OpenResult } from "./launch";
 export type { ReplyFormat } from "../basePrompt";
-import type { AccountStatus, Confirm, ConfirmRequest, EngineEvent, SessionInfo } from "../engine/types";
+import type { AccountStatus, Confirm, ConfirmRequest, EngineEvent, SessionInfo, TranscriptEntry } from "../engine/types";
 import { userSection } from "../memory/context";
 import { summarizeSession } from "../memory/summarize";
 import type { Preference, SessionRecord, TaskNote } from "../memory/store";
@@ -215,6 +215,11 @@ export class AssistantApp {
   async history(): Promise<SessionRecord[]> {
     const stored = new Set((await this.a.engine.listStoredSessions()).map((s) => s.threadId));
     return this.a.mem.sessions().filter((s) => stored.has(s.threadId)).slice(0, 15);
+  }
+
+  /** The messages of the current conversation from its start (also after a resume), for a UI to show. No model call. */
+  async conversation(): Promise<TranscriptEntry[]> {
+    return this.session ? this.a.engine.readTranscript(this.session.threadId) : [];
   }
 
   /** Continues an earlier conversation with this user's current memory. */
