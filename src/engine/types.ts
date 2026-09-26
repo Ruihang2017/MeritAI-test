@@ -72,7 +72,18 @@ export interface ConfirmRequest {
   destructive?: boolean;
 }
 
-export type Confirm = (req: ConfirmRequest) => Promise<boolean>;
+/**
+ * Passed by the application layer with every confirmation: a unique id (so a UI can
+ * re-show or dismiss it) and a signal that aborts when the question is withdrawn
+ * (reply stopped, app closing). A withdrawn question counts as "no".
+ */
+export interface ConfirmContext {
+  id: string;
+  signal: AbortSignal;
+}
+
+/** Tools call it with the request only; a UI's confirm may use the context. */
+export type Confirm = (req: ConfirmRequest, ctx?: ConfirmContext) => Promise<boolean>;
 
 export const confirmText = (r: ConfirmRequest) => [r.title, ...(r.items ?? []).map((i) => `  ${i}`)].join("\n");
 

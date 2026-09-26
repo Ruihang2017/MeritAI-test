@@ -15,7 +15,9 @@ A CLI HR adviser for small business owners with no HR department ("tells them wh
 ```
 src/cli.ts                 terminal front end only: parses commands, renders data and events, answers confirmations
 src/app/app.ts             AssistantApp: the UI-independent application layer (session flows, attachments, screening, voice, guards); every front end uses it. See docs/architecture.md
+src/app/                   confirms.ts (pending, cancellable confirmations), uploads.ts (attachments as bytes → staging), launch.ts (open / reveal workspace files)
 src/assistant.ts           createAssistant(): the one place the engine, prompts, business profile, policies, memory and tools are wired (the CLI and all tests use it)
+src/basePrompt.ts          prompts/base.md for a reply format: plain (as the file is) or markdown (for a UI)
 src/engine/rpc.ts          JSON-RPC over the app-server's stdio
 src/engine/appServer.ts    Engine implementation: threads, streaming, interrupt, client tools, ephemeral runs, resume
 src/engine/types.ts        engine-agnostic interface (ClientTool, EngineEvent, ...)

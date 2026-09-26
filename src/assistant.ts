@@ -20,6 +20,7 @@ import { Register } from "./business/register";
 import { registerTools } from "./business/registerTools";
 import { reminderTools } from "./business/reminders";
 import { leavingTools } from "./business/leaving";
+import { basePrompt, type ReplyFormat } from "./basePrompt";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -52,6 +53,8 @@ export function createAssistant(opts: {
   serviceTier?: string;
   /** true keeps Codex's built-in coding-agent prompt (A/B only). */
   codexBasePrompt?: boolean;
+  /** Reply formatting: "plain" (default, raw-text terminal) or "markdown" (a chat UI that renders it). */
+  format?: ReplyFormat;
   clientVersion?: string;
   onLog?: (line: string) => void;
   /** Progress of long-running tools (e.g. bulk screening), for the UI. */
@@ -91,7 +94,7 @@ export function createAssistant(opts: {
     codexBin: process.env.CODEX_BIN ?? "codex",
     codexHome,
     workspace,
-    baseInstructions: opts.codexBasePrompt ? undefined : read("prompts/base.md"),
+    baseInstructions: opts.codexBasePrompt ? undefined : basePrompt(ROOT, opts.format),
     // Rebuilt for every new session, so profile, policy and memory changes apply on /new.
     developerInstructions: () =>
       [

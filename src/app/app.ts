@@ -1,11 +1,18 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
 import { createAssistant, ROOT, type Assistant } from "../assistant";
+import type { ReplyFormat } from "../basePrompt";
+import { PendingConfirms } from "./confirms";
+import { launchCommand, openablePath, spawnLauncher, type Launcher, type OpenResult } from "./launch";
+import { stageUploads, type Upload } from "./uploads";
+export type { Upload } from "./uploads";
+export type { Launcher, OpenResult } from "./launch";
+export type { ReplyFormat } from "../basePrompt";
 import type { AccountStatus, Confirm, ConfirmRequest, EngineEvent, SessionInfo } from "../engine/types";
 import { userSection } from "../memory/context";
 import { summarizeSession } from "../memory/summarize";
 import type { Preference, SessionRecord, TaskNote } from "../memory/store";
-import { attachToInbox, findDroppedPaths, importIntoJob } from "../files/attach";
+import { attachToInbox, findDroppedPaths, importIntoJob, MAX_ATTACH_BYTES } from "../files/attach";
 import { ensureFolders, jobDir, listJobs, validateFilesRoot, walk, type Folders } from "../files/folders";
 import { listInbox, type InboxEntry } from "../files/tools";
 import { profileLines, type BusinessProfile } from "../business/profile";
@@ -97,26 +104,33 @@ export class AssistantApp {
   private pending: { notes: string[]; images: string[] } = { notes: [], images: [] };
   private voice: VoiceController | null = null;
   private voiceHandlers: VoiceHandlers | null = null;
+  private readonly confirms = new PendingConfirms();
 
   constructor(opts: {
     userId: string;
     ui: AppUI;
     serviceTier?: string;
     codexBasePrompt?: boolean;
+    /** Reply formatting: "plain" (default, a terminal) or "markdown" (a UI that renders it). */
+    format?: ReplyFormat;
     /** Defaults to <repo>/memory. */
     memoryRoot?: string;
     /** Business workspace chosen by the host application (not validated like /files set). */
     filesRoot?: string;
     clientVersion?: string;
+    /** Starts the system's open / reveal command (openFile, revealFile); tests pass a fake. */
+    launcher?: Launcher;
   }) {
     this.userId = opts.userId;
+    this.launcher = opts.launcher ?? spawnLauncher;
     const confirm: Confirm = async (req) => {
       // A yes/no needs a keyboard or a click; during voice mode it is declined and reported.
       if (this.voice) {
         this.voiceHandlers?.onConfirmSkipped(req);
         return false;
       }
-      return opts.ui.confirm(req);
+      // Tracked, so stop(), close() and cancelPendingConfirms() can withdraw it.
+      return this.confirms.ask(opts.ui.confirm, req);
     };
     this.confirm = confirm;
     this.a = createAssistant({
@@ -124,6 +138,7 @@ export class AssistantApp {
       confirm,
       serviceTier: opts.serviceTier,
       codexBasePrompt: opts.codexBasePrompt,
+      format: opts.format,
       memoryRoot: opts.memoryRoot,
       clientVersion: opts.clientVersion,
       onLog: opts.ui.log,
@@ -135,6 +150,7 @@ export class AssistantApp {
 
   private readonly confirm: Confirm;
   private readonly progress: Progress;
+  private readonly launcher: Launcher;
 
   // ------------------------------------------------------------------ account and session
 
@@ -201,6 +217,7 @@ export class AssistantApp {
 
   /** Saves notes and shuts the engine down. */
   async close(): Promise<TaskNote[] | null> {
+    this.cancelPendingConfirms();
     this.voice?.stop();
     let notes: TaskNote[] | null = null;
     try {
@@ -225,9 +242,20 @@ export class AssistantApp {
     return this.a.engine.isBusy();
   }
 
-  /** Stops the reply in progress. */
+  /** Stops the reply in progress; its open confirmations are declined. */
   stop(): Promise<void> {
+    this.cancelPendingConfirms();
     return this.a.engine.interrupt();
+  }
+
+  /** Confirmations waiting for an answer (a reconnecting UI shows them again, with the same id). */
+  pendingConfirms(): { id: string; req: ConfirmRequest }[] {
+    return this.confirms.list();
+  }
+
+  /** Withdraws open confirmations (e.g. the UI disconnected); each counts as declined. Returns how many. */
+  cancelPendingConfirms(): number {
+    return this.confirms.cancelAll();
   }
 
   /**
@@ -324,6 +352,27 @@ export class AssistantApp {
   }
 
   /**
+   * Attaches uploaded bytes (a browser UI has no paths): the same as dropping files or
+   * folders. Files without a folder in `relPath` go to the Inbox; files of a dropped folder
+   * are staged in a temporary folder with their structure, offered as a job import, and the
+   * staging folder is deleted. One outcome per loose file, per top-level folder and per
+   * refused upload (unsafe path, too large), in upload order; `path` is the uploaded name.
+   */
+  async attachBytes(files: Upload[]): Promise<AttachOutcome[]> {
+    const staged = stageUploads(files, MAX_ATTACH_BYTES);
+    try {
+      const out: { index: number; outcome: AttachOutcome }[] = staged.refused.map((r) => ({ index: r.index, outcome: { path: r.label, kind: "refused", reason: r.reason } }));
+      for (const group of [staged.files, staged.folders]) {
+        const outcomes = await this.attach(group.map((g) => g.path));
+        group.forEach((g, i) => out.push({ index: g.index, outcome: { ...outcomes[i], path: g.label } }));
+      }
+      return out.sort((x, y) => x.index - y.index).map((x) => x.outcome);
+    } finally {
+      rmSync(staged.dir, { recursive: true, force: true });
+    }
+  }
+
+  /**
    * For terminals, where a dropped file arrives as its path in the typed line: attaches
    * the paths it finds and returns the rest of the message (empty if there was none).
    */
@@ -374,6 +423,27 @@ export class AssistantApp {
   files(): { folders: Folders; inbox: InboxEntry[] } {
     const f = this.folders();
     return { folders: f, inbox: listInbox(f) };
+  }
+
+  /** Opens a workspace file (or folder) with the system's default app, e.g. a saved report. */
+  openFile(path: string): Promise<OpenResult> {
+    return this.launch("open", path);
+  }
+
+  /** Shows a workspace file in the file manager (Explorer / Finder; the folder on Linux). */
+  revealFile(path: string): Promise<OpenResult> {
+    return this.launch("reveal", path);
+  }
+
+  private async launch(action: "open" | "reveal", path: string): Promise<OpenResult> {
+    const p = openablePath(this.folders(), path);
+    if (!p.ok) return p;
+    try {
+      await this.launcher(launchCommand(action, p.path));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: `could not ${action} the file: ${(e as Error).message}` };
+    }
   }
 
   /** Moves this user's business workspace (validated: no system or assistant folders). */

@@ -4,7 +4,7 @@ import { createInterface } from "node:readline/promises";
 import { userInfo } from "node:os";
 import { spawn } from "node:child_process";
 import { AssistantApp, TIERS, tierLabel, VOICE_IDLE_SECONDS, type AppEvent, type AttachOutcome, type VoiceController } from "./app/app";
-import { confirmText, type ConfirmRequest } from "./engine/types";
+import { confirmText, type Confirm } from "./engine/types";
 import type { TaskNote } from "./memory/store";
 import { employeeLine } from "./business/register";
 import { formatReminders, todayLocal } from "./business/reminders";
@@ -146,12 +146,12 @@ function printAttachOutcome(o: AttachOutcome) {
 async function main(): Promise<void> {
   const userId = resolveUser();
   // Set once readline exists.
-  let ask: (req: ConfirmRequest) => Promise<boolean> = async () => false;
+  let ask: Confirm = async () => false;
 
   const app = new AssistantApp({
     userId,
     ui: {
-      confirm: (req) => ask(req),
+      confirm: (req, ctx) => ask(req, ctx),
       progress: (msg) => process.stdout.write(dim(`\n  ${msg}`)),
       log: DEBUG ? (l) => console.error(dim(`[codex] ${l}`)) : undefined,
     },
@@ -177,8 +177,9 @@ async function main(): Promise<void> {
   console.log(dim("Type /help for commands. Drag files into this window to attach them.") + "\n");
 
   const rl = createInterface({ input: process.stdin, output: process.stdout });
-  ask = async (req) => {
-    const a = (await rl.question(yellow(`\n${confirmText(req)}\n[y/n] `))).trim().toLowerCase();
+  ask = async (req, ctx) => {
+    // Ctrl+C stops the reply and withdraws the question (the app counts it as "no").
+    const a = (await rl.question(yellow(`\n${confirmText(req)}\n[y/n] `), { signal: ctx?.signal })).trim().toLowerCase();
     return a === "y" || a === "yes" || a === "是";
   };
 

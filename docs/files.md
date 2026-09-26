@@ -47,6 +47,7 @@ A file dragged into the terminal arrives as its path: quoted if it has spaces, o
 - **Folders:** the CLI asks `[y/n]` to import the folder as a job (`importIntoJob`, the same code as `/import`). The path is replaced with `[imported folder as job "<job>" (N application file(s))]`.
 - **Refused or declined:** an unsupported file, or a folder the user chose not to import, is removed from the message with a note in the terminal. If nothing is left, nothing is sent to the model.
 - **Attachments with no request:** if the message is only paths, the files are attached and the CLI asks "What should I do with it?". The attachments go with the next message.
+- **From a UI (bytes, no paths):** `AssistantApp.attachBytes` writes the upload to a temporary staging folder with sanitised names (`..` and absolute paths refused, the same size limit), then runs the same flow and deletes the staging folder; see `docs/architecture.md` §2.
 - **Why this is safe:** the copy is made by the client on the user's own action, and only from what the user typed. The model still reaches only Inbox, Jobs and Policies through the guarded tools and cannot name a path to copy. Voice requests do not go through this.
 
 ## 4 Security boundary
