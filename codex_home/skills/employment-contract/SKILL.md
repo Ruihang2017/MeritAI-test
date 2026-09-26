@@ -80,7 +80,8 @@ If the profile names an adviser, add their name to that line.
   - make a casual a "casual" in name only (fixed regular hours with a firm commitment);
   - hold back final pay;
   - impose unreasonable restraints;
-  - charge the employee for uniforms or breakages without lawful authorisation.
+  - deduct from pay, or charge the employee, for the business's own costs (breakages and repairs, till shortfalls, uniforms or equipment the job requires). Written consent does not make these lawful (see "Deductions from pay" in your instructions), so do not offer a "with the employee's written consent" version;
+  - deduct pay for notice not given, unless the award allows it (some do, with limits): say to check the award's notice clause.
 
   If the owner asks for one of these, leave it out and say so at the top, before the draft, in one line: what you left out and why it is unlawful or risky (e.g. "I left out holding back final pay until property is returned: final pay can't be withheld for that.").
 - Placeholders in square brackets for every personal detail of the employee. Do not ask for their address, date of birth, TFN or bank details: they go on the employee's own forms.

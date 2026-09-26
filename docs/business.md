@@ -236,7 +236,7 @@ Deferred to a later round (owner to decide, see the conversation of 2026-09-26):
 - procedural fairness in warning letters;
 - state schemes.
 
-### Round 3 (2026-09-26, legal knowledge; not yet evaluated with the model)
+### Round 3 (2026-09-26, legal knowledge)
 
 Chosen by the owner from the round 2 list (★1-★5). Facts checked on ato.gov.au and fairwork.gov.au on 2026-09-26 (the Code from Fair Work's copy of the Small Business Fair Dismissal Code).
 
@@ -248,6 +248,15 @@ Chosen by the owner from the round 2 list (★1-★5). Facts checked on ato.gov.
 | **Fair process in letters** | `developer.md` and `difficult-conversation`: the meeting invitation comes first (the concerns, no decision made, a chance to respond, a support person). The outcome letter is a separate draft for after their response. An apprentice stand-down doesn't change the training contract |
 | **Unsupported impressions in reviews** | `performance-review`: only concerns with a work-related example go in. Impressions are listed as "needs an example before it can go in" |
 | **Family and domestic violence leave on pay slips** | `developer.md`: must not appear on pay slips (record it as ordinary hours or another pay item). Keep it confidential and check payroll settings |
+
+Core evaluation after round 3 (70 × 2, `eval/results/round3`): 106 of 140 runs pass both the hard checks and the judge (round 1: 91); stable failures 14 → 8.
+
+### Round 4 (2026-09-26, from the round 3 evaluation)
+
+| Topic | Change |
+|---|---|
+| **Deductions from pay** (Fair Work "Deducting pay", checked 2026-09-26): only with the employee's written agreement *and* mainly for their benefit, or when a law, an order, the award or a registered agreement allows it | `developer.md`: the rule, and that the business's own costs (breakages, repairs, till shortfalls, required uniforms or tools) can't be deducted even with written consent. `employment-contract`: no "with written consent" version of such a clause; a deduction for notice not given only if the award allows it. Round 2's "draft first" had turned "without lawful authorisation" into consent-based clauses (con-10: 2/2 → 0/2). Targeted re-run of the 6 deduction scenarios plus a contract control, × 2: 13/14 (con-10 2/2; the one fail is unrelated) |
+| **Shortened links** | The model often wrote the ATO leaving page without its `-your-business` ending (a dead link). The engine now corrects a tool URL cut at a hyphen in its last segment (`links_corrected`, see `docs/research.md`); other unknown links stay flagged |
 
 ## 10 Tests
 
