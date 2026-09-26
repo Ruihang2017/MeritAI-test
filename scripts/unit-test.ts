@@ -2,7 +2,7 @@
 // the first evaluation: apprentices, the leaving checklist, fixed-term notes, reminder
 // wording, small business status and adviser referral.
 import { join } from "node:path";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { ensureFolders } from "../src/files/folders";
 import { BusinessStore, adviserLine, renderProfile, smallBusinessLine, EMPTY_PROFILE } from "../src/business/profile";
@@ -13,7 +13,13 @@ import { registerTools, FIXED_TERM_NOTE } from "../src/business/registerTools";
 import { computeReminders } from "../src/business/reminders";
 import { isOfficialUrl } from "../src/research/officialSources";
 import { AssistantApp } from "../src/app/app";
-import { confirmText } from "../src/engine/types";
+import { PendingConfirms } from "../src/app/confirms";
+import { launchCommand, type LaunchCommand } from "../src/app/launch";
+import { STAGING_PREFIX } from "../src/app/uploads";
+import { ROOT } from "../src/assistant";
+import { basePrompt, MARKDOWN_SWAPS } from "../src/basePrompt";
+import { MAX_ATTACH_BYTES } from "../src/files/attach";
+import { confirmText, type Confirm, type ConfirmContext, type ConfirmRequest } from "../src/engine/types";
 
 type Check = [string, boolean];
 const results: { name: string; checks: Check[]; detail?: string }[] = [];
@@ -143,6 +149,181 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["workspace from the host", app.folders().root === f.root],
     ["tiers", app.setTier("standard") === "standard" && app.setTier("bogus") === null],
   ], JSON.stringify({ withText, onlyPath, folder, refused }).slice(0, 600));
+}
+
+// ------------------------------------------------------------ reply format (plain for the terminal, markdown for a UI)
+{
+  const file = readFileSync(join(ROOT, "prompts/base.md"), "utf8");
+  const plain = basePrompt(ROOT).split("\n");
+  const md = basePrompt(ROOT, "markdown");
+  const changed = plain.map((l, i) => (l === md.split("\n")[i] ? null : md.split("\n")[i])).filter((l) => l !== null);
+  record("reply format", [
+    ["plain = prompts/base.md unchanged", basePrompt(ROOT) === file && basePrompt(ROOT, "plain") === file],
+    ["markdown: only the formatting lines differ", plain.length === md.split("\n").length && changed.length === MARKDOWN_SWAPS.length && MARKDOWN_SWAPS.every(([, m]) => changed.some((l) => l!.includes(m)))],
+    ["markdown rule: headings, numbered lists, bold, links", /GitHub-flavoured markdown/.test(md) && /headings/.test(md) && /numbered lists/.test(md) && /\*\*bold\*\*/.test(md) && /\[text\]\(url\)/.test(md)],
+    ["markdown: no raw-text rule left", !/raw text|plain-text|no bold or italics/.test(md)],
+  ], changed.join("\n"));
+}
+
+// ------------------------------------------------------------ cancellable confirmations
+{
+  const pc = new PendingConfirms();
+  const ctxs: ConfirmContext[] = [];
+  const answers: ((v: boolean) => void)[] = [];
+  const ui: Confirm = (_req, ctx) => (ctxs.push(ctx!), new Promise<boolean>((r) => answers.push(r)));
+  const req = { kind: "profile", title: "Save to the business profile?" } as const;
+  const first = pc.ask(ui, req);
+  const listed = pc.list();
+  answers[0](true);
+  const firstResult = await first;
+  const afterAnswer = pc.list().length;
+  const second = pc.ask(ui, { kind: "register", title: "Add to the register?" });
+  const third = pc.ask(ui, { kind: "memory", title: "Remember this?" });
+  const cancelled = pc.cancelAll();
+  answers[1](true); // a late answer changes nothing
+  const [r2, r3] = await Promise.all([second, third]);
+  const oneArg = await pc.ask(async (r) => r.title === "old style", { kind: "setup", title: "old style" });
+
+  // Through the app: a dropped folder asks to import; the UI never answers, the app withdraws it.
+  const f = ensureFolders(join(TMP, "confirm-files"));
+  const src = join(TMP, "confirm-drop", "Applicants");
+  mkdirSync(src, { recursive: true });
+  writeFileSync(join(src, "a.md"), "# A");
+  const appCtxs: ConfirmContext[] = [];
+  const app = new AssistantApp({ userId: "unit-confirm", memoryRoot: join(TMP, "confirm-mem"), filesRoot: f.root, ui: { confirm: (_r, ctx) => (appCtxs.push(ctx!), new Promise<boolean>(() => {})) } });
+  const attaching = app.attach([src]);
+  await new Promise((r) => setImmediate(r));
+  const appListed = app.pendingConfirms();
+  const appCancelled = app.cancelPendingConfirms();
+  const outcome = await attaching;
+  record("cancellable confirmations", [
+    ["pending listed with id and request", listed.length === 1 && listed[0].id === ctxs[0].id && listed[0].req === req],
+    ["answered: resolved and removed from the list", firstResult === true && afterAnswer === 0],
+    ["unique ids", new Set(ctxs.map((c) => c.id)).size === 3],
+    ["cancel: resolves false without an answer, signal aborted", cancelled === 2 && r2 === false && r3 === false && ctxs[1].signal.aborted && !pc.list().length],
+    ["single-argument UI confirm still works", oneArg === true],
+    ["app: pending folder import listed with the UI's id", appListed.length === 1 && appListed[0].req.kind === "folder-import" && appListed[0].id === appCtxs[0]?.id],
+    ["app: cancelled → declined (not imported)", appCancelled === 1 && outcome[0]?.kind === "not-imported" && appCtxs[0].signal.aborted && !app.pendingConfirms().length],
+  ], JSON.stringify({ appListed, outcome }).slice(0, 600));
+}
+
+// ------------------------------------------------------------ open and reveal workspace files
+{
+  const f = ensureFolders(join(TMP, "open-files"));
+  const doc = join(f.outbox, "Report.docx");
+  writeFileSync(doc, "x");
+  writeFileSync(join(f.data, "secret.json"), "{}");
+  writeFileSync(join(TMP, "outside.txt"), "x");
+  const launched: LaunchCommand[] = [];
+  const app = new AssistantApp({
+    userId: "unit-open",
+    memoryRoot: join(TMP, "open-mem"),
+    filesRoot: f.root,
+    ui: { confirm: async () => false },
+    launcher: async (c) => void launched.push(c),
+  });
+  const opened = await app.openFile(doc);
+  const revealed = await app.revealFile(doc);
+  const refused = [
+    await app.openFile(join(TMP, "outside.txt")),
+    await app.openFile(join(f.outbox, "..", "..", "outside.txt")),
+    await app.openFile(join(f.outbox, "missing.docx")),
+    await app.openFile(join(f.data, "secret.json")),
+    await app.revealFile(f.data),
+  ];
+  const same = (a: LaunchCommand | undefined, b: LaunchCommand) => JSON.stringify(a) === JSON.stringify(b);
+  record("open and reveal files", [
+    ["open: the default app, through the launcher", opened.ok && same(launched[0], launchCommand("open", realpathSync(doc)))],
+    ["reveal: the file manager", revealed.ok && same(launched[1], launchCommand("reveal", realpathSync(doc)))],
+    ["refused: outside the workspace, .., missing, the .assistant folder", refused.every((r) => !r.ok) && launched.length === 2],
+    ["Windows: explorer, quoted verbatim", same(launchCommand("open", "C:\\a b\\R.docx", "win32"), { command: "explorer.exe", args: ['"C:\\a b\\R.docx"'], verbatim: true }) && same(launchCommand("reveal", "C:\\a b\\R.docx", "win32"), { command: "explorer.exe", args: ['/select,"C:\\a b\\R.docx"'], verbatim: true })],
+    ["macOS open / open -R; Linux xdg-open (reveal: the folder)", same(launchCommand("reveal", "/u/R.docx", "darwin"), { command: "open", args: ["-R", "/u/R.docx"] }) && same(launchCommand("open", "/u/R.docx", "linux"), { command: "xdg-open", args: ["/u/R.docx"] }) && same(launchCommand("reveal", "/u/R.docx", "linux"), { command: "xdg-open", args: ["/u"] })],
+  ], JSON.stringify({ launched, refused }).slice(0, 600));
+}
+
+// ------------------------------------------------------------ attachments uploaded as bytes (a browser UI)
+{
+  const asked: string[] = [];
+  const f = ensureFolders(join(TMP, "upload-files"));
+  const app = new AssistantApp({ userId: "unit-upload", memoryRoot: join(TMP, "upload-mem"), filesRoot: f.root, ui: { confirm: async (r) => (asked.push(confirmText(r)), false) } });
+  const staging = () => readdirSync(tmpdir()).filter((n) => n.startsWith(STAGING_PREFIX));
+  const before = new Set(staging());
+  const text = (s: string) => Buffer.from(s);
+  const one = await app.attachBytes([{ name: "Resume B.md", data: text("# B\nCook") }]);
+  const again = await app.attachBytes([{ name: "Resume B.md", data: new Uint8Array(text("# B\nCook")) }]);
+  const names = await app.attachBytes([
+    { name: "..\\..\\evil.md", data: text("e") },
+    { name: "CON.txt", data: text("c") },
+    { name: 'a:b?"c".md.', data: text("a") },
+  ]);
+  const paths = await app.attachBytes([
+    { name: "x.md", relPath: "../x.md", data: text("x") },
+    { name: "x.md", relPath: "Applicants/../../x.md", data: text("x") },
+    { name: "x.md", relPath: "C:/Temp/x.md", data: text("x") },
+    { name: "x.md", relPath: "/etc/x.md", data: text("x") },
+  ]);
+  const big = await app.attachBytes([{ name: "big.pdf", data: new Uint8Array(MAX_ATTACH_BYTES + 1) }]);
+  const folder = await app.attachBytes([
+    { name: "a.md", relPath: "Applicants/a.md", data: text("# A") },
+    { name: "b.md", relPath: "Applicants/sub/b.md", data: text("# B") },
+  ]);
+  const attached = (o: (typeof one)[number] | undefined) => (o?.kind === "attached" ? o : null);
+  const left = staging().filter((n) => !before.has(n));
+  record("attachments from bytes", [
+    ["single file: attached to the Inbox, waits for the next message", attached(one[0])?.name === "Resume B.md" && one[0].path === "Resume B.md" && existsSync(join(f.inbox, "Resume B.md")) && app.hasPendingAttachments()],
+    ["identical upload reused", attached(again[0])?.reused === true && !existsSync(join(f.inbox, "Resume B (2).md"))],
+    ["names sanitised (basename, device names, characters)", attached(names[0])?.name === "evil.md" && attached(names[1])?.name === "_CON.txt" && attached(names[2])?.name === "a_b__c_.md" && !existsSync(join(TMP, "evil.md"))],
+    ["folder paths with .. or absolute refused", paths.length === 4 && paths.every((o) => o.kind === "refused")],
+    ["oversize refused", big[0]?.kind === "refused"],
+    ["dropped folder: asks to import (declined)", folder.length === 1 && folder[0].kind === "not-imported" && folder[0].path === "Applicants" && asked.some((q) => /Import the folder "Applicants"/.test(q))],
+    ["staging folders deleted", left.length === 0],
+  ], JSON.stringify({ one, again, names, paths, big, folder, left }).slice(0, 600));
+}
+
+// ------------------------------------------------------------------ forms (register and profile, no model)
+{
+  let answer = false;
+  const asked: ConfirmRequest[] = [];
+  const f = ensureFolders(join(TMP, "forms-files"));
+  const app = new AssistantApp({ userId: "unit-forms", memoryRoot: join(TMP, "forms-mem"), filesRoot: f.root, ui: { confirm: async (r) => (asked.push(r), answer) } });
+  const profile = app.updateProfile({ legalName: "Test Cleaning Pty Ltd", states: ["NSW"], headcount: 9 });
+  const same = app.updateProfile({ headcount: 9 });
+  const badProfile = app.updateProfile({ notes: "Owner DOB 14/03/1971" });
+  const marco = app.addEmployee({ name: "Marco Test", role: "Cleaner", employmentType: "casual", startDate: "2026-09-06" });
+  const dup = app.addEmployee({ name: "marco test", role: "Cleaner", employmentType: "casual", startDate: "2026-09-06" });
+  const pii = app.addEmployee({ name: "Ann Test", role: "Admin", employmentType: "part-time", startDate: "2026-09-06", notes: "DOB 14/03/1991" });
+  const sam = app.addEmployee({ name: "Sam Test", role: "Project cleaner", employmentType: "fixed-term", startDate: "2026-05-01", endDate: "2026-10-23" });
+  const samId = sam.ok ? sam.employee.id : -1;
+  const extend = app.updateEmployee(samId, { endDate: "2027-01-22" });
+  const role = app.updateEmployee(samId, { role: "Senior project cleaner" });
+  const leftViaUpdate = app.updateEmployee(samId, { status: "left", leftDate: "2026-10-01" });
+  const marcoId = marco.ok ? marco.employee.id : -1;
+  const docs = app.recordDocuments(marcoId, ["ceis", "super_choice"], "2026-09-25");
+  const badDate = app.recordDocuments(marcoId, ["induction"], "25/09/2026");
+  const left = app.markLeft(marcoId, "2026-10-09", "resignation");
+  const badReason = app.markLeft(samId, "2026-10-09", "quit" as never);
+  const declined = await app.removeEmployee(samId);
+  const keptAfterNo = app.staff(true).some((e) => e.id === samId);
+  answer = true;
+  const removed = await app.removeEmployee(samId);
+  const t = (xs: { task: string }[]) => xs.map((x) => x.task).join(" | ");
+  record("forms", [
+    ["profile saved without a yes/no, lines for the receipt", profile.ok && profile.lines.length === 3 && !app.needsSetup() && !asked.some((q) => q.kind === "profile")],
+    ["profile: nothing changed → no lines", same.ok && same.lines.length === 0],
+    ["profile: date of birth refused", !badProfile.ok && /date of birth/.test(badProfile.error)],
+    ["add: new starter checklist for a casual", marco.ok && /Casual Employment Information Statement/.test(t(marco.checklist)) && marco.checklist.every((i) => isOfficialUrl(i.source.url))],
+    ["add: duplicate name refused", !dup.ok && /already in the register/.test(dup.error)],
+    ["add: date of birth in notes refused", !pii.ok && /sensitive personal data/.test(pii.error)],
+    ["update: fixed-term end date → limits note", extend.ok && extend.notes.length === 1 && /2 years/.test(extend.notes[0].text) && isOfficialUrl(extend.notes[0].source.url)],
+    ["update: other changes → no note", role.ok && role.notes.length === 0],
+    ["update: leaving must use markLeft", !leftViaUpdate.ok],
+    ["documents recorded with the date; bad date refused", docs.ok && docs.employee.documents.some((d) => d.id === "ceis" && d.date === "2026-09-25") && !badDate.ok],
+    ["markLeft: status left + resignation checklist", left.ok && left.employee.status === "left" && left.employee.leftDate === "2026-10-09" && /within 7 days/.test(t(left.checklist)) && !/Get advice before acting/.test(t(left.checklist))],
+    ["markLeft: unknown reason refused", !badReason.ok],
+    ["delete: destructive confirm, declined keeps the record", declined.ok && !declined.removed && keptAfterNo && asked.some((q) => q.destructive === true)],
+    ["delete: confirmed removes it", removed.ok && removed.removed && !app.staff(true).some((e) => e.id === samId)],
+    ["only delete asked a question", asked.length === 2],
+  ], JSON.stringify({ profile, badProfile, dup, pii, extend, leftViaUpdate, badDate, badReason, declined }).slice(0, 700));
 }
 
 try {

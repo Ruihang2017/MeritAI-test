@@ -14,7 +14,7 @@ export const LEAVING_CHECKED_ON = "2026-09-26";
 export type LeavingReason = "resignation" | "dismissal" | "redundancy" | "end of fixed-term contract" | "other";
 export const LEAVING_REASONS: LeavingReason[] = ["resignation", "dismissal", "redundancy", "end of fixed-term contract", "other"];
 
-type LeavingItem = Omit<ChecklistItem, "when"> & { when: "before the last day" | "final pay" | "after they leave" };
+export type LeavingItem = Omit<ChecklistItem, "when"> & { when: "before the last day" | "final pay" | "after they leave" };
 
 export function leavingChecklist(opts: { reason: LeavingReason; apprentice: boolean; states: string[] }): LeavingItem[] {
   const items: LeavingItem[] = [];

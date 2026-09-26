@@ -124,6 +124,14 @@ The `onboarding-plan` skill also calls the checklist for its pre-start items. `d
 - **Tools:** `list_employees`, `add_employee`, `update_employee`, `record_documents`, `remove_employee`.
   - **Every write is confirmed by the owner:** the tool shows what it will save and asks `[y/n]` in the CLI. The descriptions tell the model to call the tool directly instead of asking in the chat. (In testing it first asked "shall I save?" in the chat, which doubled the confirmation.)
   - Same name as an existing active employee: the add is refused, and the model must update the record or ask.
+- **Forms (for a UI, agreed with the owner 2026-09-26):** `AssistantApp.addEmployee`, `updateEmployee`, `recordDocuments`, `markLeft(id, leftDate, reason)`, `removeEmployee`, and `updateProfile` for the business profile.
+  - They use the same checks as the tools (`src/business/registerOps.ts`, `checkProfilePatch` in `tools.ts`), so a form can't save what a tool would refuse.
+  - Submitting the form is the owner's confirmation, so there is no second yes/no. Deleting still shows the destructive confirmation the tool uses.
+  - They return what a UI shows after saving:
+    - adding someone returns their new starter checklist;
+    - `markLeft` returns the leaving checklist for the reason (leaving always goes through it);
+    - changing a fixed-term end date returns the limits note with its Fair Work source.
+  - The chat path is unchanged. The model reads the register fresh every time, so both paths stay in step.
 - **Validation (code, not only the prompt):**
   - dates must be `YYYY-MM-DD`;
   - employment types must be known;
