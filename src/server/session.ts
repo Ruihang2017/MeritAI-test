@@ -121,7 +121,7 @@ export class UiSession {
     },
     newConversation: async () =>
       this.exclusive("Starting a new conversation", async () => {
-        await this.app.newConversation();
+        await this.app.newConversation({ notes: "background" });
         return null;
       }),
     history: async () => this.app.history(),
@@ -130,7 +130,7 @@ export class UiSession {
         const threadId = str(p?.threadId, "threadId", 100);
         const record = (await this.app.history()).find((r) => r.threadId === threadId);
         if (!record) throw new Error("That conversation is no longer stored.");
-        const r = await this.app.resume(record);
+        const r = await this.app.resume(record, { notes: "background" });
         return { alreadyOpen: r.alreadyOpen };
       }),
     transcript: async () => this.app.conversation(),

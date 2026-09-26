@@ -247,11 +247,19 @@ export class AppServerEngine implements Engine {
   }
 
   async resumeSession(threadId: string, contextUpdate?: string): Promise<SessionInfo> {
-    const res = (await this.conn.request("thread/resume", {
-      threadId,
-      excludeTurns: true,
-      serviceTier: this.serviceTier,
-    })) as ThreadResumeResponse;
+    let res: ThreadResumeResponse;
+    try {
+      res = (await this.conn.request("thread/resume", {
+        threadId,
+        excludeTurns: true,
+        serviceTier: this.serviceTier,
+      })) as ThreadResumeResponse;
+    } catch (e) {
+      // Another app-server (the CLI and the browser UI at once, or two UIs) has this conversation open.
+      if (/active writer/i.test((e as Error).message))
+        throw new Error("This conversation is open in another MeritAI window or in the terminal (npm start). Close it there, or start a new conversation here.");
+      throw e;
+    }
     // The thread keeps the tool definitions it was created with; route calls to
     // this session's current handlers for the same names.
     const tools = [this.loadSkillTool(), ...(this.opts.tools?.() ?? [])];

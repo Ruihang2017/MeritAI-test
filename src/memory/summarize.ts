@@ -51,8 +51,7 @@ function render(transcript: TranscriptEntry[]): string {
  * End-of-session summary (memory write mechanism 4). Runs in an ephemeral
  * thread; saves at most a few task notes. Returns what was saved.
  */
-export async function summarizeSession(engine: Engine, mem: UserMemory): Promise<TaskNote[]> {
-  const transcript = engine.transcript();
+export async function summarizeSession(engine: Engine, mem: UserMemory, transcript: TranscriptEntry[] = engine.transcript()): Promise<TaskNote[]> {
   if (!transcript.some((m) => m.role === "user")) return [];
 
   const existing = mem.tasks();

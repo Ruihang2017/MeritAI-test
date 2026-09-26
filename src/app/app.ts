@@ -198,11 +198,13 @@ export class AssistantApp {
       onProgress: opts.ui.progress,
     });
     this.progress = opts.ui.progress ?? (() => {});
+    this.onLog = opts.ui.log;
     if (opts.filesRoot) this.a.mem.updateSettings({ filesRoot: opts.filesRoot });
   }
 
   private readonly confirm: Confirm;
   private readonly progress: Progress;
+  private readonly onLog?: (line: string) => void;
   private readonly launcher: Launcher;
 
   // ------------------------------------------------------------------ account and session
@@ -243,12 +245,22 @@ export class AssistantApp {
     return summarizeSession(this.a.engine, this.a.mem);
   }
 
-  /** Saves notes from the current conversation, then starts a new one. */
-  async newConversation(): Promise<TaskNote[] | null> {
-    const notes = await this.saveNotes();
+  /**
+   * Saves notes from the current conversation, then starts a new one. `notes: "background"`
+   * (a UI switching often) starts at once and summarises the old conversation afterwards
+   * (a model call of several seconds); "wait" (the CLI) returns the notes saved.
+   */
+  async newConversation(opts: { notes?: "wait" | "background" } = {}): Promise<TaskNote[] | null> {
+    const old = this.hasConversation() ? this.a.engine.transcript() : null;
+    const notes = opts.notes === "background" ? null : await this.saveNotes();
     this.session = await this.a.engine.newSession();
     this.recorded = false;
+    if (opts.notes === "background" && old) this.notesInBackground(old);
     return notes;
+  }
+
+  private notesInBackground(transcript: TranscriptEntry[]): void {
+    summarizeSession(this.a.engine, this.a.mem, transcript).catch((e: Error) => this.onLog?.(`[notes] not saved: ${e.message}`));
   }
 
   /** This user's earlier conversations that are still stored (newest first, at most 15). */
@@ -263,13 +275,15 @@ export class AssistantApp {
   }
 
   /** Continues an earlier conversation with this user's current memory. */
-  async resume(record: SessionRecord): Promise<{ notes: TaskNote[] | null; alreadyOpen: boolean }> {
+  async resume(record: SessionRecord, opts: { notes?: "wait" | "background" } = {}): Promise<{ notes: TaskNote[] | null; alreadyOpen: boolean }> {
     if (record.threadId === this.session?.threadId) return { notes: null, alreadyOpen: true };
-    const notes = await this.saveNotes();
+    const old = this.hasConversation() ? this.a.engine.transcript() : null;
+    const notes = opts.notes === "background" ? null : await this.saveNotes();
     // The stored thread keeps its original instructions; send the current memory with the next message.
     const update = `<memory_update>\nThis conversation is being resumed. Current memory (overrides anything older in this conversation):\n\n${userSection(this.a.mem)}\n</memory_update>`;
     this.session = await this.a.engine.resumeSession(record.threadId, update);
     this.recorded = true;
+    if (opts.notes === "background" && old) this.notesInBackground(old);
     return { notes, alreadyOpen: false };
   }
 
