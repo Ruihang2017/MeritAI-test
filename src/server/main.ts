@@ -106,9 +106,13 @@ process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
 function openBrowser(u: string): void {
-  // The URL is ours (hex token only), so no shell metacharacters reach the command.
+  // The URL is ours (hex token only), so no shell metacharacters reach the command. On Windows,
+  // explorer.exe mishandles a URL with a query string and opens the Documents folder instead;
+  // url.dll's FileProtocolHandler hands it to the default browser.
   const [cmd, argv] =
-    process.platform === "win32" ? ["explorer.exe", [u]] : process.platform === "darwin" ? ["open", [u]] : ["xdg-open", [u]];
+    process.platform === "win32"
+      ? ["rundll32.exe", ["url.dll,FileProtocolHandler", u]]
+      : process.platform === "darwin" ? ["open", [u]] : ["xdg-open", [u]];
   const child = spawn(cmd, argv, { detached: true, stdio: "ignore" });
   child.on("error", () => console.log(`Couldn't open a browser; open this link yourself: ${u}`));
   child.unref();
