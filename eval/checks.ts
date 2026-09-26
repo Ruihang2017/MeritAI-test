@@ -24,7 +24,8 @@ export function runChecks(sc: Scenario, r: Pick<RunResult, "replies" | "activity
 
   // ---- scenario
   if (e.skillsAny?.length) add(`skill: ${e.skillsAny.join(" | ")}`, e.skillsAny.some((s) => r.skills.includes(s)), `loaded: ${r.skills.join(", ") || "none"}`);
-  for (const t of e.tools ?? []) add(`tool: ${t}`, activity.some((a) => a.startsWith(t)), `activity: ${activity.join(" | ")}`);
+  // "a|b": either tool (e.g. official sources, or a checklist whose items carry checked official sources)
+  for (const t of e.tools ?? []) add(`tool: ${t}`, t.split("|").some((p) => activity.some((a) => a.startsWith(p))), `activity: ${activity.join(" | ")}`);
   for (const t of e.notTools ?? []) add(`no tool: ${t}`, !activity.some((a) => a.startsWith(t)), `activity: ${activity.join(" | ")}`);
   for (const re of e.mustMatch ?? []) add(`matches ${re}`, re.test(all));
   for (const re of e.mustNotMatch ?? []) {

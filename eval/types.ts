@@ -57,7 +57,7 @@ export interface StateContext {
 export interface Expect {
   /** At least one of these skills must be loaded (explicitly or via load_skill). */
   skillsAny?: string[];
-  /** Tool activity prefixes that must appear (e.g. "checklist:", "official sources:", "register:"). */
+  /** Tool activity prefixes that must appear (e.g. "checklist:", "official sources:", "register:"); "a|b" = either. */
   tools?: string[];
   /** Tool activity prefixes that must NOT appear. */
   notTools?: string[];

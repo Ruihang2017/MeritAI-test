@@ -30,6 +30,7 @@ export const OFFICIAL_DOMAINS = [
   "business.gov.au", // Australian Government business portal: hiring, Employment Contract Tool (employ.business.gov.au)
   "servicesaustralia.gov.au", // Employment separation certificates
   "apprenticeships.gov.au", // Australian Apprenticeships (Apprentice Connect Australia)
+  "dewr.gov.au", // Department of Employment and Workplace Relations: apprenticeship support, Apprentice Connect Australia Providers (added 2026-09-26)
   // State and territory training authorities, as listed by Fair Work (apprentices and trainees), checked 2026-09-26:
   "act.gov.au", // Skills Canberra
   "education.nsw.gov.au", // Skills NSW
