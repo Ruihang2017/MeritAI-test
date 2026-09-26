@@ -100,6 +100,9 @@ function makePrinter() {
       case "skill_loaded":
         process.stdout.write(dim(`[skill: ${ev.name}] `));
         break;
+      case "links_corrected":
+        for (const f of ev.fixes) process.stdout.write(dim(`\n[link corrected: ${f.from} → ${f.to}]`));
+        break;
       case "unverified_links":
         process.stdout.write(yellow(`\n! unverified link(s), not returned by any source in this conversation: ${ev.urls.join(" ")}`));
         break;

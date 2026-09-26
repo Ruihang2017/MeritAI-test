@@ -388,7 +388,7 @@ export const PEOPLE: Scenario[] = [
     category: "termination",
     title: "Not renewing a fixed-term contract",
     turns: ["Sam Ortiz's project contract finishes in a couple of weeks and we won't renew it. Do I owe him redundancy or anything?"],
-    expect: { mustNotMatch: [/(redundancy pay (is|will be) (payable|owed)|you (must|have to) pay (him )?redundancy)/i] },
+    expect: { mustNotMatch: [/((?<!\bno )redundancy pay (is|will be) (payable|owed)|you (must|have to) pay (him )?redundancy)/i] },
     rubric:
       "Explains that a genuine fixed-term contract ending on its end date is not a dismissal or redundancy, so no redundancy pay; confirm the end in writing, pay final pay (wages, unused annual leave), and check the contract and fixed-term rules were followed; uses the end date from the register.",
   },

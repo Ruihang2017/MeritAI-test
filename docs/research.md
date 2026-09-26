@@ -36,7 +36,7 @@ These live in `prompts/developer.md` and `prompts/base.md`:
 - Never write a URL, including a search link the model builds itself, unless a tool returned it.
 - If the official sources don't confirm something, say so. For decisions with legal risk, recommend Legal or ER.
 
-**Client guard (deterministic):** the engine records every URL that tools return in the session. After each reply, any URL not in that set produces an `unverified_links` event, and the CLI prints a warning. The prompt rule is soft (in testing the model once built reddit and wikipedia search links); the guard makes such links visible either way.
+**Client guard (deterministic):** the engine records every URL that tools return in the session. After each reply, any URL not in that set produces an `unverified_links` event, and the CLI prints a warning. One exception: when the URL is a tool URL with the end of its last segment cut off at a hyphen (the model wrote `.../when-a-worker-leaves` for the ATO page `.../when-a-worker-leaves-your-business`, a dead link, in 8 of the 13 flags of the first evaluation rounds), and exactly one tool URL fits, the engine sends `links_corrected` instead (`correctUrl()` in `appServer.ts`): the CLI prints the correction, a UI replaces the link in the shown reply, and the evaluation scores the corrected reply. A parent page, a site root or a changed ending is never rewritten; those stay flagged. The prompt rule is soft (in testing the model once built reddit and wikipedia search links); the guard makes such links visible either way.
 
 ## 4 Cost
 

@@ -13,6 +13,11 @@ export type EngineEvent =
   | { type: "error"; message: string; willRetry: boolean }
   /** URLs in the reply that no tool returned in this conversation (possible hallucination). */
   | { type: "unverified_links"; urls: string[] }
+  /**
+   * Links in the reply the model shortened from a URL a tool returned (e.g. it dropped
+   * "-your-business"). The text was already streamed: a front end replaces `from` with `to`.
+   */
+  | { type: "links_corrected"; fixes: { from: string; to: string }[] }
   | { type: "turn_end"; status: "completed" | "interrupted" | "failed"; error?: string };
 
 export interface SessionInfo {

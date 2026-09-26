@@ -21,7 +21,7 @@ engine          src/engine (Engine interface; AppServerEngine = local codex app-
   - `stop()`, `close()` and `cancelPendingConfirms()` withdraw open questions; a withdrawn question resolves to false (declined), even if the UI never answers. `pendingConfirms()` lists the open ones, so a reconnecting UI can show them again.
   - In voice mode, questions are still declined at once and reported through `onConfirmSkipped`.
 - **Everything a turn produces is an `AppEvent`:**
-  - the engine events: text deltas and done, tool activity, skill loaded, unverified links, usage, errors, turn end;
+  - the engine events: text deltas and done, tool activity, skill loaded, unverified links, links corrected, usage, errors, turn end;
   - plus app warnings (`pay_calculation`).
   - `tool_activity` carries `files` (absolute paths) when a tool saved something, so a UI can offer "open".
 

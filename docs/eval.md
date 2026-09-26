@@ -65,7 +65,7 @@ About 20% of the scenarios are in Chinese.
 
 - **Global, on every run:**
   - every turn answered;
-  - no unverified links;
+  - no unverified links (a shortened tool link that the engine corrected does not count; the correction is listed in the run activity);
   - only official links;
   - no pay calculation (unless the scenario allows money arithmetic).
 - **Per scenario:**
