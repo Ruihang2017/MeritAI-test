@@ -49,7 +49,7 @@ If the profile names an adviser, add their name to that line.
 **Employment contract**, with numbered clauses in plain English:
 1. Parties: business legal name, ABN and address; [Employee name] and [Employee address].
 2. Position and duties; reporting to [Manager]; the place of work.
-3. Commencement, and the employment type. Fixed-term: the end date or event, and the reason.
+3. Commencement, and the employment type. Fixed-term: the end date or event, and the reason. Cover for someone on parental leave: say in the letter and the contract that the job is temporary, that the employee on leave has the right to return to their job, and that their leave can end early in some situations, which could affect this job (Fair Work requires telling replacement employees this; call parental_leave_checklist for the source).
 4. Hours of work:
    - full-time: 38 ordinary hours a week plus reasonable additional hours;
    - part-time: the agreed regular hours and days, and how they can be changed (in writing);

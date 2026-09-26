@@ -24,6 +24,7 @@ const P = {
   accruing: { title: "Fair Work: Accruing and taking other leave during parental leave", url: `${FW}/during-parental-leave/accruing-and-taking-other-leave-during-parental-leave` },
   payment: { title: "Fair Work: Payment during parental leave", url: `${FW}/during-parental-leave/payment-during-parental-leave` },
   returning: { title: "Fair Work: Returning to work from parental leave", url: `${FW}/after-parental-leave/returning-to-work-from-parental-leave` },
+  replacement: { title: "Fair Work: Replacement employees", url: `${FW}/before-parental-leave/replacement-employees` },
   factSheet: { title: "Fair Work: Parental leave and related entitlements (fact sheet)", url: "https://www.fairwork.gov.au/tools-and-resources/fact-sheets/minimum-workplace-entitlements/parental-leave-and-related-entitlements" },
   discrimination: { title: "Fair Work: Protection from discrimination at work", url: "https://www.fairwork.gov.au/employment-conditions/protections-at-work/protection-from-discrimination-at-work" },
   plpProviding: { title: "Services Australia: Providing Parental Leave Pay as an employer", url: `${SA}/providing-parental-leave-pay-employer?context=23121` },
@@ -105,6 +106,12 @@ export function parentalChecklist(o: ParentalOptions): ParentalItem[] {
     },
     {
       when: "before the leave",
+      task: "If you hire someone to cover (from inside or outside the business), tell them during the application process that the job is temporary, that the employee on leave has the right to return to their job, and that the leave can end early in some situations, which could affect their employment. Put it in the offer or contract too.",
+      why: "Employers must tell potential replacement employees this; the person returning has the right to their old job.",
+      source: P.replacement,
+    },
+    {
+      when: "before the leave",
       task: "Government Parental Leave Pay: up to 26 weeks per family for a child born or adopted from 1 July 2026, funded by the government. The employee claims it from Services Australia. If you receive an Employer Determination (usually an employee with you 12 months or more), accept it or ask for a review within 14 days, register for the scheme (PRODA, then Business Hub), and pay it through your normal pay cycle with the government's funds.",
       why: "Employers must provide Parental Leave Pay to eligible long-term employees in their pay cycle; the government pays the money to the employer first.",
       source: P.plpDetermination,
@@ -148,7 +155,7 @@ export function parentalChecklist(o: ParentalOptions): ParentalItem[] {
   );
   if (eligible === false) {
     // Not NES unpaid parental leave: its notice, 12 months, keeping in touch, extension and return guarantee don't apply as such.
-    const nesOnly = [P.types, P.kit, P.accruing, P.extending, P.returning];
+    const nesOnly = [P.types, P.kit, P.accruing, P.extending, P.returning, P.replacement];
     const kept = items.filter((i) => !nesOnly.includes(i.source) && !(i.source === P.applying && i.when === "before the leave"));
     kept.splice(kept.findIndex((i) => i.when !== "now"), 0, {
       when: "before the leave",

@@ -30,7 +30,8 @@ const S = {
   pact: { title: "Fair Work: Pay and Conditions Tool", url: "https://calculate.fairwork.gov.au/" },
   contractTool: { title: "business.gov.au: Employment Contract Tool", url: "https://employ.business.gov.au/" },
   fixedTerm: { title: "Fair Work: Fixed term contract employees", url: "https://www.fairwork.gov.au/starting-employment/types-of-employees/fixed-term-contract-employees" },
-  vevo: { title: "Home Affairs: Visa Entitlement Verification Online (VEVO)", url: "https://www.homeaffairs.gov.au/Busi/visas-and-migration/visa-entitlement-verification-online-(vevo)" },
+  vevo: { title: "Home Affairs: VEVO for organisations (checking work rights)", url: "https://immi.homeaffairs.gov.au/visas/already-have-a-visa/check-visa-details-and-conditions/check-conditions-online/for-organisations" },
+  sponsorObligations: { title: "Home Affairs: Sponsor obligations (notify changes within 28 days)", url: "https://immi.homeaffairs.gov.au/visas/employing-and-sponsoring-someone/existing-sponsors/standard-business-accredited-obligations" },
   fwis: { title: "Fair Work: Fair Work Information Statement", url: "https://www.fairwork.gov.au/employment-conditions/information-statements/fair-work-information-statement" },
   ceis: { title: "Fair Work: Casual Employment Information Statement", url: "https://www.fairwork.gov.au/employment-conditions/information-statements/casual-employment-information-statement" },
   ftcis: { title: "Fair Work: Fixed Term Contract Information Statement", url: "https://www.fairwork.gov.au/employment-conditions/information-statements/fixed-term-contract-information-statement" },
@@ -168,7 +169,7 @@ export function newStarterChecklist(opts: {
   if (opts.mayNeedVisaCheck) {
     items.push({
       when: "before start",
-      task: "Check the person's right to work and any visa conditions (e.g. work hour limits) in VEVO, and keep a record of the check.",
+      task: "Check the person's right to work and any visa conditions (e.g. work hour limits) in VEVO, with their permission, and save the VEVO result (PDF) as your record. Roster them within their visa conditions.",
       why: "Employing someone without work rights, or in breach of their visa conditions, is an offence.",
       source: S.vevo,
     });

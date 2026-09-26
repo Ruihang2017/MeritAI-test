@@ -200,6 +200,7 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["PLP: 26 weeks, Employer Determination 14 days, pay cycle; ATO pays super", /26 weeks/.test(txt(preg)) && /Employer Determination/.test(txt(preg)) && /14 days/.test(txt(preg)) && /normal pay cycle/.test(txt(preg)) && /paid by the ATO/.test(txt(preg))],
     ["extension: within 12 months by notice; beyond: written reply in 21 days, reasonable business grounds", /no approval needed/.test(txt(preg)) && /within 21 days/.test(txt(preg)) && /reasonable business grounds/.test(txt(preg))],
     ["not eligible: no NES-only items, leave by agreement or policy", /by agreement or under the business's own policy/.test(txt(newbie)) && !/21 days/.test(txt(newbie)) && !/130 days/.test(txt(newbie)) && !/job they had before the leave/.test(txt(newbie)) && /safe job/.test(txt(newbie)) && /26 weeks/.test(txt(newbie))],
+    ["replacement employees told: temporary, right to return", /temporary/.test(txt(preg)) && /right to return/.test(txt(preg)) && !/right to return to their job, and that the leave can end early/.test(txt(newbie))],
     ["return to work guarantee and breastfeeding", /job they had before the leave/.test(txt(preg)) && /Breastfeeding/.test(txt(preg))],
     ["every source official", PARENTAL_URLS.every(isOfficialUrl) && preg.every((i) => isOfficialUrl(i.source.url))],
   ], txt(preg).slice(0, 600));
@@ -218,6 +219,8 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["White Card only for construction sites", /White Card/.test(txt(app)) && !/White Card/.test(txt(hair)) && !/White Card/.test(txt(office))],
     ["no apprentice items for others", !/Apprentice Connect/.test(txt(office))],
     ["every source official", app.every((i) => isOfficialUrl(i.source.url))],
+    ["visa check: VEVO for organisations, save the PDF", /save the VEVO result \(PDF\)/.test(txt(newStarterChecklist({ employmentType: "casual", mayNeedVisaCheck: true, smallBusiness: true }))) && isOfficialUrl("https://immi.homeaffairs.gov.au/visas/already-have-a-visa/check-visa-details-and-conditions/check-conditions-online/for-organisations")],
+    ["leaving a sponsored worker: tell Home Affairs within 28 days; not for others", /within 28 calendar days/.test(txt(leavingChecklist({ reason: "resignation", apprentice: false, states: ["NSW"], sponsored: true }))) && !/Home Affairs/.test(txt(leavingChecklist({ reason: "resignation", apprentice: false, states: ["NSW"] })))],
   ], txt(app).slice(0, 600));
 }
 
