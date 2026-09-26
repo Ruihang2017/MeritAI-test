@@ -12,7 +12,7 @@ import { Register, employeeLine, normaliseEmployee, type Employee } from "../src
 import { registerTools, FIXED_TERM_NOTE } from "../src/business/registerTools";
 import { computeReminders } from "../src/business/reminders";
 import { isOfficialUrl } from "../src/research/officialSources";
-import { AssistantApp, usageLimit } from "../src/app/app";
+import { AssistantApp, usageLimit, withoutName } from "../src/app/app";
 import { PendingConfirms } from "../src/app/confirms";
 import { launchCommand, type LaunchCommand } from "../src/app/launch";
 import { STAGING_PREFIX } from "../src/app/uploads";
@@ -21,7 +21,7 @@ import { basePrompt, MARKDOWN_SWAPS } from "../src/basePrompt";
 import { MAX_ATTACH_BYTES } from "../src/files/attach";
 import { correctUrl, transcriptOf } from "../src/engine/appServer";
 import { WebSocket } from "ws";
-import { UiSession, withoutName } from "../src/server/session";
+import { UiSession } from "../src/server/session";
 import { startUiServer, staticFile } from "../src/server/server";
 import type { Method, Methods, ServerEvent, ShellState } from "../src/server/protocol";
 import { parentalChecklist, serviceEligible, PARENTAL_URLS } from "../src/business/parentalLeave";

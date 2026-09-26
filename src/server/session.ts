@@ -2,10 +2,9 @@ import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
 import type { AppEvent, AssistantApp } from "../app/app";
 import type { Confirm, ConfirmRequest } from "../engine/types";
-import { DOCUMENTS, expectedDocuments } from "../business/register";
-import { documentTiming } from "../business/reminders";
+import { DOCUMENTS } from "../business/register";
 import { LEAVING_REASONS } from "../business/leaving";
-import type { ClientMessage, Method, Methods, ServerEvent, Settings, ShellState, StaffRow } from "./protocol";
+import type { ClientMessage, Method, Methods, ServerEvent, Settings, ShellState } from "./protocol";
 
 /**
  * Connects UI messages to one AssistantApp: an allowlist of methods, the reply
@@ -105,9 +104,9 @@ export class UiSession {
         p.files.map((f) => ({ name: str(f?.name, "name", 300), data: Buffer.from(str(f?.base64, "base64", 70_000_000), "base64"), ...(f?.relPath ? { relPath: str(f.relPath, "relPath", 1000) } : {}) })),
       );
     },
-    staff: async (p) => this.staffRows(p?.includeLeft === true),
+    staff: async (p) => this.app.staffOverview(p?.includeLeft === true),
     addEmployee: async (p) =>
-      this.app.addEmployee(obj(p?.details, "details"), { mayNeedVisaCheck: p?.mayNeedVisaCheck !== false, apprentice: p?.apprentice === true, constructionSite: p?.constructionSite === true }),
+      this.app.addEmployee(obj(p?.details, "details"), { mayNeedVisaCheck: p?.mayNeedVisaCheck !== false, apprentice: p?.apprentice === true ? true : undefined, constructionSite: p?.constructionSite === true }),
     updateEmployee: async (p) => this.app.updateEmployee(int(p?.id), obj(p?.changes, "changes")),
     recordDocuments: async (p) => {
       if (!Array.isArray(p?.documents) || p.documents.some((d) => typeof d !== "string" || !Object.hasOwn(DOCUMENTS, d))) throw new Error("documents must be known document ids");
@@ -141,7 +140,7 @@ export class UiSession {
     files: async () => this.app.workspaceFiles(),
     profile: async () => {
       const p = this.app.profile();
-      return { exists: p.exists, profile: p.profile, policies: p.policies };
+      return { exists: p.exists, profile: p.profile, smallBusiness: p.smallBusiness, policies: p.policies };
     },
     updateProfile: async (p) => this.app.updateProfile(obj(p?.changes, "changes")),
     memories: async () => this.app.memories(),
@@ -218,32 +217,10 @@ export class UiSession {
     };
   }
 
-  private staffRows(includeLeft: boolean): StaffRow[] {
-    const rs = this.app.reminders();
-    const soon = new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10);
-    return this.app.staff(includeLeft).map((e) => {
-      const mine = rs.filter((r) => r.employeeId === e.id).sort((a, b) => a.due.localeCompare(b.due))[0];
-      const next: StaffRow["next"] =
-        e.status === "left"
-          ? e.leftDate
-            ? { text: `Left ${e.leftDate}`, due: e.leftDate, tone: "n" }
-            : null
-          : mine
-            ? { text: withoutName(mine.title, e.name), due: mine.due, tone: mine.overdue ? "red" : mine.due <= soon ? "amber" : "n" }
-            : null;
-      const done = new Map(e.documents.map((d) => [d.id, d.date]));
-      const timing = documentTiming(e.startDate);
-      return { ...e, next, documentsExpected: expectedDocuments(e).map((id) => ({ id, label: DOCUMENTS[id], timing: timing[id], recorded: done.get(id) ?? null })) };
-    });
-  }
-
   async state(): Promise<ShellState> {
     const account = await this.app.account();
     const p = this.app.profile();
     const f = this.app.folders();
-    const rs = this.app.reminders();
-    const today = new Date();
-    const week = new Date(today.getTime() + 7 * 86_400_000).toISOString().slice(0, 10);
     const threadId = this.app.sessionInfo()?.threadId;
     const title = threadId ? ((await this.app.history()).find((r) => r.threadId === threadId)?.title ?? null) : null;
     return {
@@ -256,7 +233,7 @@ export class UiSession {
       tier: this.app.sessionInfo()?.serviceTier ?? null,
       hasConversation: this.app.hasConversation(),
       title,
-      attention: { overdue: rs.filter((r) => r.overdue).length, soon: rs.filter((r) => !r.overdue && r.due <= week).length },
+      attention: this.app.attentionSummary(),
       usageLimit: this.limit,
       confirms: [...this.waiting].map(([id, w]) => ({ id, req: w.req })),
     };
@@ -271,13 +248,6 @@ function int(v: unknown): number {
 function obj(v: unknown, name: string): Record<string, unknown> {
   if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error(`${name} must be an object`);
   return v as Record<string, unknown>;
-}
-
-/** "Probation ends 2026-10-02: Leo Tran (Cleaner)" → "Probation ends 2026-10-02" (the row already shows the name). */
-export function withoutName(title: string, name: string): string {
-  const i = title.indexOf(name);
-  if (i <= 0) return title;
-  return (title.slice(0, i).replace(/(:|\s+for)\s*$/, "") + title.slice(i + name.length).replace(/^\s*\([^)]*\)/, "")).trim();
 }
 
 function str(v: unknown, name: string, max: number): string {

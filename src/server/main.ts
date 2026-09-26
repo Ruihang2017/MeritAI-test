@@ -109,5 +109,7 @@ function openBrowser(u: string): void {
   // The URL is ours (hex token only), so no shell metacharacters reach the command.
   const [cmd, argv] =
     process.platform === "win32" ? ["explorer.exe", [u]] : process.platform === "darwin" ? ["open", [u]] : ["xdg-open", [u]];
-  spawn(cmd, argv, { detached: true, stdio: "ignore" }).unref();
+  const child = spawn(cmd, argv, { detached: true, stdio: "ignore" });
+  child.on("error", () => console.log(`Couldn't open a browser; open this link yourself: ${u}`));
+  child.unref();
 }

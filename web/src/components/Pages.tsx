@@ -270,7 +270,7 @@ export function ProfilePage({ api, onAsk, onChanged }: { api: Api; onAsk: (text:
         ["What the business does", p.industry],
         ["States where staff work", p.states.join(", ")],
         ["Business address", p.address],
-        ["Number of employees", p.headcount === null ? null : `${p.headcount}${p.headcount < 15 ? " (a small business employer: fewer than 15)" : ""}`],
+        ["Number of employees", p.headcount === null ? null : `${p.headcount}${data?.smallBusiness ? " (a small business employer: fewer than 15)" : ""}`],
         ["Employment types", p.employmentTypes.join(", ")],
         ["Awards", p.awards.join(", ")],
         ["Pay frequency", p.payFrequency],

@@ -1,4 +1,4 @@
-import { readFileSync, rmSync } from "node:fs";
+import { readFileSync, rmSync, statSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 import { createAssistant, ROOT, type Assistant } from "../assistant";
 import type { ReplyFormat } from "../basePrompt";
@@ -17,12 +17,12 @@ import { ensureFolders, jobDir, listJobs, validateFilesRoot, walk, type Folders 
 import { listFolder, listInbox, type FolderEntry, type InboxEntry } from "../files/tools";
 import { profileLines, type BusinessProfile } from "../business/profile";
 import { listPolicies, type PolicyEntry } from "../business/policies";
-import type { DocumentId, Employee } from "../business/register";
+import { DOCUMENTS, expectedDocuments, type DocumentId, type Employee } from "../business/register";
 import { checkDocuments, checkEmployeeChanges, checkNewEmployee, fixedTermEndChanged, FIXED_TERM_OWNER_NOTE, type FormNote } from "../business/registerOps";
 import { checkProfilePatch } from "../business/tools";
 import { newStarterChecklist, type ChecklistItem, type EmploymentType } from "../business/onboarding";
 import { isApprenticeRole, leavingChecklist, LEAVING_REASONS, smallBusinessOf, type LeavingItem, type LeavingReason } from "../business/leaving";
-import { remindersFor, type Reminder } from "../business/reminders";
+import { documentTiming, remindersFor, todayLocal, type Reminder } from "../business/reminders";
 import { looksLikePayCalculation, PAY_GUARD_WARNING } from "../business/payGuard";
 import { formatCriteria, ingestJob, jdFromFolder, proposeCriteria, purgeMissingJobs, screenJob, type IngestSummary, type Progress, type ScreenResult } from "../screening/pipeline";
 import { chatSummary, saveReports } from "../screening/report";
@@ -85,6 +85,33 @@ export type AttachOutcome =
   | { path: string; kind: "not-imported" }
   | { path: string; kind: "refused"; reason: string }
   | { path: string; kind: "error"; message: string };
+
+/** "Soon" for reminders shown as counts and tones (the Attention button's "this week", the Staff page's amber). */
+export const SOON_DAYS = 7;
+
+/** An employee with what a Staff page shows next to them. */
+export type StaffOverviewRow = Employee & {
+  /** The earliest reminder for this person (or their last day once they left). */
+  next: { text: string; due: string; tone: "red" | "amber" | "n" } | null;
+  /** Starting documents expected for them, recorded or not (with when each is due). */
+  documentsExpected: { id: DocumentId; label: string; timing: string; recorded: string | null }[];
+};
+
+/** "Probation ends 2026-10-02: Leo Tran (Cleaner)" → "Probation ends 2026-10-02" (the row already shows the name). */
+export function withoutName(title: string, name: string): string {
+  const i = title.indexOf(name);
+  if (i <= 0) return title;
+  return (title.slice(0, i).replace(/(:|\s+for)\s*$/, "") + title.slice(i + name.length).replace(/^\s*\([^)]*\)/, "")).trim();
+}
+
+const addDaysIso = (iso: string, days: number) => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+
+/** File types the Open button may start (documents and images). */
+const OPENABLE = [".pdf", ".docx", ".doc", ".xlsx", ".xls", ".csv", ".md", ".txt", ".rtf", ".png", ".jpg", ".jpeg", ".gif", ".webp"];
 
 /** A job's screening state for a UI: like ScreenResult, but the criteria may not exist yet. */
 export type JobResults = Omit<ScreenResult, "rubric"> & { rubric: ScreenResult["rubric"] | null };
@@ -425,10 +452,10 @@ export class AssistantApp {
     return !this.a.business().exists();
   }
 
-  profile(): { exists: boolean; profile: BusinessProfile; lines: string[]; path: string; policiesDir: string; policies: PolicyEntry[] } {
+  profile(): { exists: boolean; profile: BusinessProfile; lines: string[]; path: string; policiesDir: string; policies: PolicyEntry[]; smallBusiness: boolean | null } {
     const b = this.a.business();
     const p = b.get();
-    return { exists: b.exists(), profile: p, lines: profileLines(p), path: b.path, policiesDir: this.folders().policies, policies: listPolicies(this.folders()) };
+    return { exists: b.exists(), profile: p, lines: profileLines(p), path: b.path, policiesDir: this.folders().policies, policies: listPolicies(this.folders()), smallBusiness: smallBusinessOf(p.headcount) };
   }
 
   staff(includeLeft = false): Employee[] {
@@ -437,6 +464,33 @@ export class AssistantApp {
 
   reminders(): Reminder[] {
     return remindersFor(this.a.register(), this.a.business());
+  }
+
+  /** Overdue reminders and those due within SOON_DAYS (the Attention button and badges). */
+  attentionSummary(): { overdue: number; soon: number } {
+    const rs = this.reminders();
+    const soon = addDaysIso(todayLocal(), SOON_DAYS);
+    return { overdue: rs.filter((r) => r.overdue).length, soon: rs.filter((r) => !r.overdue && r.due <= soon).length };
+  }
+
+  /** The register for a Staff page: each person's next reminder and their starting documents with timing. */
+  staffOverview(includeLeft = false): StaffOverviewRow[] {
+    const rs = this.reminders();
+    const soon = addDaysIso(todayLocal(), SOON_DAYS);
+    return this.staff(includeLeft).map((e) => {
+      const mine = rs.filter((r) => r.employeeId === e.id).sort((a, b) => a.due.localeCompare(b.due))[0];
+      const next: StaffOverviewRow["next"] =
+        e.status === "left"
+          ? e.leftDate
+            ? { text: `Left ${e.leftDate}`, due: e.leftDate, tone: "n" }
+            : null
+          : mine
+            ? { text: withoutName(mine.title, e.name), due: mine.due, tone: mine.overdue ? "red" : mine.due <= soon ? "amber" : "n" }
+            : null;
+      const done = new Map(e.documents.map((d) => [d.id, d.date]));
+      const timing = documentTiming(e.startDate);
+      return { ...e, next, documentsExpected: expectedDocuments(e).map((id) => ({ id, label: DOCUMENTS[id], timing: timing[id], recorded: done.get(id) ?? null })) };
+    });
   }
 
   // ------------------------------------------------------------------ forms
@@ -557,6 +611,11 @@ export class AssistantApp {
   private async launch(action: "open" | "reveal", path: string): Promise<OpenResult> {
     const p = openablePath(this.folders(), path);
     if (!p.ok) return p;
+    // "Open" runs the file's default program: only documents, images and folders, never
+    // shortcuts or programs that ended up in the workspace (e.g. inside an imported job folder).
+    if (action === "open" && statSync(p.path).isFile() && !OPENABLE.includes(extname(p.path).toLowerCase())) {
+      return { ok: false, error: "For safety, only documents and images open from MeritAI. Use Show in folder for other files." };
+    }
     try {
       await this.launcher(launchCommand(action, p.path));
       return { ok: true };

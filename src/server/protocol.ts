@@ -4,7 +4,7 @@
  * server pushes events (reply streaming, confirmation questions, progress).
  * Type-only: the web app imports these types, never server code.
  */
-import type { AppEvent, AttachOutcome, ChecklistItem, FormNote, FormResult, LeavingItem, LeavingReason, JobResults, ScreenOutcome } from "../app/app";
+import type { AppEvent, AttachOutcome, ChecklistItem, FormNote, FormResult, LeavingItem, LeavingReason, JobResults, ScreenOutcome, StaffOverviewRow } from "../app/app";
 import type { IngestSummary } from "../screening/pipeline";
 import type { DocumentId, Employee } from "../business/register";
 import type { ConfirmRequest } from "../engine/types";
@@ -45,7 +45,7 @@ export interface Methods {
   report: { params: { job: string; format: "docx" | "xlsx" | "both" }; result: string[] };
   // ---- files, profile, memory, settings (M3/M4)
   files: { params: void; result: WorkspaceFiles };
-  profile: { params: void; result: { exists: boolean; profile: BusinessProfile; policies: { id: string; title: string; description: string }[] } };
+  profile: { params: void; result: { exists: boolean; profile: BusinessProfile; smallBusiness: boolean | null; policies: { id: string; title: string; description: string }[] } };
   updateProfile: { params: { changes: Partial<BusinessProfile> }; result: FormResult<{ profile: BusinessProfile }> };
   memories: { params: void; result: { preferences: Preference[]; notes: TaskNote[] } };
   forget: { params: { id: string }; result: { forgotten: boolean } };
@@ -125,13 +125,8 @@ export interface EmployeeFields {
   notes?: string | null;
 }
 
-/** An employee with what the Staff page shows next to them. */
-export type StaffRow = Employee & {
-  /** The earliest reminder for this person (or their last day once they left). */
-  next: { text: string; due: string; tone: "red" | "amber" | "n" } | null;
-  /** Starting documents expected for them, recorded or not (with when each is due). */
-  documentsExpected: { id: DocumentId; label: string; timing: string; recorded: string | null }[];
-};
+/** An employee with what the Staff page shows next to them (worked out in the app layer). */
+export type StaffRow = StaffOverviewRow;
 
 export type ClientMessage ={ [M in Method]: { id: number; method: M; params: Methods[M]["params"] } }[Method];
 
