@@ -19,7 +19,7 @@ import { STAGING_PREFIX } from "../src/app/uploads";
 import { ROOT } from "../src/assistant";
 import { basePrompt, MARKDOWN_SWAPS } from "../src/basePrompt";
 import { MAX_ATTACH_BYTES } from "../src/files/attach";
-import { confirmText, type Confirm, type ConfirmContext } from "../src/engine/types";
+import { confirmText, type Confirm, type ConfirmContext, type ConfirmRequest } from "../src/engine/types";
 
 type Check = [string, boolean];
 const results: { name: string; checks: Check[]; detail?: string }[] = [];
@@ -278,6 +278,52 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["dropped folder: asks to import (declined)", folder.length === 1 && folder[0].kind === "not-imported" && folder[0].path === "Applicants" && asked.some((q) => /Import the folder "Applicants"/.test(q))],
     ["staging folders deleted", left.length === 0],
   ], JSON.stringify({ one, again, names, paths, big, folder, left }).slice(0, 600));
+}
+
+// ------------------------------------------------------------------ forms (register and profile, no model)
+{
+  let answer = false;
+  const asked: ConfirmRequest[] = [];
+  const f = ensureFolders(join(TMP, "forms-files"));
+  const app = new AssistantApp({ userId: "unit-forms", memoryRoot: join(TMP, "forms-mem"), filesRoot: f.root, ui: { confirm: async (r) => (asked.push(r), answer) } });
+  const profile = app.updateProfile({ legalName: "Test Cleaning Pty Ltd", states: ["NSW"], headcount: 9 });
+  const same = app.updateProfile({ headcount: 9 });
+  const badProfile = app.updateProfile({ notes: "Owner DOB 14/03/1971" });
+  const marco = app.addEmployee({ name: "Marco Test", role: "Cleaner", employmentType: "casual", startDate: "2026-09-06" });
+  const dup = app.addEmployee({ name: "marco test", role: "Cleaner", employmentType: "casual", startDate: "2026-09-06" });
+  const pii = app.addEmployee({ name: "Ann Test", role: "Admin", employmentType: "part-time", startDate: "2026-09-06", notes: "DOB 14/03/1991" });
+  const sam = app.addEmployee({ name: "Sam Test", role: "Project cleaner", employmentType: "fixed-term", startDate: "2026-05-01", endDate: "2026-10-23" });
+  const samId = sam.ok ? sam.employee.id : -1;
+  const extend = app.updateEmployee(samId, { endDate: "2027-01-22" });
+  const role = app.updateEmployee(samId, { role: "Senior project cleaner" });
+  const leftViaUpdate = app.updateEmployee(samId, { status: "left", leftDate: "2026-10-01" });
+  const marcoId = marco.ok ? marco.employee.id : -1;
+  const docs = app.recordDocuments(marcoId, ["ceis", "super_choice"], "2026-09-25");
+  const badDate = app.recordDocuments(marcoId, ["induction"], "25/09/2026");
+  const left = app.markLeft(marcoId, "2026-10-09", "resignation");
+  const badReason = app.markLeft(samId, "2026-10-09", "quit" as never);
+  const declined = await app.removeEmployee(samId);
+  const keptAfterNo = app.staff(true).some((e) => e.id === samId);
+  answer = true;
+  const removed = await app.removeEmployee(samId);
+  const t = (xs: { task: string }[]) => xs.map((x) => x.task).join(" | ");
+  record("forms", [
+    ["profile saved without a yes/no, lines for the receipt", profile.ok && profile.lines.length === 3 && !app.needsSetup() && !asked.some((q) => q.kind === "profile")],
+    ["profile: nothing changed → no lines", same.ok && same.lines.length === 0],
+    ["profile: date of birth refused", !badProfile.ok && /date of birth/.test(badProfile.error)],
+    ["add: new starter checklist for a casual", marco.ok && /Casual Employment Information Statement/.test(t(marco.checklist)) && marco.checklist.every((i) => isOfficialUrl(i.source.url))],
+    ["add: duplicate name refused", !dup.ok && /already in the register/.test(dup.error)],
+    ["add: date of birth in notes refused", !pii.ok && /sensitive personal data/.test(pii.error)],
+    ["update: fixed-term end date → limits note", extend.ok && extend.notes.length === 1 && /2 years/.test(extend.notes[0].text) && isOfficialUrl(extend.notes[0].source.url)],
+    ["update: other changes → no note", role.ok && role.notes.length === 0],
+    ["update: leaving must use markLeft", !leftViaUpdate.ok],
+    ["documents recorded with the date; bad date refused", docs.ok && docs.employee.documents.some((d) => d.id === "ceis" && d.date === "2026-09-25") && !badDate.ok],
+    ["markLeft: status left + resignation checklist", left.ok && left.employee.status === "left" && left.employee.leftDate === "2026-10-09" && /within 7 days/.test(t(left.checklist)) && !/Get advice before acting/.test(t(left.checklist))],
+    ["markLeft: unknown reason refused", !badReason.ok],
+    ["delete: destructive confirm, declined keeps the record", declined.ok && !declined.removed && keptAfterNo && asked.some((q) => q.destructive === true)],
+    ["delete: confirmed removes it", removed.ok && removed.removed && !app.staff(true).some((e) => e.id === samId)],
+    ["only delete asked a question", asked.length === 2],
+  ], JSON.stringify({ profile, badProfile, dup, pii, extend, leftViaUpdate, badDate, badReason, declined }).slice(0, 700));
 }
 
 try {

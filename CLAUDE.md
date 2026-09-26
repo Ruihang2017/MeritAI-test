@@ -15,13 +15,13 @@ A CLI HR adviser for small business owners with no HR department ("tells them wh
 ```
 src/cli.ts                 terminal front end only: parses commands, renders data and events, answers confirmations
 src/app/app.ts             AssistantApp: the UI-independent application layer (session flows, attachments, screening, voice, guards); every front end uses it. See docs/architecture.md
-src/app/                   confirms.ts (pending, cancellable confirmations), uploads.ts (attachments as bytes → staging), launch.ts (open / reveal workspace files)
+src/app/                   confirms.ts (pending, cancellable confirmations), uploads.ts (attachments as bytes → staging), launch.ts (open / reveal workspace files); form methods for the register and profile live in app.ts
 src/assistant.ts           createAssistant(): the one place the engine, prompts, business profile, policies, memory and tools are wired (the CLI and all tests use it)
 src/basePrompt.ts          prompts/base.md for a reply format: plain (as the file is) or markdown (for a UI)
 src/engine/rpc.ts          JSON-RPC over the app-server's stdio
 src/engine/appServer.ts    Engine implementation: threads, streaming, interrupt, client tools, ephemeral runs, resume
 src/engine/types.ts        engine-agnostic interface (ClientTool, EngineEvent, ...)
-src/business/              profile.ts (business profile store + rendering), tools.ts (update_business_profile), policies.ts (Policies/ index + read_policy), onboarding.ts (new_starter_checklist: official items + verified URLs), register.ts + registerTools.ts (employee register, SQLite), reminders.ts (compliance reminders + get_reminders), leaving.ts (leaving_checklist), payGuard.ts (flags pay arithmetic in replies)
+src/business/              profile.ts (business profile store + rendering), tools.ts (update_business_profile), policies.ts (Policies/ index + read_policy), onboarding.ts (new_starter_checklist: official items + verified URLs), register.ts + registerTools.ts + registerOps.ts (employee register, SQLite; checks shared by the tools and the forms), reminders.ts (compliance reminders + get_reminders), leaving.ts (leaving_checklist), payGuard.ts (flags pay arithmetic in replies)
 src/memory/                store.ts, context.ts, tools.ts, summarize.ts
 src/research/              officialSources.ts: isolated official-site research tool + OFFICIAL_DOMAINS allowlist
 src/voice/                 liveSession.ts (GPT-Live WebSocket), bridge.ts (delegation → Codex turn/steer), audio.ts (ffmpeg mic, ffplay speaker)

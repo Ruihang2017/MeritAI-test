@@ -1,5 +1,5 @@
 import type { ClientTool, Confirm } from "../engine/types";
-import { AU_STATES, EMPLOYMENT_TYPES, BusinessStore, describeChanges, normalisePatch } from "./profile";
+import { AU_STATES, EMPLOYMENT_TYPES, BusinessStore, describeChanges, normalisePatch, type ProfilePatch } from "./profile";
 import { findPii } from "../memory/store";
 
 const nullableString = (description: string) => ({ type: ["string", "null"], description });
@@ -38,6 +38,27 @@ const PATCH_SCHEMA = {
 };
 
 /**
+ * Validates a profile patch against the current profile: shared by the tool below
+ * (then [y/n]) and the application layer's profile form (submitting is the confirmation).
+ * `lines` is empty when nothing would change.
+ */
+export function checkProfilePatch(store: BusinessStore, raw: unknown): { ok: true; patch: ProfilePatch; lines: string[] } | { ok: false; error: string } {
+  let patch: ProfilePatch;
+  try {
+    patch = normalisePatch(raw);
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+  const lines = describeChanges(store.get(), patch);
+  // Business contact details are fine; a TFN or date of birth never belongs here.
+  // (The ABN is excluded: its digits look like a TFN to the pattern.)
+  const { abn: _abn, ...rest } = patch;
+  const pii = findPii(JSON.stringify(rest));
+  if (lines.length && (pii === "tax file number" || pii === "date of birth")) return { ok: false, error: `looks like personal data (${pii}). The profile holds business facts only` };
+  return { ok: true, patch, lines };
+}
+
+/**
  * update_business_profile: the only way the model changes the profile. Every
  * change is shown to the owner and saved only after they confirm.
  */
@@ -56,22 +77,11 @@ export function businessTools(opts: { store: () => BusinessStore; confirm: Confi
         additionalProperties: false,
       },
       handle: async (args) => {
-        let patch;
-        try {
-          patch = normalisePatch((args as { changes?: unknown } | null)?.changes);
-        } catch (e) {
-          return { success: false, text: `Not saved: ${(e as Error).message}. Fix the value and try again.` };
-        }
         const store = opts.store();
-        const lines = describeChanges(store.get(), patch);
+        const c = checkProfilePatch(store, (args as { changes?: unknown } | null)?.changes);
+        if (!c.ok) return { success: false, text: c.error.startsWith("looks like personal data") ? `Not saved: ${c.error}.` : `Not saved: ${c.error}. Fix the value and try again.` };
+        const { patch, lines } = c;
         if (!lines.length) return { success: true, text: "Nothing changed: the profile already has these values." };
-        // Business contact details are fine; a TFN or date of birth never belongs here.
-        // (The ABN is excluded: its digits look like a TFN to the pattern.)
-        const { abn: _abn, ...rest } = patch;
-        const pii = findPii(JSON.stringify(rest));
-        if (pii === "tax file number" || pii === "date of birth") {
-          return { success: false, text: `Not saved: looks like personal data (${pii}). The profile holds business facts only.` };
-        }
         const ok = await opts.confirm({ kind: "profile", title: "Save to the business profile?", items: lines });
         if (!ok) return { success: true, text: "The owner did not confirm; nothing was saved. Ask what to correct.", display: "profile: not saved" };
         store.update(patch);

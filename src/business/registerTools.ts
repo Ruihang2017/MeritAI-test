@@ -1,5 +1,6 @@
 import type { ClientTool, Confirm, ToolOutcome } from "../engine/types";
-import { DOCUMENTS, employeeLine, normaliseEmployee, type DocumentId, type Register } from "./register";
+import { DOCUMENTS, employeeLine, type Register } from "./register";
+import { checkDocuments, checkEmployeeChanges, checkNewEmployee, fixedTermEndChanged } from "./registerOps";
 import type { BusinessStore } from "./profile";
 import { isApprenticeRole, leavingText } from "./leaving";
 
@@ -32,10 +33,6 @@ export const FIXED_TERM_NOTE =
 
 export function registerTools(opts: { register: () => Register; business: () => BusinessStore; confirm: Confirm }): ClientTool[] {
   const { confirm } = opts;
-  const describe = (o: Record<string, unknown>) =>
-    Object.entries(o)
-      .filter(([, v]) => v !== undefined)
-      .map(([k, v]) => `${k}: ${v === null ? "(cleared)" : String(v)}`);
 
   return [
     {
@@ -68,15 +65,13 @@ export function registerTools(opts: { register: () => Register; business: () => 
         additionalProperties: false,
       },
       handle: async (args) => {
-        let e;
-        try {
-          e = normaliseEmployee(args, true);
-        } catch (err) {
-          return fail(`Not saved: ${(err as Error).message}.`);
+        const c = checkNewEmployee(opts.register(), args);
+        if (!c.ok) {
+          const dup = c.duplicate;
+          return fail(dup ? `Not saved: "${dup.name}" is already in the register as [${dup.id}]. Use update_employee to change their details, or ask the owner if this is a different person.` : `Not saved: ${c.error}.`);
         }
-        const dup = opts.register().list().find((x) => x.name.toLowerCase() === e.name!.toLowerCase());
-        if (dup) return fail(`Not saved: "${dup.name}" is already in the register as [${dup.id}]. Use update_employee to change their details, or ask the owner if this is a different person.`);
-        if (!(await confirm({ kind: "register", title: "Add to the employee register?", items: describe(e) }))) return { success: true, text: "The owner did not confirm; nothing was saved.", display: "register: not saved" };
+        const e = c.input;
+        if (!(await confirm({ kind: "register", title: "Add to the employee register?", items: c.lines }))) return { success: true, text: "The owner did not confirm; nothing was saved.", display: "register: not saved" };
         const saved = opts.register().add(e);
         return { success: true, text: `Added: ${employeeLine(saved)}`, display: `register: added [${saved.id}] ${saved.name}` };
       },
@@ -105,14 +100,10 @@ export function registerTools(opts: { register: () => Register; business: () => 
         const a = args as { id?: number; changes?: unknown };
         const current = opts.register().get(Number(a.id));
         if (!current) return fail(`No employee with id ${a.id}. Call list_employees first.`);
-        let changes;
-        try {
-          changes = normaliseEmployee(a.changes, false);
-        } catch (err) {
-          return fail(`Not saved: ${(err as Error).message}.`);
-        }
-        if (!Object.keys(changes).length) return fail("Nothing to change.");
-        if (!(await confirm({ kind: "register", title: `Update ${current.name} in the employee register?`, items: describe(changes) }))) return { success: true, text: "The owner did not confirm; nothing was saved.", display: "register: not saved" };
+        const c = checkEmployeeChanges(opts.register(), current.id, a.changes);
+        if (!c.ok) return fail(c.error === "nothing to change" ? "Nothing to change." : `Not saved: ${c.error}.`);
+        const changes = c.changes;
+        if (!(await confirm({ kind: "register", title: `Update ${current.name} in the employee register?`, items: c.lines }))) return { success: true, text: "The owner did not confirm; nothing was saved.", display: "register: not saved" };
         const saved = opts.register().update(current.id, changes);
         // Code-added guidance for changes that carry legal obligations (found missing in the evaluation).
         const notes: string[] = [];
@@ -120,7 +111,7 @@ export function registerTools(opts: { register: () => Register; business: () => 
           notes.push(leavingText({ reason: "other", apprentice: isApprenticeRole(saved.role), states: opts.business().get().states }));
           notes.push("If you know why they left (resignation, dismissal, redundancy, end of contract), call leaving_checklist with that reason for the specific steps.");
         }
-        if (saved.employmentType === "fixed-term" && changes.endDate !== undefined && changes.endDate !== current.endDate) {
+        if (fixedTermEndChanged(current, saved, changes)) {
           notes.push(FIXED_TERM_NOTE);
         }
         return {
@@ -147,10 +138,10 @@ export function registerTools(opts: { register: () => Register; business: () => 
         const a = args as { id?: number; documents?: string[]; date?: string };
         const current = opts.register().get(Number(a.id));
         if (!current) return fail(`No employee with id ${a.id}. Call list_employees first.`);
-        const docs = (a.documents ?? []).filter((d): d is DocumentId => d in DOCUMENTS);
-        if (!docs.length) return fail(`documents must be some of: ${Object.keys(DOCUMENTS).join(", ")}`);
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(a.date))) return fail("date must be YYYY-MM-DD");
-        if (!(await confirm({ kind: "register", title: `Record for ${current.name} (${a.date})?`, items: docs.map((d) => DOCUMENTS[d]) }))) {
+        const c = checkDocuments(opts.register(), current.id, a.documents, a.date);
+        if (!c.ok) return fail(c.error);
+        const docs = c.docs;
+        if (!(await confirm({ kind: "register", title: `Record for ${current.name} (${a.date})?`, items: c.lines }))) {
           return { success: true, text: "The owner did not confirm; nothing was saved.", display: "register: not saved" };
         }
         const saved = opts.register().recordDocuments(current.id, docs, String(a.date));

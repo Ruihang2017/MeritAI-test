@@ -17,7 +17,11 @@ import { ensureFolders, jobDir, listJobs, validateFilesRoot, walk, type Folders 
 import { listInbox, type InboxEntry } from "../files/tools";
 import { profileLines, type BusinessProfile } from "../business/profile";
 import { listPolicies, type PolicyEntry } from "../business/policies";
-import type { Employee } from "../business/register";
+import type { DocumentId, Employee } from "../business/register";
+import { checkDocuments, checkEmployeeChanges, checkNewEmployee, fixedTermEndChanged, FIXED_TERM_OWNER_NOTE, type FormNote } from "../business/registerOps";
+import { checkProfilePatch } from "../business/tools";
+import { newStarterChecklist, type ChecklistItem, type EmploymentType } from "../business/onboarding";
+import { isApprenticeRole, leavingChecklist, LEAVING_REASONS, type LeavingItem, type LeavingReason } from "../business/leaving";
 import { remindersFor, type Reminder } from "../business/reminders";
 import { looksLikePayCalculation, PAY_GUARD_WARNING } from "../business/payGuard";
 import { formatCriteria, ingestJob, jdFromFolder, proposeCriteria, purgeMissingJobs, screenJob, type IngestSummary, type Progress } from "../screening/pipeline";
@@ -58,6 +62,12 @@ export interface AppUI {
 
 /** Events of one assistant turn: the engine's events plus app-level warnings. */
 export type AppEvent = EngineEvent | { type: "warning"; code: "pay_calculation"; message: string };
+
+/** Result of a form submission: saved (with `lines` for the receipt) or refused with a reason to show next to the form. */
+export type FormResult<T> = ({ ok: true; lines: string[] } & T) | { ok: false; error: string };
+export type { FormNote } from "../business/registerOps";
+export type { ChecklistItem } from "../business/onboarding";
+export type { LeavingItem, LeavingReason } from "../business/leaving";
 
 export type AttachOutcome =
   | { path: string; kind: "attached"; name: string; reused: boolean; image: boolean }
@@ -402,6 +412,74 @@ export class AssistantApp {
 
   reminders(): Reminder[] {
     return remindersFor(this.a.register(), this.a.business());
+  }
+
+  // ------------------------------------------------------------------ forms
+  // Direct edits from a UI form. They use the same validation as the chat tools
+  // (PII refusal, dates, duplicates); submitting the form is the owner's
+  // confirmation, so there is no second yes/no, except for deleting.
+
+  /** Adds an employee; returns the new starter checklist for them (from code, with official sources). */
+  addEmployee(details: unknown, opts: { mayNeedVisaCheck?: boolean; apprentice?: boolean } = {}): FormResult<{ employee: Employee; checklist: ChecklistItem[] }> {
+    const c = checkNewEmployee(this.a.register(), details);
+    if (!c.ok) return { ok: false, error: c.error };
+    const employee = this.a.register().add(c.input);
+    const p = this.a.business().get();
+    const checklist = newStarterChecklist({
+      employmentType: employee.employmentType as EmploymentType,
+      // Unknown unless the form says otherwise: the visa check stays on the list.
+      mayNeedVisaCheck: opts.mayNeedVisaCheck ?? true,
+      smallBusiness: p.headcount === null ? null : p.headcount < 15,
+      apprentice: opts.apprentice ?? isApprenticeRole(employee.role),
+      states: p.states,
+    });
+    return { ok: true, employee, lines: c.lines, checklist };
+  }
+
+  /** Changes work details. Leaving goes through markLeft (it returns the leaving checklist). */
+  updateEmployee(id: number, changes: unknown): FormResult<{ employee: Employee; notes: FormNote[] }> {
+    if (changes && typeof changes === "object" && (changes as { status?: unknown }).status === "left") return { ok: false, error: "use markLeft to record that someone left" };
+    const c = checkEmployeeChanges(this.a.register(), id, changes);
+    if (!c.ok) return { ok: false, error: c.error };
+    const employee = this.a.register().update(c.current.id, c.changes);
+    const notes = fixedTermEndChanged(c.current, employee, c.changes) ? [FIXED_TERM_OWNER_NOTE] : [];
+    return { ok: true, employee, lines: c.lines, notes };
+  }
+
+  /** Records starting documents given or completed on one date (YYYY-MM-DD). */
+  recordDocuments(id: number, documents: DocumentId[], date: string): FormResult<{ employee: Employee }> {
+    const c = checkDocuments(this.a.register(), id, documents, date);
+    if (!c.ok) return { ok: false, error: c.error };
+    return { ok: true, employee: this.a.register().recordDocuments(c.current.id, c.docs, c.date), lines: c.lines };
+  }
+
+  /** Marks someone as left and returns the leaving checklist for the reason (from code, with official sources). */
+  markLeft(id: number, leftDate: string, reason: LeavingReason): FormResult<{ employee: Employee; checklist: LeavingItem[] }> {
+    if (!LEAVING_REASONS.includes(reason)) return { ok: false, error: `reason must be one of: ${LEAVING_REASONS.join(", ")}` };
+    const c = checkEmployeeChanges(this.a.register(), id, { status: "left", leftDate });
+    if (!c.ok) return { ok: false, error: c.error };
+    if (!c.changes.leftDate) return { ok: false, error: "leftDate is required (YYYY-MM-DD)" };
+    const employee = this.a.register().update(c.current.id, c.changes);
+    const checklist = leavingChecklist({ reason, apprentice: isApprenticeRole(employee.role), states: this.a.business().get().states });
+    return { ok: true, employee, lines: c.lines, checklist };
+  }
+
+  /** Deletes an employee and their records after the destructive confirmation (the same one the chat tool shows). */
+  async removeEmployee(id: number): Promise<FormResult<{ removed: boolean }>> {
+    const current = this.a.register().get(Number(id));
+    if (!current) return { ok: false, error: `no employee with id ${id}` };
+    const yes = await this.confirm({ kind: "register", title: `Delete ${current.name} and all their records from the register? This cannot be undone.`, destructive: true });
+    if (yes) this.a.register().remove(current.id);
+    return { ok: true, removed: yes, lines: yes ? [`deleted: ${current.name}`] : [] };
+  }
+
+  /** Saves business profile fields (only those given). `lines` is empty when nothing changed. */
+  updateProfile(changes: unknown): FormResult<{ profile: BusinessProfile }> {
+    const b = this.a.business();
+    const c = checkProfilePatch(b, changes);
+    if (!c.ok) return { ok: false, error: c.error };
+    const profile = c.lines.length ? b.update(c.patch) : b.get();
+    return { ok: true, profile, lines: c.lines };
   }
 
   // ------------------------------------------------------------------ memory

@@ -34,6 +34,7 @@ engine          src/engine (Engine interface; AppServerEngine = local codex app-
 | Confirmations | `pendingConfirms()` → `{id, req}[]`, `cancelPendingConfirms()` → how many were withdrawn |
 | Attachments | `attach(paths)` (files copied to the Inbox; folders offered as a job import), `attachBytes(files)` (a browser UI: `{name, data, relPath?}[]`, see below), `takeDroppedPaths(line)` (terminals: paths inside typed text), `hasPendingAttachments()`; attachments go with the next `send` |
 | Business | `needsSetup()`, `profile()`, `staff(includeLeft)`, `reminders()` |
+| Forms (no model) | `updateProfile(changes)`, `addEmployee(details, {mayNeedVisaCheck, apprentice})` → + new starter checklist, `updateEmployee(id, changes)` → + notes (fixed-term limits), `recordDocuments(id, docs, date)`, `markLeft(id, leftDate, reason)` → + leaving checklist, `removeEmployee(id)` (destructive confirm). Each returns `FormResult`: `{ok: true, lines, ...}` for the receipt or `{ok: false, error}` to show by the form. Same validation as the chat tools; submitting is the confirmation |
 | Memory | `memories()`, `forget(id)` |
 | Files and jobs | `folders()`, `files()`, `setFilesRoot(path)`, `resetFilesRoot()`, `jobs()`, `importJob(path, job)`, `screen(job)` → `no-jd` / `not-confirmed` / `done` + summary, `report(job, format)` → saved paths, `openFile(path)` / `revealFile(path)` → `{ok: true}` or `{ok: false, error}` |
 | Voice | `microphones()`, `setMicrophone(device)`, `startVoice(handlers, audio?)` → controller with `stop()`. Handlers: `onRequest`, `onEvent`, `onSaid`, `onConfirmSkipped`, `onError`, `onEnded({reason, byUser, billedSeconds})`. `audio` defaults to the local mic and speaker (ffmpeg/ffplay); a UI can pass its own PCM16 24 kHz source and sink |
@@ -72,6 +73,12 @@ Constructor options:
   - the reply format (plain = `base.md`; markdown changes only the formatting lines);
   - cancellable confirmations (listed, cancelled → declined, answered → removed; also through a folder import in the app);
   - open and reveal (a fake launcher; outside the root, `..`, missing and `.assistant` refused; the per-platform commands);
-  - uploads (Inbox, reuse, sanitised names, `..` and absolute paths refused, oversize refused, folder import asked, staging deleted).
+  - uploads (Inbox, reuse, sanitised names, `..` and absolute paths refused, oversize refused, folder import asked, staging deleted);
+  - forms:
+    - profile saved without a yes/no; date of birth refused;
+    - add returns the checklist; a duplicate or a date of birth in the notes is refused;
+    - a fixed-term end date change returns the limits note; leaving only through `markLeft`, which returns the leaving checklist;
+    - bad dates and reasons are refused;
+    - delete asks the destructive confirmation (declined keeps the record, confirmed removes it).
 - **The live suites and the evaluation** use `createAssistant()` directly, so they test the same wiring.
 - **The CLI itself** is covered by a smoke test of the non-model commands. It was run after the refactor on 2026-09-26, with the same output as before.
