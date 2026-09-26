@@ -9,7 +9,7 @@ Covers resignations and the end of fixed-term contracts. For dismissals, redunda
 
 ## First
 
-Call leaving_checklist with the reason (resignation, end of fixed-term contract, ...) and whether the person is an apprentice or trainee. Its items (final pay timing and contents, records, separation certificate, the training authority for apprentices) must appear in the exit checklist, with their links.
+Call leaving_checklist with the reason (resignation, end of fixed-term contract, ...; if not given, the likely one, said as an assumption) and whether the person is an apprentice or trainee. Its items (final pay timing and contents, records, separation certificate, the training authority for apprentices) must appear in the exit checklist, with their links.
 
 ## Inputs
 
@@ -19,7 +19,7 @@ The role, the last day of work (or the resignation date and the notice period), 
 
 1. **Resignation acknowledgement letter or email**: thank them, confirm the last day of work, what happens to final pay (including accrued, unused annual leave, paid out as required), return of company property, and a contact person. Neutral and warm; no comment on their reasons. Use placeholders for dates and amounts. Sign off with the signer from the business profile, or [Your name].
 2. **Exit checklist** (owner and timing for each item): notice confirmed in writing; handover plan agreed; knowledge transfer sessions; return of equipment, keys, cards and uniform; systems access removed on the last day; final pay calculated and paid on time; separation certificate if requested; exit interview offered; team and customers informed at the right time.
-3. **Handover plan**: a table of responsibilities, current work, key contacts and documents, who takes each over, and by when.
+3. **Handover plan**: a table of responsibilities, current work, key contacts and documents, who takes each over, and by when. Never hand over passwords or shared logins: the business gives the new person their own account and access, and removes the leaver's.
 4. **Exit interview**: 8-10 open questions (reasons for leaving, what worked, what could improve, manager support, recognition, development, whether they would return or recommend the business). Make clear that participation is voluntary and how responses are used.
 
 ## Rules

@@ -63,6 +63,20 @@ export function ceisDueDates(startDate: string, smallBusiness: boolean, until: s
   return out.filter((d) => d <= until);
 }
 
+/** When each starting document is due, for someone who starts on `startDate` (YYYY-MM-DD). */
+export function documentTiming(startDate: string): Record<DocumentId, string> {
+  return {
+    contract: "before they start",
+    fwis: "before, or as soon as possible after, they start",
+    ceis: "before, or as soon as possible after, they start",
+    ftcis: "when you enter into the contract (usually when it is signed)",
+    tfn: "when they start (it tells you how much tax to withhold)",
+    super_choice: `within 28 days of starting, by ${addDays(startDate, 28)}`,
+    vevo: "before they start work",
+    induction: "on their first day",
+  };
+}
+
 export function computeReminders(opts: {
   employees: Employee[];
   /** Headcount from the business profile; null if unknown. */
@@ -87,16 +101,7 @@ export function computeReminders(opts: {
     if (missing.length && e.startDate <= horizon) {
       // Each item with its own timing, so a recorded item is never reported and nothing looks overdue early.
       const superDue = addDays(e.startDate, 28);
-      const timing: Record<DocumentId, string> = {
-        contract: "before they start",
-        fwis: "before, or as soon as possible after, they start",
-        ceis: "before, or as soon as possible after, they start",
-        ftcis: "when, or as soon as possible after, the contract starts",
-        tfn: "when they start (it tells you how much tax to withhold)",
-        super_choice: `within 28 days of starting, by ${superDue}`,
-        vevo: "before they start work",
-        induction: "on their first day",
-      };
+      const timing = documentTiming(e.startDate);
       const superOnly = missing.every((d) => d === "super_choice");
       push({
         due: superOnly ? superDue : e.startDate,
@@ -214,7 +219,7 @@ export function reminderTools(opts: { register: () => Register; business: () => 
         const rs = remindersFor(opts.register(), opts.business(), today);
         return {
           success: true,
-          text: `Today is ${today}. Reminders (rules checked ${RULES_CHECKED_ON}):\n${formatReminders(rs, today)}\n\nPresent them in plain language, overdue first, with what to do and the source links. Offer to draft anything needed (e.g. a probation outcome letter).`,
+          text: `Today is ${today}. Reminders (rules checked ${RULES_CHECKED_ON}):\n${formatReminders(rs, today)}\n\nPresent them in plain language, overdue first, with what to do, each item's deadline or timing and date as listed, and the source links. Offer to draft anything needed (e.g. a probation outcome letter).`,
           display: `reminders: ${rs.length}`,
         };
       },

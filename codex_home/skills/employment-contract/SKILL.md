@@ -7,7 +7,10 @@ description: Draft a letter of offer and a written employment contract for a new
 
 The owner is hiring and has no HR team or lawyer on hand. Give them a clear, fair draft they can check and use, plus everything they must do around it.
 
-## 1 Gather the terms (ask once, in one short numbered list, only for what is missing)
+## 1 The terms (draft first; list what is missing after the draft)
+
+Do not hold the draft back to ask for these. Draft with what you have, using a placeholder for each missing term, and after the draft list the missing terms in one short numbered list.
+
 
 - Role title, and the main duties in a line.
 - Employment type: full-time, part-time, casual or fixed-term.
@@ -79,6 +82,6 @@ If the profile names an adviser, add their name to that line.
   - impose unreasonable restraints;
   - charge the employee for uniforms or breakages without lawful authorisation.
 
-  If the owner asks for one of these, explain the risk in one line and leave it out.
+  If the owner asks for one of these, leave it out and say so at the top, before the draft, in one line: what you left out and why it is unlawful or risky (e.g. "I left out holding back final pay until property is returned: final pay can't be withheld for that.").
 - Placeholders in square brackets for every personal detail of the employee. Do not ask for their address, date of birth, TFN or bank details: they go on the employee's own forms.
 - Offer to save the letter and the contract to the Outbox as Word documents (save only when asked).

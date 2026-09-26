@@ -7,7 +7,7 @@ description: Assess a few candidate resumes (pasted in the chat or in the Inbox)
 
 ## Inputs
 
-You need the selection criteria (a JD, ad, or a list of must-haves and nice-to-haves) and at least one resume or application pasted as text. If the criteria are missing, ask for them in one line; do not invent criteria. If only a JD is given, derive Essential and Desirable criteria from it and show the list you used.
+You need the selection criteria (a JD, ad, or a list of must-haves and nice-to-haves) and at least one resume or application pasted as text. If only a JD is given, derive Essential and Desirable criteria from it and show the list you used. If there are no criteria and no JD, do not stop: take 3-5 job-related criteria from the role named (e.g. for a first-year apprentice: interest in the trade and any pre-apprenticeship or school subjects, reliability, practical or hands-on experience, a driver licence only if the role needs travel), label them "criteria I assumed", assess against them, and invite the owner to change them. Never assume criteria that screen people out on a protected attribute or a stand-in for one.
 
 ## Fairness rules (non-negotiable)
 

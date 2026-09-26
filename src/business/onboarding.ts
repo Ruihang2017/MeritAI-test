@@ -168,8 +168,8 @@ export function newStarterChecklist(opts: {
   }
   if (type === "fixed-term") {
     items.push({
-      when: "on or before day one",
-      task: "Give the Fixed Term Contract Information Statement (FTCIS).",
+      when: "before start",
+      task: "Give the Fixed Term Contract Information Statement (FTCIS) when you enter into the fixed-term contract (usually when it is signed).",
       why: "Required when an employee enters a new fixed-term contract.",
       source: S.ftcis,
     });

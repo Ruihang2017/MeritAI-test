@@ -460,7 +460,7 @@ export class AssistantApp {
     if (!c.ok) return { ok: false, error: c.error };
     if (!c.changes.leftDate) return { ok: false, error: "leftDate is required (YYYY-MM-DD)" };
     const employee = this.a.register().update(c.current.id, c.changes);
-    const checklist = leavingChecklist({ reason, apprentice: isApprenticeRole(employee.role), states: this.a.business().get().states });
+    const checklist = leavingChecklist({ reason, apprentice: isApprenticeRole(employee.role), casual: employee.employmentType === "casual", states: this.a.business().get().states });
     return { ok: true, employee, lines: c.lines, checklist };
   }
 

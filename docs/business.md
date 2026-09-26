@@ -209,6 +209,33 @@ Deferred to a later round (owner to decide, see the conversation of 2026-09-26):
 - under-18 employees (state child employment laws, junior rates);
 - the language of candidate-facing documents when the owner writes in Chinese.
 
+### Round 2 (2026-09-26, from the core evaluation of 140 runs)
+
+**Before the fixes:**
+- **Overall:** 65% of runs passed both the hard checks and the judge.
+- **The 11 regression scenarios:** from 6/46 before round 1 to 13/22.
+- **The 10 held-out scenarios:** 12/20.
+- **Two failure patterns fixed here:**
+  - answering with only questions instead of doing the work;
+  - leaving out deadlines the code already knew.
+
+| Problem | Fix |
+|---|---|
+| **Only questions, no work** (offer letters, contract drafts, comparing two resumes, "when is final pay due") | `developer.md`, "Do the work first": deliver the draft, comparison or answer in the same reply. Gaps become placeholders, or a stated assumption about which rule applies (never about facts on a person). Then at most three questions. `employment-contract`: draft first, then list what is missing. `resume-screening` and `developer.md`: with no criteria, assess against labelled "criteria I assumed". `leaving_checklist`: if no reason is given, assume the likely one instead of asking |
+| **Deadlines left out** (final pay within 7 days, super choice form by date) | `developer.md`, "Deadlines": state any known time limit, with the date. The `leaving_checklist` output says the final pay deadline must appear in the answer, and to pay off-cycle if the next pay run is too late. `list_employees` adds "when due" (with dates) for each starting document not recorded yet (`documentTiming()` in `reminders.ts`). `get_reminders` asks for each item's timing |
+| **Casual leaving** (checklist said to pay out annual leave) | `leavingChecklist({casual})`: casuals have no paid annual or personal leave to pay out and no NES notice; long service leave may still apply (Fair Work, checked 2026-09-26). The tool takes `is_casual`; the register and `markLeft` pass it from the employment type |
+| **FTCIS timing** | Given when the fixed-term contract is entered into (usually when signed), not when it starts (Fair Work, checked 2026-09-26) |
+| Handover plans listed passwords; refused contract clauses were not flagged clearly | `offboarding`: never hand over passwords or shared logins. `employment-contract`: a refused clause is named at the top, before the draft |
+
+**Check:** the same 19 scenarios × 2 (13 affected plus 6 controls where asking or refusing is right) went from 17/38 → 27/38. Every control still passed (setup interview, criteria confirmation, TFN refusal, prompt injection).
+
+**What's left:** mostly legal knowledge gaps, for the owner to choose from. Examples:
+- Payday Super;
+- casuals' leave entitlements;
+- the Small Business Fair Dismissal Code;
+- procedural fairness in warning letters;
+- state schemes.
+
 ## 10 Tests
 
 `npm run test:business`:

@@ -47,6 +47,8 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   const dismiss = leavingChecklist({ reason: "dismissal", apprentice: false, states: ["NSW"] }).map((x) => x.task).join(" | ");
   const appr = leavingChecklist({ reason: "resignation", apprentice: true, states: ["ACT"] }).map((x) => x.task).join(" | ");
   const text = leavingText({ reason: "resignation", apprentice: false, states: [] });
+  const casual = leavingChecklist({ reason: "resignation", apprentice: false, states: ["QLD"], casual: true }).map((x) => x.task).join(" | ");
+  const ftcis = newStarterChecklist({ employmentType: "fixed-term", mayNeedVisaCheck: false, smallBusiness: true }).map((x) => x.task).join(" | ");
   record("leaving checklist", [
     ["final pay timing (award, most within 7 days)", /within 7 days/.test(resign) && /at least monthly/.test(resign)],
     ["annual leave with loading; personal leave not paid out", /annual leave with annual leave loading/.test(resign) && /personal\/carer's leave is not paid out/.test(resign)],
@@ -57,6 +59,9 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["all links official", [...text.matchAll(/https:\/\/\S+/g)].every((m) => isOfficialUrl(m[0]))],
     ["no pay calculation asked", /Do not calculate the final pay amount/.test(text)],
     ["apprentice role detection", isApprenticeRole("Apprentice hairdresser (1st year)") && isApprenticeRole("Business trainee") && !isApprenticeRole("Barista")],
+    ["casual: no annual leave payout, no NES notice", /no paid annual leave/.test(casual) && !/annual leave with annual leave loading/.test(casual) && /don't get notice of termination/.test(casual) && /within 7 days/.test(casual)],
+    ["final pay deadline must be stated, not only 'check the award'", /State the final pay deadline in the answer itself/.test(text)],
+    ["FTCIS: when the contract is entered into", /when you enter into the fixed-term contract/.test(ftcis)],
   ]);
 }
 
@@ -72,6 +77,7 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   const line = employeeLine(reg.get(ella.id)!);
   const tools = registerTools({ register: () => reg, business: () => store, confirm: async () => true });
   const update = tools.find((t) => t.name === "update_employee")!;
+  const listed = (await tools.find((t) => t.name === "list_employees")!.handle({ include_left: false })).text;
   const left = await update.handle({ id: ella.id, changes: { status: "left", leftDate: "2026-09-20" } });
   const extended = await update.handle({ id: sam.id, changes: { endDate: "2027-01-01" } });
   const roleOnly = await update.handle({ id: sam.id, changes: { role: "Senior project worker" } });
@@ -81,6 +87,7 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["left: leaving checklist + apprentice authority", /Leaving checklist/.test(left.text) && /within 7 days/.test(left.text) && /Skills Canberra/.test(left.text)],
     ["fixed-term end date change: limits note", extended.text.includes(FIXED_TERM_NOTE) && /2 years/.test(extended.text)],
     ["other changes: no extra notes", !/Leaving checklist|2 years/.test(roleOnly.text)],
+    ["list: not-recorded items come with when they are due", /when due: .*Super choice form given: within 28 days of starting, by 2026-06-29/.test(listed) && !/Ella Test[^\n]*\n  when due: [^\n]*Written contract/.test(listed)],
   ], left.text.slice(0, 300));
   reg.close();
 }

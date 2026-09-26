@@ -1,5 +1,6 @@
 import type { ClientTool, Confirm, ToolOutcome } from "../engine/types";
-import { DOCUMENTS, employeeLine, type Register } from "./register";
+import { DOCUMENTS, employeeLine, outstandingDocuments, type Employee, type Register } from "./register";
+import { documentTiming } from "./reminders";
 import { checkDocuments, checkEmployeeChanges, checkNewEmployee, fixedTermEndChanged } from "./registerOps";
 import type { BusinessStore } from "./profile";
 import { isApprenticeRole, leavingText } from "./leaving";
@@ -47,9 +48,15 @@ export function registerTools(opts: { register: () => Register; business: () => 
       handle: async (args) => {
         const list = opts.register().list({ includeLeft: (args as { include_left?: boolean })?.include_left === true });
         if (!list.length) return { success: true, text: "The employee register is empty.", display: "register: empty" };
+        // Each "not recorded yet" item comes with when it is due, so an answer about paperwork can give the deadline.
+        const line = (e: Employee) => {
+          const missing = outstandingDocuments(e);
+          const timing = documentTiming(e.startDate);
+          return `- ${employeeLine(e)}${missing.length && e.status === "active" ? `\n  when due: ${missing.map((d) => `${DOCUMENTS[d]}: ${timing[d]}`).join("; ")}` : ""}`;
+        };
         return {
           success: true,
-          text: `Employee register (personal data: use only what the task needs):\n${list.map((e) => `- ${employeeLine(e)}`).join("\n")}`,
+          text: `Employee register (personal data: use only what the task needs):\n${list.map(line).join("\n")}\n\nWhen you report paperwork that is not recorded yet, give each item's due timing and date from "when due".`,
           display: `register: ${list.length} employee(s)`,
         };
       },
@@ -108,7 +115,7 @@ export function registerTools(opts: { register: () => Register; business: () => 
         // Code-added guidance for changes that carry legal obligations (found missing in the evaluation).
         const notes: string[] = [];
         if (changes.status === "left" && current.status !== "left") {
-          notes.push(leavingText({ reason: "other", apprentice: isApprenticeRole(saved.role), states: opts.business().get().states }));
+          notes.push(leavingText({ reason: "other", apprentice: isApprenticeRole(saved.role), casual: saved.employmentType === "casual", states: opts.business().get().states }));
           notes.push("If you know why they left (resignation, dismissal, redundancy, end of contract), call leaving_checklist with that reason for the specific steps.");
         }
         if (fixedTermEndChanged(current, saved, changes)) {
