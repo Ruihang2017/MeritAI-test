@@ -32,6 +32,17 @@ export const FIXED_TERM_NOTE =
   "Check any earlier contracts or extensions for this person before agreeing, and put the extension in writing (a new contract also needs a Fixed Term Contract Information Statement). Offer to draft the extension letter. " +
   "Source: Fair Work: Fixed term contract employees https://www.fairwork.gov.au/starting-employment/types-of-employees/fixed-term-contract-employees";
 
+/** The length of a fixed-term contract from its start to the new end date, against the 2-year limit (round 5 evaluation: say it for this person, not only the rule). */
+export function fixedTermSpan(start: string, end: string): string {
+  const [ys, ms, ds] = start.split("-").map(Number);
+  const [ye, me, de] = end.split("-").map(Number);
+  const months = (ye - ys) * 12 + (me - ms) - (de < ds ? 1 : 0);
+  const span = `In the reply, state the limits themselves in plain words (at most 2 years in total, at most one extension or renewal) and this figure; never only "it must comply with the fixed-term limits". From the start date (${start}) to the new end date (${end}) is about ${months} months.`;
+  return months >= 24
+    ? `${span} That is 2 years or more: over the fixed-term limit unless an exception applies. Tell the owner, and to get advice before agreeing to it.`
+    : `${span} That is within the 2-year limit only if there were no earlier contracts or extensions for this role. Tell the owner this counts as the one extension allowed: if the contract was already extended or renewed once, another extension isn't allowed unless an exception applies. Steps: 1. check earlier contracts and extensions; 2. put the extension in writing (a new contract also needs the FTCIS); 3. offer to draft the letter.`;
+}
+
 export function registerTools(opts: { register: () => Register; business: () => BusinessStore; confirm: Confirm }): ClientTool[] {
   const { confirm } = opts;
 
@@ -120,6 +131,7 @@ export function registerTools(opts: { register: () => Register; business: () => 
         }
         if (fixedTermEndChanged(current, saved, changes)) {
           notes.push(FIXED_TERM_NOTE);
+          if (saved.endDate) notes.push(fixedTermSpan(saved.startDate, saved.endDate));
         }
         return {
           success: true,

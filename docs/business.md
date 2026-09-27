@@ -277,7 +277,22 @@ Evaluation of the 80 recruitment, screening, contract, onboarding, register, ter
 | **Right to work after recording documents** | `record_documents` now says what is still not recorded and asks the model to tell the owner; an unchecked VEVO for someone with a visa expiry is spelled out (check before their next shift). A New Zealand citizen counts as `may_need_visa_check` (usually a Special Category visa, checked in VEVO) |
 | **Workers under 18** | `developer.md`: junior rates (a percentage of the adult rate, from the award) via the Pay and Conditions Tool, no dollar figure; state rules on employing young people checked through official sources before rostering |
 
-Targeted re-run of the 9 scenarios behind these fixes × 2 (`eval/results/round5-fix-abcd`): judge 15/18, was 3/18 (onb-01, con-09, onb-03, onb-08, onb-12, reg-02, onb-11 now 2/2; scr-10 1/2; con-06 0/2: the contract draft still gives pay figures).
+Targeted re-run of the 9 scenarios behind these fixes × 2 (`eval/results/round5-fix-abcd`): judge 15/18, was 3/18 (onb-01, con-09, onb-03, onb-08, onb-12, reg-02, onb-11 now 2/2; scr-10 1/2; con-06 0/2: the contract draft still gave pay figures, fixed below).
+
+Leaving and contracts (the owner reviewed each rule first, 2026-09-27; Fair Work pages checked 2026-09-27):
+
+| Topic | Change |
+|---|---|
+| **NES notice on dismissal or redundancy** (Fair Work "Dismissal") | `leaving_checklist` (not casuals): the notice table by service, plus 1 week if over 45 with at least 2 years' service (unknown age: say so, don't assume); the award or contract may require more; pay in lieu includes loadings, penalties and allowances |
+| **Genuine redundancy** (Fair Work "Redundancy") | The job no longer needed by anyone, the award's consultation requirements followed, redeployment considered; otherwise an unfair dismissal claim may be possible |
+| **Unfair dismissal vs general protections** (Fair Work "Unfair dismissal") | Dismissal: unfair dismissal needs 6 months' service (12 for a small business employer); general protections and discrimination apply from day one |
+| **Resignation** (Fair Work "Resignation") | An employer can't accept or reject a resignation; not working the notice: agree an earlier last day, or end it and pay the rest; withholding for short notice only if the award allows (most: up to a week, 18 or over), never from leave. Final pay: notice in lieu only when the employer ended the employment or the notice early |
+| **Apprentices leaving** | The tool description asks for the checklist also when the owner is considering ending someone's employment (e.g. no-shows), and for `is_apprentice_or_trainee` from the register role; the apprentice items were already there |
+| **Heat-of-the-moment resignation; references** (no official page: practice) | `developer.md`: check with them and give time to confirm, get advice, keep rostering and paying meanwhile (no unpaid stand-down). References: consent first, job-related facts only, never health or personal circumstances |
+| **Contracts** (Fair Work "Annualised wage arrangements") | `employment-contract`: under 18 → a placeholder for the junior rate, no figure, and the state's rules; part-time → start and finish times and unpaid breaks so the hours add up; a salary covering overtime only as an annualised wage the award allows (named entitlements, hours covered, 12-monthly review and shortfall paid), checked by the profile's adviser |
+| **Fixed-term extension** | `update_employee` adds the length from the start to the new end date against the 2-year limit (over it: get advice; under it: this is the one extension allowed), and asks the reply to state the limits, not just "comply with the limits" |
+
+Targeted re-run of the 13 scenarios behind these × 2 (`eval/results/round5-fix-ef`): judge 19/26, was 10/26; all hard checks pass. reg-06 then 2/2 after the last change (`round5-fix-reg06`). Still 1 of 2: con-03 (hours vs breaks), term-04, term-06, term-09 (didn't draft the letter), term-12.
 
 ## 10 Tests
 

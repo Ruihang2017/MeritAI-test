@@ -57,6 +57,10 @@ const S = {
   stp: { title: "ATO: What is Single Touch Payroll", url: "https://www.ato.gov.au/businesses-and-organisations/hiring-and-paying-your-workers/single-touch-payroll/what-is-stp" },
   workersComp: { title: "business.gov.au: Workers compensation insurance", url: "https://business.gov.au/risk-management/insurance/types-of-business-insurance" },
   tfnPayer: { title: "ATO: TFN declaration, payer information and obligations", url: "https://www.ato.gov.au/forms-and-instructions/tfn-declaration/payer-information-and-obligations" },
+  dismissal: { title: "Fair Work: Dismissal (notice periods)", url: "https://www.fairwork.gov.au/ending-employment/dismissal" },
+  redundancy: { title: "Fair Work: Redundancy (genuine redundancy)", url: "https://www.fairwork.gov.au/ending-employment/redundancy" },
+  resignation: { title: "Fair Work: Resignation", url: "https://www.fairwork.gov.au/ending-employment/resignation" },
+  annualised: { title: "Fair Work: Annualised wage arrangements", url: "https://www.fairwork.gov.au/pay-and-wages/minimum-wages/annualised-salaries" },
   whm: { title: "ATO: Working holiday makers", url: "https://www.ato.gov.au/individuals-and-families/coming-to-australia-or-going-overseas/coming-to-australia/working-holiday-makers" },
 };
 export { S as SOURCES };

@@ -12,7 +12,7 @@ import { BusinessStore, adviserLine, renderProfile, smallBusinessLine, EMPTY_PRO
 import { CHECKLIST_URLS, TRAINING_AUTHORITIES, authoritiesFor, newStarterChecklist } from "../src/business/onboarding";
 import { leavingChecklist, leavingText, isApprenticeRole } from "../src/business/leaving";
 import { Register, employeeLine, normaliseEmployee, type Employee } from "../src/business/register";
-import { registerTools, FIXED_TERM_NOTE } from "../src/business/registerTools";
+import { registerTools, FIXED_TERM_NOTE, fixedTermSpan } from "../src/business/registerTools";
 import { computeReminders, formatReminders, nextKeyDate } from "../src/business/reminders";
 import { isOfficialUrl } from "../src/research/officialSources";
 import { AssistantApp, usageLimit, withoutName } from "../src/app/app";
@@ -806,6 +806,10 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   const reg = new Register(ensureFolders(join(TMP, "r5-files")).data);
   const ana = reg.add(normaliseEmployee({ name: "Ana Lima", role: "Barista", employmentType: "casual", startDate: "2026-09-01", visaExpiry: "2026-10-22" }, true));
   const tools = registerTools({ register: () => reg, confirm: async () => true, business: () => new BusinessStore(join(TMP, "r5-files", ".assistant")) } as never);
+  const dismissal = leavingChecklist({ reason: "dismissal", apprentice: false, states: ["VIC"], smallBusiness: true });
+  const casualDismissal = leavingChecklist({ reason: "dismissal", apprentice: false, states: ["VIC"], casual: true, smallBusiness: true });
+  const redundancy = leavingChecklist({ reason: "redundancy", apprentice: false, states: ["VIC"], smallBusiness: true });
+  const resignation = leavingChecklist({ reason: "resignation", apprentice: false, states: ["VIC"] });
   const rec = await tools.find((x) => x.name === "record_documents")!.handle({ id: ana.id, documents: ["tfn", "super_choice", "induction"], date: "2026-09-27" });
   record("round 5 fixes (checklist and register)", [
     ["first employee: PAYG withholding and STP, before start", /PAYG withholding/.test(t(first)) && /Single Touch Payroll/.test(t(first)) && !/PAYG withholding/.test(t(later))],
@@ -814,6 +818,10 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["working holiday maker: register with the ATO", /working holiday maker/.test(t(first)) && !/working holiday maker/.test(t(later))],
     ["new sources are official", [...first, ...later].every((x) => isOfficialUrl(x.source.url))],
     ["recorded documents: says what is still outstanding, VEVO spelled out", /Still not recorded for Ana Lima/.test(rec.text) && /VEVO before their next shift/.test(rec.text) && /2026-10-22/.test(rec.text)],
+    ["dismissal: NES notice table with over 45, unfair dismissal 6/12 months", /over 45/.test(t(dismissal)) && /4 weeks/.test(t(dismissal)) && /6 months of service/.test(t(dismissal)) && !/over 45/.test(t(casualDismissal))],
+    ["redundancy: genuine (consultation, redeployment)", /genuine/.test(t(redundancy)) && /consultation/.test(t(redundancy)) && /another job/.test(t(redundancy))],
+    ["resignation: can't accept or reject; notice pay only if you end it early", /can't accept or reject/.test(t(resignation)) && /not for notice a resigning employee chose not to work/.test(t(resignation)) && !/over 45/.test(t(resignation))],
+    ["fixed-term span: over 2 years flagged, else the one extension", /over the fixed-term limit/.test(fixedTermSpan("2024-06-01", "2026-07-01")) && /one extension allowed/.test(fixedTermSpan("2026-01-05", "2026-12-18"))],
   ], rec.text.slice(0, 400));
 }
 

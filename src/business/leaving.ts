@@ -9,7 +9,7 @@ import { authoritiesFor, SOURCES as S, type ChecklistItem } from "./onboarding";
  * against those pages on LEAVING_CHECKED_ON.
  */
 
-export const LEAVING_CHECKED_ON = "2026-09-26";
+export const LEAVING_CHECKED_ON = "2026-09-27";
 
 export type LeavingReason = "resignation" | "dismissal" | "redundancy" | "end of fixed-term contract" | "other";
 export const LEAVING_REASONS: LeavingReason[] = ["resignation", "dismissal", "redundancy", "end of fixed-term contract", "other"];
@@ -29,6 +29,39 @@ export function leavingChecklist(opts: { reason: LeavingReason; apprentice: bool
       task: "Get advice before acting (the adviser in the business profile, an employment lawyer, an employer association, or the Fair Work Infoline 13 13 94), and follow a fair process.",
       why: "Dismissals and redundancies carry unfair dismissal and general protections risk; notice and redundancy pay rules apply.",
       source: S.finalPay,
+    });
+  }
+  // Round 5 evaluation fixes (Fair Work, checked 2026-09-27).
+  if (opts.reason === "dismissal") {
+    items.push({
+      when: "before the last day",
+      task: "Unfair dismissal claims need at least 6 months of service (12 months with a small business employer, fewer than 15 employees), but general protections and discrimination claims can be made from the first day: never dismiss someone because of a protected attribute or for exercising a workplace right (e.g. a complaint or a question about their pay).",
+      why: "A short time in the job lowers the unfair dismissal risk, not the general protections risk.",
+      source: S.unfairDismissal,
+    });
+  }
+  if (opts.reason === "redundancy") {
+    items.push({
+      when: "before the last day",
+      task: "Make sure the redundancy is genuine: the job no longer needs to be done by anyone; you follow the consultation requirements in the award or agreement (talk with the employee about the change before deciding); and you consider whether they could reasonably be given another job in the business or an associated entity.",
+      why: "If the redundancy isn't genuine, the employee may be able to claim unfair dismissal.",
+      source: S.redundancy,
+    });
+  }
+  if ((opts.reason === "dismissal" || opts.reason === "redundancy") && !opts.casual) {
+    items.push({
+      when: "before the last day",
+      task: "Minimum notice under the NES, by continuous service: 1 year or less, 1 week; over 1 up to 3 years, 2 weeks; over 3 up to 5 years, 3 weeks; over 5 years, 4 weeks. Add 1 week if the employee is over 45 and has at least 2 years of service (if you don't know their age, say so; don't assume). The award, an agreement or the contract may require more. Pay in lieu of notice must equal what they would have earned over the notice period, including loadings, penalty rates and allowances.",
+      why: "The NES sets the minimum; an employment contract can't give less.",
+      source: S.dismissal,
+    });
+  }
+  if (opts.reason === "resignation") {
+    items.push({
+      when: "before the last day",
+      task: "An employer can't accept or reject a resignation: acknowledge it in writing with the last day. If you don't want them to work out their notice, either agree an earlier last day with them, or end the employment yourself and pay the rest of the notice. If they didn't give enough notice, you can withhold pay only if the award or agreement allows it (most awards: up to one week's wages, if they are 18 or over and it isn't unreasonable), and never from leave or other entitlements.",
+      why: "The notice they must give comes from the award, an agreement or the contract.",
+      source: S.resignation,
     });
   }
   if (opts.reason === "dismissal" && opts.smallBusiness !== false) {
@@ -74,7 +107,7 @@ export function leavingChecklist(opts: { reason: LeavingReason; apprentice: bool
         }
       : {
           when: "final pay",
-          task: "Include everything owed: wages to the last day, any notice paid in lieu, unused annual leave with annual leave loading (even if the award says loading is not paid on termination), long service leave if owed under state law, and redundancy pay if it applies. Unused personal/carer's leave is not paid out.",
+          task: "Include everything owed: wages to the last day, notice paid in lieu if you ended the employment (or the notice period) early (not for notice a resigning employee chose not to work), unused annual leave with annual leave loading (even if the award says loading is not paid on termination), long service leave if owed under state law, and redundancy pay if it applies. Unused personal/carer's leave is not paid out.",
           why: "These amounts are set by the NES, the award and state long service leave laws.",
           source: S.finalPay,
         },
@@ -155,13 +188,13 @@ export function leavingTools(business: () => BusinessStore): ClientTool[] {
       name: "leaving_checklist",
       description:
         "Get the official checklist for when someone's employment ends (notice, final pay and what it includes, tax and super, records, separation certificate, apprentices), with verified links. " +
-        "Call it whenever an employee resigns, is dismissed, is made redundant, or a fixed-term contract ends. " +
+        "Call it whenever an employee resigns, is dismissed, is made redundant, or a fixed-term contract ends, and when the owner is considering ending someone's employment (e.g. after warnings, or someone who has stopped turning up). " +
         "If the owner did not say why they left, do not stop to ask: use the likely reason (resignation if they quit or 'finished up') or 'other', and say which one you assumed.",
       inputSchema: {
         type: "object",
         properties: {
           reason: { type: "string", enum: LEAVING_REASONS },
-          is_apprentice_or_trainee: { type: "boolean" },
+          is_apprentice_or_trainee: { type: "boolean", description: "true if the owner or the register (role) says apprentice or trainee: the training contract has its own rules for ending it." },
           is_casual: { type: "boolean", description: "The person was a casual employee (casuals have no paid leave to pay out and no NES notice)." },
           is_sponsored_visa: { type: "boolean", description: "true if the business sponsors their visa (e.g. Skills in Demand / 482); false if not or unknown." },
         },
