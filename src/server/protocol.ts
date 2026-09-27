@@ -10,7 +10,7 @@ import type { Rubric } from "../screening/catalog";
 import type { DocumentId, Employee } from "../business/register";
 import type { ConfirmRequest } from "../engine/types";
 import type { Reminder } from "../business/reminders";
-import type { Preference, SessionRecord, TaskNote } from "../memory/store";
+import type { Preference, SessionFrom, SessionRecord, TaskNote } from "../memory/store";
 import type { BusinessProfile } from "../business/profile";
 
 /** Everything the UI can call. Anything else is refused by the server. */
@@ -18,7 +18,7 @@ export interface Methods {
   /** Snapshot for the shell (app bar, nav, first run). */
   state: { params: void; result: ShellState };
   /** Starts a reply; its events arrive as `turn` events with the turnId the UI chose (so no event can arrive before the UI knows the id). One at a time. */
-  send: { params: { text: string; skill?: string; turnId: string; mode?: "setup" }; result: { turnId: string } };
+  send: { params: { text: string; skill?: string; turnId: string; mode?: "setup"; from?: SessionFrom }; result: { turnId: string } };
   /** Stops the running reply (also withdraws open questions). */
   stop: { params: void; result: null };
   answerConfirm: { params: { id: string; yes: boolean }; result: { ok: boolean } };
@@ -98,6 +98,9 @@ export interface ShellState {
   hasConversation: boolean;
   /** The current conversation's title, when it has one. */
   title: string | null;
+  /** The current conversation's thread, and the page it was started from (the side panel's "From …"). */
+  threadId: string | null;
+  from: SessionFrom | null;
   /** Overdue and this-week counts for the Attention button and badges. */
   attention: { overdue: number; soon: number };
   /** Set when the last reply hit the ChatGPT plan usage limit (cleared by the next reply that works). */

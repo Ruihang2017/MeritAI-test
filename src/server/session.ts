@@ -9,6 +9,7 @@ import { OFFICIAL_DOMAINS } from "../research/officialSources";
 import { todayIso } from "../clock";
 import type { ClientMessage, Method, Methods, ServerEvent, Settings, ShellState } from "./protocol";
 import { RULES_CHECKED_ON } from "../business/reminders";
+import type { SessionFrom } from "../memory/store";
 
 /**
  * Connects UI messages to one AssistantApp: an allowlist of methods, the reply
@@ -100,11 +101,12 @@ export class UiSession {
       const text = str(p?.text, "text", 20_000);
       const skill = p?.skill === undefined ? undefined : str(p.skill, "skill", 80);
       const turnId = str(p?.turnId, "turnId", 100);
+      const from = p.from === undefined ? undefined : sessionFrom(p.from);
       const busy = this.running();
       if (busy) throw new Error(busy);
       this.turn = turnId;
       // The reply's own questions (fake engine tools) belong to this turn.
-      this.origin.run({ turnId }, () => void this.run(turnId, p.mode === "setup" ? this.app.setup() : this.app.send(text, skill ? { skill } : {})));
+      this.origin.run({ turnId }, () => void this.run(turnId, p.mode === "setup" ? this.app.setup(from) : this.app.send(text, { ...(skill ? { skill } : {}), ...(from ? { from } : {}) })));
       return { turnId };
     },
     stop: async () => {
@@ -293,7 +295,7 @@ export class UiSession {
     const p = this.app.profile();
     const f = this.app.folders();
     const threadId = this.app.sessionInfo()?.threadId;
-    const title = threadId ? ((await this.app.history()).find((r) => r.threadId === threadId)?.title ?? null) : null;
+    const rec = threadId ? ((await this.app.history()).find((r) => r.threadId === threadId) ?? null) : null;
     return {
       account,
       engine: this.opts.engine,
@@ -308,7 +310,9 @@ export class UiSession {
       operation: this.op,
       tier: this.app.sessionInfo()?.serviceTier ?? null,
       hasConversation: this.app.hasConversation(),
-      title,
+      title: rec?.title ?? null,
+      threadId: threadId ?? null,
+      from: rec?.from ?? null,
       attention: this.app.attentionSummary(),
       usageLimit: this.limit,
       attachments: this.app.pendingAttachments(),
@@ -326,6 +330,22 @@ function int(v: unknown): number {
 function obj(v: unknown, name: string): Record<string, unknown> {
   if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error(`${name} must be an object`);
   return v as Record<string, unknown>;
+}
+
+const FROM_PAGES = new Set<SessionFrom["page"]>(["hiring", "staff", "files", "profile"]);
+
+/** The page a conversation is started from, as sent by the UI: checked field by field. */
+function sessionFrom(v: unknown): SessionFrom {
+  const o = (v ?? {}) as Record<string, unknown>;
+  const page = str(o.page, "from.page", 20) as SessionFrom["page"];
+  if (!FROM_PAGES.has(page)) throw new Error("from.page is not a page");
+  const out: SessionFrom = { page, key: str(o.key, "from.key", 300), label: str(o.label, "from.label", 200) };
+  if (o.job !== undefined) out.job = str(o.job, "from.job", 200);
+  if (o.employeeId !== undefined) {
+    if (!Number.isInteger(o.employeeId)) throw new Error("from.employeeId must be a number");
+    out.employeeId = o.employeeId as number;
+  }
+  return out;
 }
 
 function str(v: unknown, name: string, max: number): string {

@@ -264,6 +264,13 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   await done("t2");
   const t2End = events.find((e) => e.event === "turn" && e.turnId === "t2" && e.ev.type === "turn_end");
   const state = await session.handle({ id: 6, method: "state", params: undefined }) as ShellState;
+  // A conversation started from a page (the side panel) keeps where it came from.
+  await session.handle({ id: 7, method: "newConversation", params: undefined });
+  await session.handle({ id: 8, method: "send", params: { text: "hello there, tell me about demo mode", turnId: "t4", from: { page: "hiring", key: "job:Team leader", label: "Team leader", job: "Team leader" } } });
+  await done("t4");
+  const fromState = await session.handle({ id: 9, method: "state", params: undefined }) as ShellState;
+  const fromHistory = (await app.history()).find((r) => r.threadId === fromState.threadId)?.from;
+  const badFrom = await session.handle({ id: 10, method: "send", params: { text: "x", turnId: "t5", from: { page: "settings", key: "k", label: "l" } } } as never).then(() => false, () => true);
 
   const ui = await startUiServer({ session, staticDir: join(TMP, "no-dist") });
   const tryWs = (path: string, headers: Record<string, string>) =>
@@ -293,6 +300,8 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["a second send while busy is refused", busyRefused],
     ["stop ends the reply as interrupted", t2End?.event === "turn" && t2End.ev.type === "turn_end" && t2End.ev.status === "interrupted"],
     ["state: fake engine, business name, no open questions", state.engine === "fake" && state.business.name === "Your business" && state.confirms.length === 0 && !state.busy],
+    ["a conversation started from a page keeps it (state and history)", fromState.from?.key === "job:Team leader" && fromHistory?.label === "Team leader" && fromState.threadId !== null],
+    ["from: an unknown page is refused, nothing starts", badFrom && !(await session.handle({ id: 11, method: "state", params: undefined }) as ShellState).busy],
     ["socket: token + own origin accepted", good === "open"],
     ["socket: no token, other origin, other host refused", noToken === "403" && badOrigin === "403" && badHost === "403"],
     ["static: files inside dist only; routes get index.html", staticFile(dist, "/assets/a.js") === join(dist, "assets", "a.js") && staticFile(dist, "/../package.json") === null && staticFile(dist, "/%2e%2e/%2e%2e/package.json") === null && staticFile(dist, "/staff") === join(dist, "index.html") && staticFile(dist, "/missing.js") === null],

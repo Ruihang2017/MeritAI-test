@@ -4,6 +4,7 @@ import type { JobResults, JobSummary } from "../../../src/app/app";
 import type { Api } from "../api";
 import { fmtDate, fmtDay, localDay } from "../format";
 import { Icon } from "./Icon";
+import { fromJob, type Ask, type Asking } from "../ask";
 
 // The Hiring page as on the design canvas (Hiring*, artboards): jobs on the left, the selected
 // job's steps, criteria, applications and ranked candidates on the right.
@@ -34,13 +35,23 @@ const shortReason = (r: string | null) => (r && /no text/i.test(r) ? "no text" :
 export function HiringPage({
   api,
   progress,
-  onAsk,
+  onAsk: ask,
+  asking,
+  openJob,
+  refreshKey,
   onHire,
   onOpenEmployee,
 }: {
   api: Api;
   progress: string | null;
-  onAsk: (text: string) => void;
+  /** Asks MeritAI in the side panel, about a job. */
+  onAsk: (a: Ask) => void;
+  /** What the side panel is doing (a button shows its request running or waiting). */
+  asking: Asking;
+  /** A job to show (the side panel's "From Hiring · <job>"). */
+  openJob: { job: string } | null;
+  /** Changes after a reply or an answered question: the page reloads (a job description may have been saved). */
+  refreshKey: number;
   /** Add to Staff for a candidate: the Staff form, which records the hire when saved. */
   onHire: (candidate: { name: string; file: string } | null, job: string) => void;
   onOpenEmployee: (id: number) => void;
@@ -85,9 +96,22 @@ export function HiringPage({
   useEffect(() => {
     if (sel) void loadResult(sel);
   }, [sel, loadResult]);
+  const selRef = useRef(sel);
+  selRef.current = sel;
+  useEffect(() => {
+    if (!refreshKey) return;
+    void loadJobs();
+    if (selRef.current) void loadResult(selRef.current);
+  }, [refreshKey, loadJobs, loadResult]);
+  /** A request about a job; `draft`: fill the side panel's box and wait for the owner's words. */
+  const onAsk = (job: string, text: string, draft = false) => ask({ text, from: fromJob(job), ...(draft ? { draft } : {}) });
 
   const job = jobs?.find((j) => j.job === sel) ?? null;
   const pick = (name: string) => (setSel(name), setCand(null), setNote(null), setSaved(null), setShowAll(false), setError(null), setReviewing(false));
+  useEffect(() => {
+    if (openJob) pick(openJob.job);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openJob]);
 
   const run = async (label: string, f: () => Promise<void>) => {
     setBusy(label);
@@ -249,7 +273,8 @@ export function HiringPage({
             onConfirm={confirmAndScreen}
             onDraft={draft}
             onReport={report}
-            onAsk={onAsk}
+            onAsk={(t, draft) => onAsk(job.job, t, draft)}
+            asking={asking}
             reviewing={reviewing}
             onReview={setReviewing}
             onDecide={(file, d) => void decide(file, d)}
@@ -270,8 +295,8 @@ export function HiringPage({
           result={result}
           onClose={() => setCand(null)}
           onOpen={() => void api.call("openFile", { path: joinPath(job.path, cand.file) }).then((r) => !r.ok && setError(r.error))}
-          onInvite={() => onAsk(`Draft an interview invite for ${cand.name} for the "${job.job}" role.`)}
-          onPhone={() => onAsk(`Help me prepare a phone screen for ${cand.name} for the "${job.job}" role.`)}
+          onInvite={() => onAsk(job.job, `Draft an interview invite for ${cand.name} for the "${job.job}" role.`)}
+          onPhone={() => onAsk(job.job, `Help me prepare a phone screen for ${cand.name} for the "${job.job}" role.`)}
           decision={result.decisions.find((d) => d.file === cand.file)?.decision ?? null}
           onDecide={(d) => void decide(cand.file, d)}
           hire={result.hires.find((h) => h.file === cand.file) ?? null}
@@ -298,7 +323,7 @@ export function HiringPage({
           api={api}
           existing={jobs?.map((j) => j.job) ?? []}
           onClose={() => setNewJob(false)}
-          onWriteJd={(name) => (setNewJob(false), onAsk(`Write a job description for a ${name || "new role"} with me, then save it into the job.`))}
+          onWriteJd={(name) => (setNewJob(false), onAsk(name || "New role", `Write a job description for a ${name || "new role"} with me, then save it into the job.`))}
           onCreated={async (name, text) => {
             setNewJob(false);
             setNote(text);
@@ -331,7 +356,8 @@ function JobPane(p: {
   onConfirm: (version: number, count: number) => void;
   onDraft: () => void;
   onReport: () => void;
-  onAsk: (text: string) => void;
+  onAsk: (text: string, draft?: boolean) => void;
+  asking: Asking;
   reviewing: boolean;
   onReview: (on: boolean) => void;
   onDecide: (file: string, decision: Decision | null) => void;
@@ -423,14 +449,14 @@ function JobPane(p: {
         {screeningNow && <span className="pill info">Screening</span>}
         {screened > 0 && (
           <>
-            <button type="button" className="btn" onClick={() => p.onAsk(kitPrompt)}>
+            <button type="button" className="btn hide-docked" onClick={() => p.onAsk(kitPrompt)}>
               Interview kit
             </button>
-            <button type="button" className="btn" onClick={() => p.onAsk(emailsPrompt)}>
+            <button type="button" className="btn hide-docked" onClick={() => p.onAsk(emailsPrompt)}>
               Candidate emails
             </button>
             <button type="button" className="btn p" disabled={!!p.busy} onClick={p.onReport}>
-              Report: Word (top 10)
+              Report<span className="hide-docked">: Word (top 10)</span>
             </button>
           </>
         )}
@@ -593,7 +619,7 @@ function JobPane(p: {
                 <button type="button" className="btn p" disabled={!!p.busy || unscreened <= 0} onClick={() => p.onConfirm(rubric.version, unscreened)}>
                   Yes, screen {plural(unscreened, "application")}
                 </button>
-                <button type="button" className="btn" disabled={!!p.busy} onClick={() => p.onAsk(`Change the screening criteria for the "${job.job}" role: `)}>
+                <button type="button" className="btn" disabled={!!p.busy} onClick={() => p.onAsk(`Change the screening criteria for the "${job.job}" role: `, true)}>
                   No, change them
                 </button>
                 <span className="meta">Takes about a minute. Up to 20 per run.</span>
@@ -632,7 +658,7 @@ function JobPane(p: {
                   <span className="cap" style={{ flexGrow: 1 }}>
                     Criteria · confirmed{rubric.confirmedAt ? ` by you ${fmtDay(localDay(rubric.confirmedAt))}` : ""}
                   </span>
-                  <button type="button" className="link-btn" style={{ fontSize: 13, fontWeight: 700 }} onClick={() => p.onAsk(`Change the screening criteria for the "${job.job}" role: `)}>
+                  <button type="button" className="link-btn" style={{ fontSize: 13, fontWeight: 700 }} onClick={() => p.onAsk(`Change the screening criteria for the "${job.job}" role: `, true)}>
                     Change
                   </button>
                 </div>
@@ -718,14 +744,14 @@ function JobPane(p: {
                     </button>
                   </div>
                   <NextStep n={1} title="Interview kit" text={shortlisted.length ? `Questions and a scoring sheet for ${names(shortlisted)}, built from your criteria.` : "No one is shortlisted yet."}>
-                    <button type="button" className="btn" disabled={!shortlisted.length} onClick={() => p.onAsk(kitPrompt)}>
+                    <AskButton prompt={kitPrompt} asking={p.asking} busyLabel="Making the kit" disabled={!shortlisted.length} onAsk={p.onAsk}>
                       Make the interview kit
-                    </button>
+                    </AskButton>
                   </NextStep>
                   <NextStep n={2} title="Candidate emails" text={`${plural(shortlisted.length, "interview invitation")} and ${notNow.length} “not this time” email${notNow.length === 1 ? "" : "s"}, saved as drafts in your Outbox. You check and send them.`}>
-                    <button type="button" className="btn p" onClick={() => p.onAsk(emailsPrompt)}>
+                    <AskButton prompt={emailsPrompt} asking={p.asking} busyLabel="Drafting in the side panel" primary onAsk={p.onAsk}>
                       Draft the emails
-                    </button>
+                    </AskButton>
                   </NextStep>
                   <NextStep
                     n={3}
@@ -826,8 +852,8 @@ function JobPane(p: {
                         <th>Candidate</th>
                         <th>Band</th>
                         <th>Essential</th>
-                        <th>Desirable</th>
-                        <th>Summary</th>
+                        <th className="opt-col">Desirable</th>
+                        <th className="opt-col">Summary</th>
                         <th style={{ width: 236 }}>Decision</th>
                       </tr>
                     </thead>
@@ -851,10 +877,10 @@ function JobPane(p: {
                           <td>
                             {c.essentialScore} of {c.essentialTotal}
                           </td>
-                          <td>
+                          <td className="opt-col">
                             {c.desirableScore} of {c.desirableTotal}
                           </td>
-                          <td className="ellipsis" style={{ maxWidth: 180 }}>
+                          <td className="ellipsis opt-col" style={{ maxWidth: 180 }}>
                             {c.evaluation.summary}
                           </td>
                           <td style={{ whiteSpace: "nowrap" }}>
@@ -922,6 +948,28 @@ function DecisionButtons({ name, value, onChange, large }: { name: string; value
         Not this time
       </button>
     </div>
+  );
+}
+
+/** A next step that asks MeritAI: shows its request running or waiting in the side panel. */
+function AskButton({ prompt, asking, busyLabel, primary, disabled, onAsk, children }: { prompt: string; asking: Asking; busyLabel: string; primary?: boolean; disabled?: boolean; onAsk: (text: string) => void; children: React.ReactNode }) {
+  if (asking.running === prompt)
+    return (
+      <button type="button" className="btn" disabled>
+        <span className="spin" />
+        {busyLabel}
+      </button>
+    );
+  if (asking.queued.includes(prompt))
+    return (
+      <button type="button" className="btn" disabled>
+        Next in the side panel
+      </button>
+    );
+  return (
+    <button type="button" className={`btn${primary ? " p" : ""}`} disabled={disabled} onClick={() => onAsk(prompt)}>
+      {children}
+    </button>
   );
 }
 
@@ -1039,8 +1087,8 @@ function ClosedPane({ p, sub, hires, steps }: { p: Parameters<typeof JobPane>[0]
                   <th>Candidate</th>
                   <th>Band</th>
                   <th>Essential</th>
-                  <th>Desirable</th>
-                  <th>Summary</th>
+                  <th className="opt-col">Desirable</th>
+                  <th className="opt-col">Summary</th>
                   <th style={{ width: 170 }}>Decision</th>
                 </tr>
               </thead>
@@ -1059,10 +1107,10 @@ function ClosedPane({ p, sub, hires, steps }: { p: Parameters<typeof JobPane>[0]
                     <td>
                       {c.essentialScore} of {c.essentialTotal}
                     </td>
-                    <td>
+                    <td className="opt-col">
                       {c.desirableScore} of {c.desirableTotal}
                     </td>
-                    <td className="ellipsis" style={{ maxWidth: 200 }}>
+                    <td className="ellipsis opt-col" style={{ maxWidth: 200 }}>
                       {c.evaluation.summary}
                     </td>
                     <td style={{ whiteSpace: "nowrap" }}>

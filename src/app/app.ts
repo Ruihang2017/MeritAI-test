@@ -13,7 +13,7 @@ export type { ReplyFormat } from "../basePrompt";
 import type { AccountStatus, Confirm, ConfirmRequest, EngineEvent, SessionInfo, TranscriptEntry } from "../engine/types";
 import { userSection } from "../memory/context";
 import { summarizeSession } from "../memory/summarize";
-import type { Preference, SessionRecord, TaskNote } from "../memory/store";
+import type { Preference, SessionFrom, SessionRecord, TaskNote } from "../memory/store";
 import { attachToInbox, findDroppedPaths, importIntoJob, MAX_ATTACH_BYTES } from "../files/attach";
 import { checkJobId, ensureFolders, jobDir, listJobs, sanitizeStem, validateFilesRoot, walk, type Folders } from "../files/folders";
 import type { Decision, Rubric } from "../screening/catalog";
@@ -372,10 +372,11 @@ export class AssistantApp {
 
   /**
    * One assistant turn. Pending attachments go with it. `title` is what the user
-   * typed (used for the history), when it differs from `text`.
+   * typed (used for the history), when it differs from `text`; `from` is the page a
+   * new conversation was started from (kept with it in the history).
    */
-  async *send(text: string, opts: { skill?: string; title?: string } = {}): AsyncIterable<AppEvent> {
-    this.recordSession(opts.title ?? text);
+  async *send(text: string, opts: { skill?: string; title?: string; from?: SessionFrom } = {}): AsyncIterable<AppEvent> {
+    this.recordSession(opts.title ?? text, opts.from);
     const message = [...this.pending.notes, text].filter(Boolean).join(" ");
     const images = this.pending.images;
     this.pending = { notes: [], images: [] };
@@ -394,15 +395,15 @@ export class AssistantApp {
     }
   }
 
-  private recordSession(title: string): void {
+  private recordSession(title: string, from?: SessionFrom): void {
     if (this.recorded || !this.session) return;
-    this.a.mem.recordSession({ threadId: this.session.threadId, title: title.slice(0, 60), startedAt: now().toISOString() });
+    this.a.mem.recordSession({ threadId: this.session.threadId, title: title.slice(0, 60), startedAt: now().toISOString(), ...(from ? { from } : {}) });
     this.recorded = true;
   }
 
   /** The business setup interview (a skill-driven turn). */
-  setup(): AsyncIterable<AppEvent> {
-    return this.send(SETUP_PROMPT, { skill: "business-setup", title: "/setup" });
+  setup(from?: SessionFrom): AsyncIterable<AppEvent> {
+    return this.send(SETUP_PROMPT, { skill: "business-setup", title: "/setup", ...(from ? { from } : {}) });
   }
 
   /** Saves a preference through the model, so preferences that break the HR principles are refused. */

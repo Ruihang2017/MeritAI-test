@@ -7,6 +7,7 @@ import type { Api } from "../api";
 import { fmtDate, fmtDatesIn, fmtDay } from "../format";
 import { Icon } from "./Icon";
 import { todayIso } from "../clock";
+import { fromEmployee, type Ask } from "../ask";
 
 const TYPES: EmployeeFields["employmentType"][] = ["full-time", "part-time", "casual", "fixed-term"];
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -20,10 +21,12 @@ type Panel =
   | { kind: "edited"; id: number; lines: string[]; notes: FormNote[] }
   | { kind: "docs"; id: number }
   | { kind: "left"; id: number }
-  | { kind: "leftDone"; name: string; lines: string[]; checklist: LeavingItem[] }
+  | { kind: "leftDone"; id: number; name: string; lines: string[]; checklist: LeavingItem[] }
   | null;
 
-export function StaffPage({ api, openId, addPrefill, onAsk, onChanged }: { api: Api; openId?: number | null; addPrefill?: { name: string; role: string; hireFrom?: { job: string; file: string } } | null; onAsk: (text: string) => void; onChanged: () => void }) {
+export function StaffPage({ api, openId, addPrefill, onAsk: ask, onChanged, refreshKey }: { api: Api; openId?: number | null; addPrefill?: { name: string; role: string; hireFrom?: { job: string; file: string } } | null; onAsk: (a: Ask) => void; onChanged: () => void; refreshKey: number }) {
+  /** A request about someone; `draft`: fill the side panel's box and wait for the owner's words. */
+  const onAsk = (r: { id: number; name: string }, text: string, draft = false) => ask({ text, from: fromEmployee(r.id, r.name), ...(draft ? { draft } : {}) });
   const [rows, setRows] = useState<StaffRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
@@ -45,6 +48,10 @@ export function StaffPage({ api, openId, addPrefill, onAsk, onChanged }: { api: 
     }
   }, [api]);
   useEffect(() => void load(), [load]);
+  // After a reply or an answered question (the register may have changed in the side panel).
+  useEffect(() => {
+    if (refreshKey) void load();
+  }, [refreshKey, load]);
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 5000);
@@ -228,7 +235,7 @@ export function StaffPage({ api, openId, addPrefill, onAsk, onChanged }: { api: 
                                   <button type="button" role="menuitem" className="menu-item row" onClick={() => (setMenu(null), setPanel({ kind: "docs", id: r.id }))}>
                                     Record documents
                                   </button>
-                                  <button type="button" role="menuitem" className="menu-item row" onClick={() => (setMenu(null), onAsk(`I have a question about ${r.name} (${r.role}).`))}>
+                                  <button type="button" role="menuitem" className="menu-item row" onClick={() => (setMenu(null), onAsk(r, `I have a question about ${r.name} (${r.role}). `, true))}>
                                     Ask the adviser
                                   </button>
                                   <div role="separator" className="menu-sep" />
@@ -273,7 +280,7 @@ export function StaffPage({ api, openId, addPrefill, onAsk, onChanged }: { api: 
           onDocs={() => setPanel({ kind: "docs", id: panel.id })}
           onLeft={() => setPanel({ kind: "left", id: panel.id })}
           onDelete={() => void remove(byId(panel.id)!)}
-          onAsk={() => onAsk(`I have a question about ${byId(panel.id)!.name} (${byId(panel.id)!.role}).`)}
+          onAsk={() => onAsk(byId(panel.id)!, `I have a question about ${byId(panel.id)!.name} (${byId(panel.id)!.role}). `, true)}
         />
       )}
       {panel?.kind === "add" && (
@@ -308,7 +315,7 @@ export function StaffPage({ api, openId, addPrefill, onAsk, onChanged }: { api: 
           onDocs={() => setPanel({ kind: "docs", id: panel.id })}
           onLeft={() => setPanel({ kind: "left", id: panel.id })}
           onDelete={() => void remove(byId(panel.id)!)}
-          onAsk={() => onAsk(`I have a question about ${byId(panel.id)!.name}.`)}
+          onAsk={() => onAsk(byId(panel.id)!, `I have a question about ${byId(panel.id)!.name}. `, true)}
         />
       )}
       {panel?.kind === "docs" && byId(panel.id) && (
@@ -329,12 +336,12 @@ export function StaffPage({ api, openId, addPrefill, onAsk, onChanged }: { api: 
           r={byId(panel.id)!}
           onClose={() => setPanel({ kind: "detail", id: panel.id })}
           onSaved={(res) => {
-            setPanel({ kind: "leftDone", name: byId(panel.id)!.name, lines: res.lines, checklist: res.checklist });
+            setPanel({ kind: "leftDone", id: panel.id, name: byId(panel.id)!.name, lines: res.lines, checklist: res.checklist });
             void changed();
           }}
         />
       )}
-      {panel?.kind === "leftDone" && <LeavingDone name={panel.name} lines={panel.lines} checklist={panel.checklist} onClose={() => setPanel(null)} onAsk={() => onAsk(`${panel.name} is leaving. Can you draft the letter confirming their last day?`)} />}
+      {panel?.kind === "leftDone" && <LeavingDone name={panel.name} lines={panel.lines} checklist={panel.checklist} onClose={() => setPanel(null)} onAsk={() => onAsk(panel, `${panel.name} is leaving. Can you draft the letter confirming their last day?`)} />}
       {toast && (
         <div className="toast" role="status">
           <Icon name="check" size={18} />

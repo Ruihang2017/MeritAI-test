@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Reminder } from "../../src/business/reminders";
-import type { SessionRecord } from "../../src/memory/store";
+import type { SessionFrom, SessionRecord } from "../../src/memory/store";
 import type { ShellState } from "../../src/server/protocol";
 import type { ConfirmRequest } from "../../src/engine/types";
 import { fmtDatesIn } from "./format";
@@ -8,7 +8,9 @@ import { Api, type Connection } from "./api";
 import { addConfirm, applyEvent, setConfirm, turnsFromTranscript, type Turn } from "./conversation";
 import { ConversationPage } from "./components/Conversation";
 import { Icon } from "./components/Icon";
-import { AppBar, AttentionPanel, Nav, type Page } from "./components/Shell";
+import { AppBar, AttentionPanel, Nav, type AskButton, type Page } from "./components/Shell";
+import { Dock, type DockNotice } from "./components/Dock";
+import { FROM_PROFILE, fromReminder, type Ask } from "./ask";
 import { StaffPage } from "./components/Staff";
 import { FilesPage, MemoryPage, ProfilePage, SettingsPage } from "./components/Pages";
 import { HiringPage } from "./components/Hiring";
@@ -78,11 +80,50 @@ function Shell({ api }: { api: Api }) {
   };
   const [login, setLogin] = useState<{ url: string | null; code: string | null; message: string } | null>(null);
 
+  // ---- the side panel (design: Dock*): the current conversation next to any page except Conversations
+  const [dockOpen, setDockOpen] = useState(() => {
+    try {
+      return localStorage.getItem("meritai.dock") === "open";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("meritai.dock", dockOpen ? "open" : "closed");
+    } catch {
+      /* only a convenience */
+    }
+  }, [dockOpen]);
+  /** Page requests waiting for the running answer to finish ("Next"). */
+  const [queue, setQueue] = useState<Ask[]>([]);
+  /** The topic of a request put in the box for the owner to finish: applied when it is sent. */
+  const [pendingFrom, setPendingFrom] = useState<SessionFrom | null>(null);
+  /** The page the current conversation was started from (a new topic starts a new conversation). */
+  const [convFrom, setConvFrom] = useState<SessionFrom | null>(null);
+  const convFromRef = useRef(convFrom);
+  convFromRef.current = convFrom;
+  const [notice, setNotice] = useState<DockNotice | null>(null);
+  /** A question waiting for the owner's OK while the panel is closed. */
+  const [askPopup, setAskPopup] = useState<string | null>(null);
+  /** Bumped after a reply or an answered question: open pages reload what the adviser may have changed. */
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [hiringJob, setHiringJob] = useState<{ job: string } | null>(null);
+  const dockable = page !== "conversations" && page !== "all";
+  const showDock = dockable && dockOpen;
+  const dockVisible = useRef(showDock);
+  dockVisible.current = showDock;
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const asking = useRef(false);
+
   const refresh = useCallback(async () => {
     try {
       const s = await api.call("state");
       setAppToday(s.today);
       setState(s);
+      // Kept until the server has recorded a new conversation (its first message is on its way).
+      setConvFrom((c) => s.from ?? (s.title ? null : c));
       // After a page reload the conversation is still open on the server: show its messages again.
       if (!restored.current) {
         restored.current = true;
@@ -133,24 +174,31 @@ function Shell({ api }: { api: Api }) {
             // A reply followed after a page reload missed its start: show the stored conversation instead.
             const followed = turnsRef.current.find((t) => t.id === m.turnId && !t.user.text && !t.user.attachments.length);
             if (followed) api.call("transcript").then((entries) => entries.length && setTurns(turnsFromTranscript(entries, followed.at)), () => null);
+            setRefreshKey((k) => k + 1);
             void refresh();
             break;
           }
           case "confirm": {
             // A reply's question is a card in that reply; any other (delete from Staff, screening criteria) a dialog.
-            if (m.turnId && turnsRef.current.some((t) => t.id === m.turnId)) setTurns((ts) => ts.map((t) => (t.id === m.turnId ? addConfirm(t, m.id, m.req) : t)));
-            else setDialog({ id: m.id, req: m.req });
+            if (m.turnId && turnsRef.current.some((t) => t.id === m.turnId)) {
+              setTurns((ts) => ts.map((t) => (t.id === m.turnId ? addConfirm(t, m.id, m.req) : t)));
+              // The side panel is closed on another page: a short popup under its button.
+              if (!dockVisible.current && pageRef.current !== "conversations") setAskPopup(m.req.title);
+            } else setDialog({ id: m.id, req: m.req });
             setState((s) => (s ? { ...s, confirms: [...s.confirms.filter((c) => c.id !== m.id), { id: m.id, req: m.req, turnId: m.turnId }] } : s));
             break;
           }
           case "confirmAnswered":
             // Answered here or in another tab.
             setDialog((d) => (d?.id === m.id ? null : d));
+            setAskPopup(null);
+            setRefreshKey((k) => k + 1);
             setTurns((ts) => ts.map((t) => setConfirm(t, m.id, m.yes ? "yes" : "no")));
             setState((s) => (s ? { ...s, confirms: s.confirms.filter((c) => c.id !== m.id) } : s));
             break;
           case "confirmWithdrawn":
             setDialog((d) => (d?.id === m.id ? null : d));
+            setAskPopup(null);
             setTurns((ts) => ts.map((t) => setConfirm(t, m.id, "withdrawn")));
             setState((s) => (s ? { ...s, confirms: s.confirms.filter((c) => c.id !== m.id) } : s));
             break;
@@ -172,12 +220,14 @@ function Shell({ api }: { api: Api }) {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const send = async (text: string, skill?: string, attachments: string[] = [], mode?: "setup") => {
+  /** Sends on the current conversation: in the side panel on a page that has one, else on Conversations. */
+  const send = async (text: string, skill?: string, attachments: string[] = [], mode?: "setup", from?: SessionFrom) => {
     const turnId = crypto.randomUUID();
-    setPage("conversations");
+    if (pageRef.current === "conversations" || pageRef.current === "all") setPage("conversations");
+    else setDockOpen(true);
     setTurns((ts) => [...ts, { id: turnId, at: now(), user: { text, attachments }, ...(skill ? { skill } : {}), steps: [], blocks: [], status: "running" }]);
     try {
-      await api.call("send", { text, turnId, ...(skill ? { skill } : {}), ...(mode ? { mode } : {}) });
+      await api.call("send", { text, turnId, ...(skill ? { skill } : {}), ...(mode ? { mode } : {}), ...(from ? { from } : {}) });
       setState((s) => (s ? { ...s, busy: true } : s));
     } catch (e) {
       setTurns((ts) => ts.map((t) => (t.id === turnId ? applyEvent(t, { type: "turn_end", status: "failed", error: (e as Error).message }) : t)));
@@ -195,22 +245,28 @@ function Shell({ api }: { api: Api }) {
     setState((s) => (s ? { ...s, confirms: s.confirms.filter((c) => c.id !== id) } : s));
   };
 
-  const newConversation = async () => {
+  /** `stay`: from the side panel (the page stays); otherwise Conversations opens. */
+  const newConversation = async (stay = false): Promise<boolean> => {
     try {
       await api.call("newConversation");
       setTurns([]);
       setResumedTitle(null);
-      setPage("conversations");
+      setConvFrom(null);
+      setNotice(null);
+      if (!stay) setPage("conversations");
       void refresh();
+      return true;
     } catch (e) {
       setError((e as Error).message);
+      return false;
     }
   };
 
-  const resume = async (threadId: string) => {
+  const resume = async (threadId: string, stay = false) => {
     try {
       const r = await api.call("resume", { threadId });
-      setPage("conversations");
+      setNotice(null);
+      if (!stay) setPage("conversations");
       if (!r.alreadyOpen) {
         const rec = recent.find((x) => x.threadId === threadId);
         setResumedTitle(rec?.title ?? "an earlier conversation");
@@ -223,12 +279,92 @@ function Shell({ api }: { api: Api }) {
     }
   };
 
-  const currentThread = recent.find((r) => r.title === state?.title)?.threadId ?? null;
+  /**
+   * A page button that asks MeritAI (owner, 2026-09-27): the side panel opens; the current conversation
+   * continues when it is empty or about the same thing, otherwise a new one starts (no question asked).
+   * While an answer runs, the request waits as "Next".
+   */
+  const ask = (a: Ask) => {
+    setDockOpen(true);
+    setAskPopup(null);
+    if (a.draft) {
+      setDraft(a.text);
+      setPendingFrom(a.from);
+      return;
+    }
+    if (running || state?.busy || asking.current) {
+      setQueue((q) => [...q, a]);
+      return;
+    }
+    void runAsk(a);
+  };
+  const runAsk = async (a: Ask) => {
+    asking.current = true;
+    try {
+      const empty = turnsRef.current.length === 0;
+      const same = empty || convFromRef.current?.key === a.from.key;
+      let from: SessionFrom | undefined = empty ? a.from : undefined;
+      if (!same) {
+        const cur = stateRef.current;
+        const prev = cur?.title && cur.threadId ? { title: cur.title, threadId: cur.threadId } : null;
+        if (!(await newConversation(true))) return;
+        if (prev) setNotice({ about: a.from.label, prev });
+        from = a.from;
+      }
+      if (from) setConvFrom(from);
+      await send(a.text, a.skill, a.attachments ?? [], a.mode, from);
+    } finally {
+      asking.current = false;
+    }
+  };
+  /** What the owner typed and sent: a request they finished from a page button keeps that button's topic. */
+  const typedSend = (text: string, skill?: string, attachments?: string[]) => {
+    if (pendingFrom) {
+      setPendingFrom(null);
+      void runAsk({ text, from: pendingFrom, ...(skill ? { skill } : {}), ...(attachments ? { attachments } : {}) });
+    } else void send(text, skill, attachments);
+  };
+  const running = turns.some((t) => t.status === "running");
+  const waitingOnYou = turns.some((t) => t.blocks.some((b) => b.kind === "confirm" && b.state === "open"));
+  // The next waiting request goes when nothing runs.
+  useEffect(() => {
+    if (running || state?.busy || asking.current || !queue.length) return;
+    const [next, ...rest] = queue;
+    setQueue(rest);
+    void runAsk(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running, state?.busy, queue]);
+  useEffect(() => {
+    if (showDock) setAskPopup(null);
+  }, [showDock]);
+  // Ctrl J opens and closes the side panel (not on Conversations, which is the full view).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "j" && pageRef.current !== "conversations" && pageRef.current !== "all") {
+        e.preventDefault();
+        setDockOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  /** "From Hiring · Team leader": back to that page and thing. */
+  const goFrom = (f: SessionFrom) => {
+    setStaffAdd(null);
+    if (f.page === "staff" && f.employeeId !== undefined) return openEmployee(f.employeeId);
+    setStaffOpen(null);
+    if (f.page === "hiring" && f.job) setHiringJob({ job: f.job });
+    setPage(f.page);
+  };
+
+  const currentThread = state?.threadId ?? null;
   const showPanel = page === "conversations" && wide;
+  const askButton: AskButton = !dockable ? "none" : showDock ? "open" : waitingOnYou ? "waiting" : running ? "working" : "closed";
+  const docked = showDock && wide;
 
   return (
-    <div className="m app">
-      <AppBar state={state} connection={connection} showAttention={!showPanel} onAttention={() => setAttentionOpen(true)} />
+    <div className={`m app${docked ? " dock-open" : ""}`}>
+      <AppBar state={state} connection={connection} showAttention={!showPanel} onAttention={() => setAttentionOpen(true)} ask={askButton} onAskToggle={() => setDockOpen(!dockOpen)} />
       {connection !== "open" && (
         <div className="banner bad conn" role="alert">
           <Icon name="alert" size={18} />
@@ -243,20 +379,20 @@ function Shell({ api }: { api: Api }) {
           state={state}
           login={login}
           onRefresh={() => void refresh()}
-          onSetup={() => (finishFirstRun(), void send("Set up my business profile", undefined, [], "setup"))}
+          onSetup={() => (finishFirstRun(), setPage("conversations"), void send("Set up my business profile", undefined, [], "setup"))}
           onForm={() => (finishFirstRun(), setPage("profile"))}
           onSkip={finishFirstRun}
         />
       ) : (
       <div className="body">
-        <Nav page={page} onPage={(p) => (setStaffOpen(null), setStaffAdd(null), setPage(p))} onNew={() => void newConversation()} recent={recent} onRecent={(id) => void resume(id)} currentThread={currentThread} state={state} />
+        <Nav page={page} collapsed={docked} onPage={(p) => (setStaffOpen(null), setStaffAdd(null), setPage(p))} onNew={() => void newConversation()} recent={recent} onRecent={(id) => void resume(id)} currentThread={currentThread} state={state} />
         {page === "conversations" && (
           <ConversationPage
             api={api}
             state={state}
             turns={turns}
             title={state?.title ?? null}
-            onSend={(t, s, a) => void send(t, s, a)}
+            onSend={typedSend}
             onStop={() => void api.call("stop").catch(() => null)}
             onAnswer={(id, yes) => void answer(id, yes)}
             onNew={() => void newConversation()}
@@ -264,25 +400,74 @@ function Shell({ api }: { api: Api }) {
             resumedTitle={resumedTitle}
             draft={draft}
             onDraftUsed={() => setDraft(null)}
+            from={convFrom}
+            onGoFrom={goFrom}
           />
         )}
         {page === "all" && <AllConversations api={api} onResume={(id) => void resume(id)} onNew={() => void newConversation()} />}
-        {page === "staff" && <StaffPage key={staffOpen ?? (staffAdd ? `add:${staffAdd.name}` : "list")} api={api} openId={staffOpen} addPrefill={staffAdd} onAsk={(t) => (setDraft(t), setPage("conversations"))} onChanged={() => void refresh()} />}
-        {page === "files" && <FilesPage api={api} onAsk={(t) => (setDraft(t), setPage("conversations"))} />}
-        {page === "profile" && <ProfilePage api={api} onAsk={() => void send("Set up my business profile", undefined, [], "setup")} onChanged={() => void refresh()} />}
+        {page === "staff" && <StaffPage key={staffOpen ?? (staffAdd ? `add:${staffAdd.name}` : "list")} api={api} openId={staffOpen} addPrefill={staffAdd} onAsk={ask} onChanged={() => void refresh()} refreshKey={refreshKey} />}
+        {page === "files" && <FilesPage api={api} onAsk={ask} refreshKey={refreshKey} />}
+        {page === "profile" && <ProfilePage api={api} onAsk={() => ask({ text: "Set up my business profile", mode: "setup", from: FROM_PROFILE })} onChanged={() => void refresh()} refreshKey={refreshKey} />}
         {page === "memory" && <MemoryPage api={api} onProfile={() => setPage("profile")} />}
         {page === "settings" && <SettingsPage api={api} login={login} onChanged={() => void refresh()} />}
-        {page === "hiring" && <HiringPage api={api} progress={lastProgress} onAsk={(t) => (setDraft(t), setPage("conversations"))} onHire={(c, job) => (setStaffOpen(null), setStaffAdd({ name: c?.name ?? "", role: job, ...(c ? { hireFrom: { job, file: c.file } } : {}) }), setPage("staff"))} onOpenEmployee={openEmployee} />}
-        {showPanel && <AttentionPanel reminders={reminders} rulesChecked={state?.rulesChecked ?? null} onAsk={(t) => void send(t)} onOpenEmployee={openEmployee} />}
+        {page === "hiring" && <HiringPage api={api} progress={lastProgress} onAsk={ask} asking={{ running: turns.find((t) => t.status === "running")?.user.text ?? null, queued: queue.map((q) => q.text) }} openJob={hiringJob} refreshKey={refreshKey} onHire={(c, job) => (setStaffOpen(null), setStaffAdd({ name: c?.name ?? "", role: job, ...(c ? { hireFrom: { job, file: c.file } } : {}) }), setPage("staff"))} onOpenEmployee={openEmployee} />}
+        {/* Kept while closed on a page (a half-typed message survives closing it); hidden, not removed. */}
+        {dockable && (
+          <Dock
+            hidden={!dockOpen}
+            api={api}
+            state={state}
+            page={page}
+            turns={turns}
+            title={state?.title ?? null}
+            from={convFrom}
+            recent={recent}
+            currentThread={currentThread}
+            running={running}
+            waiting={waitingOnYou}
+            queue={queue}
+            notice={notice}
+            draft={draft}
+            floating={!wide}
+            onDraftUsed={() => setDraft(null)}
+            onSend={typedSend}
+            onStop={() => void api.call("stop").catch(() => null)}
+            onAnswer={(id, yes) => void answer(id, yes)}
+            onNew={() => void newConversation(true)}
+            onResume={(id) => void resume(id, true)}
+            onCancelQueued={(i) => setQueue((q) => q.filter((_, j) => j !== i))}
+            onFull={() => setPage("conversations")}
+            onClose={() => setDockOpen(false)}
+            onGoFrom={goFrom}
+          />
+        )}
+        {showPanel && <AttentionPanel reminders={reminders} rulesChecked={state?.rulesChecked ?? null} onAsk={(r) => void send(`Help me with this: ${r.title}`)} onOpenEmployee={openEmployee} />}
       </div>
       )}
       {attentionOpen && !showPanel && (
         <>
           <div className="scrim fill" onClick={() => setAttentionOpen(false)} />
           <div className="attention-drawer">
-            <AttentionPanel reminders={reminders} rulesChecked={state?.rulesChecked ?? null} onClose={() => setAttentionOpen(false)} onAsk={(t) => (setAttentionOpen(false), void send(t))} onOpenEmployee={(id) => (setAttentionOpen(false), openEmployee(id))} />
+            <AttentionPanel reminders={reminders} rulesChecked={state?.rulesChecked ?? null} onClose={() => setAttentionOpen(false)} onAsk={(r) => (setAttentionOpen(false), pageRef.current === "conversations" || pageRef.current === "all" ? void send(`Help me with this: ${r.title}`) : ask({ text: `Help me with this: ${r.title}`, from: fromReminder(r) }))} onOpenEmployee={(id) => (setAttentionOpen(false), openEmployee(id))} />
           </div>
         </>
+      )}
+      {askPopup && !showDock && dockable && (
+        <div className="ask-pop" role="dialog" aria-label="MeritAI needs your OK">
+          <div className="cap" style={{ color: "#6B4E00" }}>
+            Needs your OK
+          </div>
+          <b>{fmtDatesIn(askPopup)}</b>
+          <span className="meta">{state?.title ? `In “${state.title}”. ` : ""}Nothing changes until you say yes.</span>
+          <div className="row-wrap">
+            <button type="button" className="btn p sm" onClick={() => setDockOpen(true)}>
+              Open the side panel
+            </button>
+            <button type="button" className="btn g sm" onClick={() => setAskPopup(null)}>
+              Later
+            </button>
+          </div>
+        </div>
       )}
       {dialog && (
         <>

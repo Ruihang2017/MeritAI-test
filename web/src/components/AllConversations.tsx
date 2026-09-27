@@ -6,6 +6,7 @@ import { dayLabel, fmtDate } from "../format";
 const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 import { Icon } from "./Icon";
 import { now as clockNow } from "../clock";
+import { fromText } from "../ask";
 
 /** All stored conversations (design board "Conversations"): search, grouped by day, click to continue. */
 export function AllConversations({ api, onResume, onNew }: { api: Api; onResume: (threadId: string) => void; onNew: () => void }) {
@@ -69,6 +70,7 @@ export function AllConversations({ api, onResume, onNew }: { api: Api; onResume:
                 <button key={r.threadId} type="button" className="conv-row" style={i ? undefined : { borderTop: 0 }} onClick={() => onResume(r.threadId)}>
                   <Icon name="conversations" size={18} />
                   <span className="grow ellipsis">{r.title}</span>
+                  {r.from && <span className="meta ellipsis conv-from">From {fromText(r.from)}</span>}
                   <span className="meta">{g.title === "Today" ? new Date(r.startedAt).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" }).toLowerCase() : fmtDate(isoDay(new Date(r.startedAt)))}</span>
                 </button>
               ))}

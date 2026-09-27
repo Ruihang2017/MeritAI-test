@@ -28,6 +28,18 @@ export interface SessionRecord {
   threadId: string;
   title: string;
   startedAt: string;
+  /** The page it was started from (a button in the UI's side panel), e.g. Hiring · Team leader. */
+  from?: SessionFrom;
+}
+
+/** Where a conversation started: a page and the thing on it (a job, an employee, a file). */
+export interface SessionFrom {
+  page: "hiring" | "staff" | "files" | "profile";
+  /** Same key = same topic: the side panel continues that conversation instead of starting a new one. */
+  key: string;
+  label: string;
+  job?: string;
+  employeeId?: number;
 }
 
 /** Per-user settings (not memory the model sees). */

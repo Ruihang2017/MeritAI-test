@@ -7,6 +7,7 @@ import type { Api } from "../api";
 import { dayLabel, fmtDate, fmtDatesIn, fmtDay, fmtWhen, localDay } from "../format";
 import { now } from "../clock";
 import { Icon } from "./Icon";
+import { fromFile, type Ask } from "../ask";
 
 const isoDay = localDay;
 const kb = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
@@ -55,9 +56,13 @@ function LoadError({ what, error, retry }: { what: string; error: string; retry:
 
 type Tab = "inbox" | "outbox" | "jobs" | "policies";
 
-export function FilesPage({ api, onAsk }: { api: Api; onAsk: (text: string) => void }) {
+export function FilesPage({ api, onAsk, refreshKey }: { api: Api; onAsk: (a: Ask) => void; refreshKey: number }) {
   const load = useCallback(() => api.call("files"), [api]);
   const { data, error, reload } = useLoad<WorkspaceFiles>(load);
+  // After a reply (drafts may have been saved to the Outbox).
+  useEffect(() => {
+    if (refreshKey) void reload();
+  }, [refreshKey, reload]);
   const [tab, setTab] = useState<Tab>("inbox");
   const [msg, setMsg] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -213,7 +218,7 @@ export function FilesPage({ api, onAsk }: { api: Api; onAsk: (text: string) => v
                           Show in folder
                         </button>
                         {tab === "inbox" && f.readable && (
-                          <button type="button" className="btn g sm" onClick={() => onAsk(`Please read "${f.name}" in my Inbox and tell me what I need to do.`)}>
+                          <button type="button" className="btn g sm" onClick={() => onAsk({ text: `Please read "${f.name}" in my Inbox and tell me what I need to do.`, from: fromFile(f.name) })}>
                             Ask about it
                           </button>
                         )}
@@ -280,9 +285,13 @@ function adviserText(kind: string | null): string {
   return "For dismissals, disputes or legal risk, I'll point you to an employment lawyer, an employer association or the Fair Work Infoline (13 13 94).";
 }
 
-export function ProfilePage({ api, onAsk, onChanged }: { api: Api; onAsk: (text: string) => void; onChanged: () => void }) {
+export function ProfilePage({ api, onAsk, onChanged, refreshKey }: { api: Api; onAsk: () => void; onChanged: () => void; refreshKey: number }) {
   const load = useCallback(() => api.call("profile"), [api]);
   const { data, error, reload } = useLoad(load);
+  // After a reply or an answered question (the profile may have changed in the side panel).
+  useEffect(() => {
+    if (refreshKey) void reload();
+  }, [refreshKey, reload]);
   const [editing, setEditing] = useState(false);
   const [receipt, setReceipt] = useState<string[] | null>(null);
   const [files, setFiles] = useState<WorkspaceFiles | null>(null);
@@ -320,7 +329,7 @@ export function ProfilePage({ api, onAsk, onChanged }: { api: Api; onAsk: (text:
           </div>
         ))}
       </dl>
-      <button type="button" className="link-btn" style={{ margin: "6px 0 2px" }} onClick={() => onAsk("/setup")}>
+      <button type="button" className="link-btn" style={{ margin: "6px 0 2px" }} onClick={onAsk}>
         Tell the adviser
       </button>
     </section>
@@ -330,7 +339,7 @@ export function ProfilePage({ api, onAsk, onChanged }: { api: Api; onAsk: (text:
       <PageHead title="Profile & policies" sub={p?.updatedAt ? `Used in every answer · updated ${fmtDay(localDay(p.updatedAt), { year: true })}` : "Used in every answer"}>
         {data?.exists === false ? (
           <>
-            <button type="button" className="btn" onClick={() => onAsk("/setup")}>
+            <button type="button" className="btn" onClick={onAsk}>
               Set up with the adviser
             </button>
             <button type="button" className="btn p" onClick={() => (setEditing(true), setReceipt(null))}>

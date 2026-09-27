@@ -3,7 +3,8 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { AttachOutcome } from "../../../src/app/app";
-import type { SessionRecord } from "../../../src/memory/store";
+import type { SessionFrom, SessionRecord } from "../../../src/memory/store";
+import { fromText } from "../ask";
 import type { ShellState } from "../../../src/server/protocol";
 import type { Api } from "../api";
 import { flaggedLinks, isOfficial, sources, UNREPORTED, type Block, type Turn } from "../conversation";
@@ -33,6 +34,9 @@ export function ConversationPage(props: {
   /** Text to put in the composer (e.g. "Ask the adviser" from the Staff page). */
   draft: string | null;
   onDraftUsed: () => void;
+  /** The page this conversation was started from (a side panel button), with a link back. */
+  from: SessionFrom | null;
+  onGoFrom: (f: SessionFrom) => void;
 }) {
   const { api, state, turns } = props;
   const running = turns.some((t) => t.status === "running");
@@ -89,6 +93,14 @@ export function ConversationPage(props: {
             </span>
           )}
         </nav>
+        {props.from && (turns.length > 0 || props.resumedTitle) && (
+          <span className="meta from-link">
+            From{" "}
+            <button type="button" className="link-btn" onClick={() => props.onGoFrom(props.from!)}>
+              {fromText(props.from)}
+            </button>
+          </span>
+        )}
         <button type="button" className="ib" aria-label="Conversation history" title="Conversation history" onClick={() => setHistoryOpen(true)}>
           <Icon name="history" />
         </button>
@@ -153,7 +165,7 @@ function Welcome({ resumed, onPick, demo }: { resumed: string | null; onPick: (t
   );
 }
 
-function TurnView({ turn, showDay, onAnswer, api, domains }: { turn: Turn; showDay: boolean; onAnswer: (id: string, yes: boolean) => void; api: Api; domains: string[] }) {
+export function TurnView({ turn, showDay, onAnswer, api, domains }: { turn: Turn; showDay: boolean; onAnswer: (id: string, yes: boolean) => void; api: Api; domains: string[] }) {
   const [stepsOpen, setStepsOpen] = useState(false);
   const src = sources(turn, domains);
   const flagged = flaggedLinks(turn);
@@ -371,8 +383,8 @@ export interface ComposerHandle {
 }
 
 
-const Composer = forwardRef<ComposerHandle, { api: Api; running: boolean; waiting: boolean; disabled: boolean; onSend: (text: string, skill?: string, attachments?: string[]) => void; onStop: () => void; draft: string | null; onDraftUsed: () => void; pending: string[] }>(
-  function Composer({ api, running, waiting, disabled, onSend, onStop, draft, onDraftUsed, pending }, ref) {
+export const Composer = forwardRef<ComposerHandle, { api: Api; running: boolean; waiting: boolean; disabled: boolean; onSend: (text: string, skill?: string, attachments?: string[]) => void; onStop: () => void; draft: string | null; onDraftUsed: () => void; pending: string[]; id?: string; placeholder?: string }>(
+  function Composer({ api, running, waiting, disabled, onSend, onStop, draft, onDraftUsed, pending, id = "msg", placeholder }, ref) {
     const [text, setText] = useState("");
     const [attached, setAttached] = useState<{ name: string; note: string; ok: boolean }[]>([]);
     const [uploading, setUploading] = useState(false);
@@ -482,16 +494,16 @@ const Composer = forwardRef<ComposerHandle, { api: Api; running: boolean; waitin
             )}
           </div>
         )}
-        <label htmlFor="msg" className="sr">
+        <label htmlFor={id} className="sr">
           Message
         </label>
         <textarea
-          id="msg"
+          id={id}
           ref={area}
           rows={1}
           value={text}
           disabled={disabled}
-          placeholder={disabled ? "Sign in first (Settings, or `npm run login`)" : "Tell me what happened, or ask what to do next"}
+          placeholder={disabled ? "Sign in first (Settings, or `npm run login`)" : running ? "Answering… press Stop to change your question" : (placeholder ?? "Tell me what happened, or ask what to do next")}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -608,7 +620,10 @@ function HistoryDrawer({ api, onClose, onResume }: { api: Api; onClose: () => vo
           {items?.map((r) => (
             <button key={r.threadId} type="button" className="hist" onClick={() => onResume(r.threadId)}>
               <b className="ellipsis">{r.title}</b>
-              <span className="meta">{dayLabel(new Date(r.startedAt))}</span>
+              <span className="meta">
+                {r.from ? `From ${fromText(r.from)} · ` : ""}
+                {dayLabel(new Date(r.startedAt))}
+              </span>
             </button>
           ))}
         </div>

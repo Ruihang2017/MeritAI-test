@@ -15,7 +15,10 @@ import { Icon, type IconName } from "./Icon";
 
 export type Page = "conversations" | "all" | "staff" | "hiring" | "profile" | "files" | "memory" | "settings";
 
-export function AppBar({ state, connection, onAttention, showAttention }: { state: ShellState | null; connection: Connection; onAttention: () => void; showAttention: boolean }) {
+/** The side panel's button in the app bar (every page except Conversations). */
+export type AskButton = "none" | "closed" | "open" | "working" | "waiting";
+
+export function AppBar({ state, connection, onAttention, showAttention, ask, onAskToggle }: { state: ShellState | null; connection: Connection; onAttention: () => void; showAttention: boolean; ask: AskButton; onAskToggle: () => void }) {
   const status =
     connection !== "open"
       ? { word: connection === "connecting" ? "Connecting" : "Offline", dot: "#B3261E" }
@@ -52,6 +55,16 @@ export function AppBar({ state, connection, onAttention, showAttention }: { stat
           Workspace <b>{state.workspace}</b>
         </span>
       )}
+      {ask !== "none" && (
+        <>
+          <div className="vr" />
+          <button type="button" className={`ask-btn ${ask}`} aria-pressed={ask === "open"} title="Ask MeritAI (Ctrl J)" onClick={onAskToggle}>
+            {ask === "working" ? <span className="spin" style={{ width: 12, height: 12 }} /> : ask === "waiting" ? <span className="dot" style={{ color: "#D9A400" }} /> : <Icon name="conversations" size={15} stroke={2} />}
+            {ask === "working" ? "MeritAI is working" : ask === "waiting" ? "Waiting on you" : "Ask MeritAI"}
+            {(ask === "closed" || ask === "open") && <span className="kbd">Ctrl J</span>}
+          </button>
+        </>
+      )}
     </header>
   );
 }
@@ -76,7 +89,10 @@ export function Nav({
   onRecent,
   currentThread,
   state,
+  collapsed = false,
 }: {
+  /** Icons only (the side panel is open and needs the room). */
+  collapsed?: boolean;
   page: Page;
   onPage: (p: Page) => void;
   onNew: () => void;
@@ -88,6 +104,17 @@ export function Nav({
   const item = (it: (typeof MAIN)[number]) => {
     const on = it.key === page || (it.key === "conversations" && page === "all");
     const badge = it.key === "conversations" && state?.confirms.length ? { n: state.confirms.length, bg: "#F0D58A", fg: "#4A3600" } : it.key === "staff" && state?.attention.overdue ? { n: state.attention.overdue, bg: "#B3261E", fg: "#FFFFFF" } : null;
+    if (collapsed)
+      return (
+        <button key={it.key} type="button" className={`nav-icon${on ? " on" : ""}`} aria-current={on ? "page" : undefined} aria-label={it.label} title={badge ? `${it.label} · ${badge.n}` : it.label} onClick={() => onPage(it.key)}>
+          <Icon name={it.icon} />
+          {badge && (
+            <span className="badge" style={{ background: badge.bg, color: badge.fg }}>
+              {badge.n}
+            </span>
+          )}
+        </button>
+      );
     return (
       <button key={it.key} type="button" className={`nav-item${on ? " on" : ""}`} aria-current={on ? "page" : undefined} onClick={() => onPage(it.key)}>
         <Icon name={it.icon} />
@@ -100,6 +127,23 @@ export function Nav({
       </button>
     );
   };
+  if (collapsed)
+    return (
+      <nav className="nav collapsed" aria-label="Main">
+        <button type="button" className="btn p nav-new" aria-label="New conversation" title="New conversation" onClick={onNew}>
+          <Icon name="plus" size={18} stroke={2} />
+        </button>
+        <div className="nav-list">
+          {MAIN.map(item)}
+          <div role="separator" className="nav-sep" />
+          {SYSTEM.map(item)}
+        </div>
+        <div className="grow" />
+        <div className="av" title={state?.sampleData ? "Jo Kim, owner · sample data" : "Owner"} style={{ background: "#DCE6FA", color: "#1446A6", width: 32, height: 32, borderRadius: 999, fontSize: 13, alignSelf: "center" }}>
+          {state?.sampleData ? "JK" : "Me"}
+        </div>
+      </nav>
+    );
   return (
     <nav className="nav" aria-label="Main">
       <button type="button" className="btn p new-conv" onClick={onNew}>
@@ -171,7 +215,7 @@ export function AttentionPanel({
   reminders: Reminder[] | null;
   rulesChecked: string | null;
   onClose?: () => void;
-  onAsk: (text: string) => void;
+  onAsk: (r: Reminder) => void;
   onOpenEmployee: (id: number) => void;
 }) {
   const [filter, setFilter] = useState<When | "all">("all");
@@ -225,7 +269,7 @@ export function AttentionPanel({
               </a>
             )}
             <div className="rem-a">
-              <button type="button" onClick={() => onAsk(`Help me with this: ${x.r.title}`)}>
+              <button type="button" onClick={() => onAsk(x.r)}>
                 Ask about this
               </button>
               {x.r.employeeId !== null && (
