@@ -19,5 +19,6 @@ export default defineConfig({
     },
     headers: { "Content-Security-Policy": "default-src 'self'; connect-src 'self' ws://127.0.0.1:5173; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'" },
   },
-  build: { outDir: "dist", emptyOutDir: true },
+  // One bundle is fine for a local app served from this computer (about 0.5 MB, 150 kB gzipped).
+  build: { outDir: "dist", emptyOutDir: true, chunkSizeWarningLimit: 800 },
 });

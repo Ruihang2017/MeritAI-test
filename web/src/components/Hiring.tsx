@@ -2,15 +2,33 @@ import type * as React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { JobResults, JobSummary } from "../../../src/app/app";
 import type { Api } from "../api";
+import { fmtDay, localDay } from "../format";
 import { Icon } from "./Icon";
 
+// The Hiring page as on the design canvas (Hiring*, artboards): jobs on the left, the selected
+// job's steps, criteria, applications and ranked candidates on the right.
+
 const STAGE = { "needs-jd": "Needs job description", criteria: "Criteria to confirm", ready: "Ready to screen", screened: "Screened" } as const;
+const STAGE_ORDER = { screened: 0, ready: 1, criteria: 2, "needs-jd": 3 } as const;
 
 type Job = JobSummary;
 type Ranked = JobResults["ranked"][number];
 
 const BAND: Record<string, string> = { Strong: "ok", Partial: "warn", Weak: "n", "Not a resume": "n" };
 const STATUS: Record<string, [string, string]> = { met: ["Met", "ok"], partly: ["Partly", "warn"], not_evidenced: ["Not evidenced", "n"] };
+/** Rows shown before "Show all". */
+const TOP = 6;
+/** A job description file, as screening finds it (src/screening/pipeline.ts JD_NAME). */
+const JD_FILE = /^(jd\b|jd[-_ ]|job[-_ ]?description|position[-_ ]?description|职位描述|岗位描述)|[-_ ](jd|job[-_ ]?description|position[-_ ]?description)\.[a-z0-9]+$/i;
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+const kb = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
+const joinPath = (dir: string, rel: string) => {
+  const sep = dir.includes("\\") ? "\\" : "/";
+  return `${dir}${sep}${rel.split("/").join(sep)}`;
+};
+/** "this PDF has no text layer (probably a scan...)" → "no text". */
+const shortReason = (r: string | null) => (r && /no text/i.test(r) ? "no text" : (r ?? "can't be read"));
 
 export function HiringPage({ api, progress, onAsk }: { api: Api; progress: string | null; onAsk: (text: string) => void }) {
   const [jobs, setJobs] = useState<Job[] | null>(null);
@@ -21,224 +39,491 @@ export function HiringPage({ api, progress, onAsk }: { api: Api; progress: strin
   const [note, setNote] = useState<React.ReactNode>(null);
   const [newJob, setNewJob] = useState(false);
   const [cand, setCand] = useState<Ranked | null>(null);
-  const [reportOpen, setReportOpen] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const [saved, setSaved] = useState<{ name: string; path: string; size: number } | null>(null);
+  const [screening, setScreening] = useState<number | null>(null);
 
   const loadJobs = useCallback(async () => {
     try {
       // Furthest along first, as in the design: screened, ready, criteria to confirm, no job description.
-      const order = { screened: 0, ready: 1, criteria: 2, "needs-jd": 3 };
-      const js = (await api.call("jobs")).sort((a, b) => order[a.stage] - order[b.stage] || a.job.localeCompare(b.job));
+      const js = (await api.call("jobs")).sort((a, b) => STAGE_ORDER[a.stage] - STAGE_ORDER[b.stage] || a.job.localeCompare(b.job));
       setJobs(js);
       setSel((s) => s ?? js[0]?.job ?? null);
     } catch (e) {
       setError((e as Error).message);
     }
   }, [api]);
-  const loadResult = useCallback(async (job: string) => {
-    try {
-      setResult(await api.call("screenResults", { job }));
-    } catch (e) {
-      setResult(null);
-      setError((e as Error).message);
-    }
-  }, [api]);
+  const loadResult = useCallback(
+    async (job: string) => {
+      try {
+        setResult(await api.call("screenResults", { job }));
+      } catch (e) {
+        setResult(null);
+        setError((e as Error).message);
+      }
+    },
+    [api],
+  );
   useEffect(() => void loadJobs(), [loadJobs]);
   useEffect(() => {
     if (sel) void loadResult(sel);
   }, [sel, loadResult]);
-  useEffect(() => {
-    const close = () => setReportOpen(false);
-    window.addEventListener("click", close);
-    return () => window.removeEventListener("click", close);
-  }, []);
 
-  const screen = async () => {
-    if (!sel) return;
-    setBusy("Screening…");
+  const job = jobs?.find((j) => j.job === sel) ?? null;
+  const pick = (name: string) => (setSel(name), setCand(null), setNote(null), setSaved(null), setShowAll(false), setError(null));
+
+  const run = async (label: string, f: () => Promise<void>) => {
+    setBusy(label);
     setError(null);
     setNote(null);
     try {
-      const r = await api.call("screen", { job: sel });
-      if (r.status === "no-jd") setNote(<>This job has no job description yet, so there are no criteria to screen against. Add a file named “Job description” to the job folder, or write one with the adviser.</>);
-      if (r.status === "not-confirmed") setNote(<>The criteria weren't confirmed, so nothing was screened. Screen again to review them.</>);
-      await loadResult(sel);
+      await f();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+      setScreening(null);
+      if (sel) await loadResult(sel);
       await loadJobs();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(null);
     }
   };
 
-  const report = async (format: "docx" | "xlsx") => {
-    if (!sel) return;
-    setReportOpen(false);
-    setBusy("Writing the report…");
-    try {
-      const paths = await api.call("report", { job: sel, format });
-      setNote(
-        <>
-          <b>Report saved to the Outbox.</b> {format === "docx" ? "Word, the top 10" : "Excel, everyone"}. It contains candidates' personal details: keep it private.{" "}
-          {paths.map((p) => (
-            <button key={p} type="button" className="link-btn" onClick={() => void api.call("openFile", { path: p })}>
-              Open {p.split(/[\\/]/).pop()}
-            </button>
-          ))}
-        </>,
-      );
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const confirmed = result?.rubric?.confirmed ?? false;
-  const screened = result?.ranked.length ?? 0;
-  const apps = result?.ingest.applications ?? 0;
-  const steps: [string, "done" | "now" | "todo"][] = [
-    ["Job description", result ? (result.ingest.jdFiles.length ? "done" : "now") : "todo"],
-    ["Criteria", confirmed ? "done" : result?.ingest.jdFiles.length ? "now" : "todo"],
-    [`Screen${apps ? ` (${screened} of ${apps})` : ""}`, confirmed && screened && !result?.remaining ? "done" : confirmed ? "now" : "todo"],
-    ["Shortlist", screened && !result?.remaining ? "now" : "todo"],
-  ];
+  const screen = (count: number) =>
+    run("Screening", async () => {
+      if (!sel) return;
+      setScreening(count);
+      const r = await api.call("screen", { job: sel });
+      if (r.status === "no-jd") setNote(<>This job has no job description yet, so there are no criteria to screen against.</>);
+      if (r.status === "not-confirmed") setNote(<>The criteria weren't confirmed, so nothing was screened.</>);
+    });
+  const confirmAndScreen = (version: number, count: number) =>
+    run("Screening", async () => {
+      if (!sel) return;
+      await api.call("confirmCriteria", { job: sel, version });
+      setScreening(count);
+      await api.call("screen", { job: sel });
+    });
+  const draft = () =>
+    run("Drafting the criteria", async () => {
+      if (!sel) return;
+      const r = await api.call("draftCriteria", { job: sel });
+      if (r.status === "no-jd") setNote(<>This job has no job description yet.</>);
+    });
+  const report = () =>
+    run("Writing the report", async () => {
+      if (!sel) return;
+      const [path] = await api.call("report", { job: sel, format: "docx" });
+      const files = await api.call("files");
+      const f = files.outbox.find((x) => x.path === path);
+      setSaved({ name: f?.name ?? path.split(/[\\/]/).pop() ?? path, path, size: f?.size ?? 0 });
+    });
 
   return (
-    <main className="main" style={{ background: "#EEF2F7" }}>
-      <div className="page-h">
-        <div style={{ flexGrow: 1, display: "flex", alignItems: "baseline", gap: 12 }}>
-          <h1 className="h1">Hiring</h1>
-          <span className="sub">Fair screening against criteria you confirm. You see names; the assessment is blind to names and contact details.</span>
+    <main className="main hiring-page">
+      <section className="jobs-col" aria-label="Jobs">
+        <div className="jobs-col-h">
+          <h1 className="h1" style={{ flexGrow: 1, fontSize: 22 }}>
+            Hiring
+          </h1>
+          <button type="button" className="btn sm" onClick={() => setNewJob(true)}>
+            <Icon name="plus" size={15} stroke={2} />
+            New job
+          </button>
         </div>
-        <button type="button" className="btn p" onClick={() => setNewJob(true)}>
-          <Icon name="plus" size={16} stroke={2} />
-          New job
-        </button>
-      </div>
-      <div className="hiring">
-        <aside className="jobs" aria-label="Jobs">
-          <div className="cap" style={{ padding: "0 4px 6px" }}>
-            Jobs
-          </div>
-          {jobs?.length === 0 && <p className="meta">No jobs yet.</p>}
-          {jobs?.map((j) => (
-            <button key={j.job} type="button" className={`job${sel === j.job ? " on" : ""}`} onClick={() => (setSel(j.job), setCand(null), setNote(null))}>
-              <b className="ellipsis">{j.job}</b>
-              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span className={`pill ${j.stage === "screened" ? "ok" : "warn"}`} style={{ height: 22 }}>
-                  {STAGE[j.stage]}
-                </span>
-                <span className="meta">{j.stage === "needs-jd" ? `${j.files} file${j.files === 1 ? "" : "s"}` : `${j.applications} application${j.applications === 1 ? "" : "s"}`}</span>
+        {jobs?.map((j) => (
+          <button key={j.job} type="button" className={`job${sel === j.job ? " on" : ""}`} onClick={() => pick(j.job)}>
+            <b className="ellipsis">{j.job}</b>
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className={`pill ${j.stage === "screened" ? "ok" : "warn"}`} style={{ height: 22 }}>
+                {STAGE[j.stage]}
               </span>
-            </button>
-          ))}
-        </aside>
-        <section className="job-main">
-          {error && (
-            <div className="banner bad" role="alert" style={{ alignItems: "center" }}>
-              <span className="grow">{error}</span>
-              <button type="button" className="ib" aria-label="Dismiss" style={{ width: 36, height: 36 }} onClick={() => setError(null)}>
-                <Icon name="close" size={16} />
+              <span className="meta">{j.stage === "needs-jd" ? plural(j.files, "file") : plural(j.applications, "application")}</span>
+            </span>
+          </button>
+        ))}
+        <FolderDrop
+          api={api}
+          disabled={!!busy}
+          onCreated={async (name, text) => {
+            setNote(text);
+            await loadJobs();
+            pick(name);
+            await loadResult(name);
+          }}
+          onError={setError}
+        />
+      </section>
+
+      <section className="job-pane">
+        {jobs?.length === 0 && (
+          <div className="center dots" style={{ flexGrow: 1 }}>
+            <div className="card empty-card">
+              <div className="empty-ic">
+                <Icon name="hiring" size={24} />
+              </div>
+              <b style={{ fontSize: 16 }}>No jobs yet</b>
+              <span className="sub" style={{ lineHeight: 1.5 }}>
+                Start with a job description and the applications. I screen them fairly against criteria you confirm.
+              </span>
+              <button type="button" className="btn p" onClick={() => setNewJob(true)}>
+                New job
               </button>
             </div>
-          )}
-          {jobs?.length === 0 && (
-            <div className="center dots" style={{ borderRadius: 12 }}>
-              <div className="card empty-card">
-                <div className="empty-ic">
-                  <Icon name="hiring" size={24} />
-                </div>
-                <b style={{ fontSize: 16 }}>No jobs yet</b>
-                <span className="sub" style={{ lineHeight: 1.5 }}>
-                  Start with a job description and the applications. MeritAI screens them fairly against criteria you confirm.
-                </span>
-                <button type="button" className="btn p" onClick={() => setNewJob(true)}>
-                  New job
+          </div>
+        )}
+        {job && result && (
+          <JobPane
+            api={api}
+            job={job}
+            result={result}
+            busy={busy}
+            screening={screening}
+            progress={progress}
+            error={error}
+            note={note}
+            saved={saved}
+            showAll={showAll}
+            cand={cand}
+            onShowAll={() => setShowAll(true)}
+            onDismissError={() => setError(null)}
+            onPick={setCand}
+            onScreen={screen}
+            onConfirm={confirmAndScreen}
+            onDraft={draft}
+            onReport={report}
+            onAsk={onAsk}
+          />
+        )}
+      </section>
+
+      {cand && result && job && (
+        <Candidate
+          c={cand}
+          result={result}
+          onClose={() => setCand(null)}
+          onOpen={() => void api.call("openFile", { path: joinPath(job.path, cand.file) }).then((r) => !r.ok && setError(r.error))}
+          onInvite={() => onAsk(`Draft an interview invite for ${cand.name} for the "${job.job}" role.`)}
+          onPhone={() => onAsk(`Help me prepare a phone screen for ${cand.name} for the "${job.job}" role.`)}
+        />
+      )}
+      {newJob && (
+        <NewJob
+          api={api}
+          existing={jobs?.map((j) => j.job) ?? []}
+          onClose={() => setNewJob(false)}
+          onWriteJd={(name) => (setNewJob(false), onAsk(`Write a job description for a ${name || "new role"} with me, then save it into the job.`))}
+          onCreated={async (name, text) => {
+            setNewJob(false);
+            setNote(text);
+            await loadJobs();
+            pick(name);
+            await loadResult(name);
+          }}
+        />
+      )}
+    </main>
+  );
+}
+
+function JobPane(p: {
+  api: Api;
+  job: Job;
+  result: JobResults;
+  busy: string | null;
+  screening: number | null;
+  progress: string | null;
+  error: string | null;
+  note: React.ReactNode;
+  saved: { name: string; path: string; size: number } | null;
+  showAll: boolean;
+  cand: Ranked | null;
+  onShowAll: () => void;
+  onDismissError: () => void;
+  onPick: (c: Ranked) => void;
+  onScreen: (count: number) => void;
+  onConfirm: (version: number, count: number) => void;
+  onDraft: () => void;
+  onReport: () => void;
+  onAsk: (text: string) => void;
+}) {
+  const { job, result: r } = p;
+  const rubric = r.rubric;
+  const confirmed = rubric?.confirmed ?? false;
+  const screened = r.ranked.length;
+  const unscreened = r.files.filter((f) => f.status === "application").length - screened;
+  const unreadable = r.files.filter((f) => f.status === "unreadable");
+  const duplicates = r.files.filter((f) => f.status === "duplicate");
+  const screeningNow = p.busy === "Screening";
+  const essential = rubric?.criteria.filter((c) => c.type === "essential") ?? [];
+  const desirable = rubric?.criteria.filter((c) => c.type === "desirable") ?? [];
+
+  type Step = { label: string; state: "done" | "now" | "todo" | "warn" };
+  const steps: Step[] = [
+    job.jd ? { label: "Job description", state: "done" } : { label: "Needs a job description", state: "warn" },
+    confirmed ? { label: "Criteria confirmed", state: "done" } : { label: "Criteria", state: job.jd ? "now" : "todo" },
+    screeningNow
+      ? { label: `Screening${p.progress ? ` ${p.progress.replace(/^screened /, "").replace("/", " of ")}` : ""}`, state: "now" }
+      : screened && unscreened > 0
+        ? { label: `${screened} of ${screened + unscreened} screened`, state: "now" }
+        : screened
+          ? { label: `${screened} screened`, state: "done" }
+          : { label: "Screening", state: confirmed ? "now" : "todo" },
+    { label: "Your decision", state: screened && !unscreened && !screeningNow ? "now" : "todo" },
+  ];
+
+  const where = job.stage === "screened" ? "" : `Jobs/${job.job} · `;
+  const sub = `${where}${job.jd ? `${job.jd} · ` : ""}${job.jd ? plural(job.applications, "application") : plural(job.files, "file")}`;
+  const rows = p.showAll ? r.ranked : r.ranked.slice(0, TOP);
+
+  return (
+    <>
+      <div className="page-h">
+        <div style={{ flexGrow: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+          <h2 className="h1 ellipsis" style={{ fontSize: 20 }}>
+            {job.job}
+          </h2>
+          <span className="meta ellipsis">{sub}</span>
+        </div>
+        {screeningNow && <span className="pill info">Screening</span>}
+        {screened > 0 && (
+          <>
+            <button type="button" className="btn" onClick={() => p.onAsk(`Build an interview kit for the "${job.job}" role, using the confirmed screening criteria.`)}>
+              Interview kit
+            </button>
+            <button type="button" className="btn" onClick={() => p.onAsk(`Draft emails to the candidates for the "${job.job}" role: interview invitations for the shortlist, and respectful "not this time" emails for the rest.`)}>
+              Candidate emails
+            </button>
+            <button type="button" className="btn p" disabled={!!p.busy} onClick={p.onReport}>
+              Report: Word (top 10)
+            </button>
+          </>
+        )}
+      </div>
+      <div className="job-body">
+        <ol className="steps4" aria-label="Steps">
+          {steps.map((s, i) => (
+            <li key={i} className={s.state} aria-current={s.state === "now" ? "step" : undefined}>
+              {s.state === "done" ? <Icon name="check" size={16} stroke={2.4} /> : <span className="n">{s.state === "warn" ? "!" : i + 1}</span>}
+              {s.label}
+            </li>
+          ))}
+        </ol>
+
+        {p.error && (
+          <div className="banner bad" role="alert" style={{ alignItems: "center" }}>
+            <span className="grow">{p.error}</span>
+            <button type="button" className="ib" aria-label="Dismiss" style={{ width: 36, height: 36 }} onClick={p.onDismissError}>
+              <Icon name="close" size={16} />
+            </button>
+          </div>
+        )}
+        {p.note && (
+          <div className="banner info">
+            <span>{p.note}</span>
+          </div>
+        )}
+        {p.busy && !screeningNow && (
+          <div className="banner info" style={{ alignItems: "center" }}>
+            <span className="spin" />
+            <span>
+              <b>{p.busy}…</b> {p.progress ?? ""}
+            </span>
+          </div>
+        )}
+
+        {/* No job description yet (HiringJobs). */}
+        {!job.jd && !rubric && (
+          <>
+            <div className="card" style={{ padding: "18px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+              <b style={{ fontSize: 16 }}>I need the job description first</b>
+              <span style={{ color: "#4A5363", lineHeight: 1.5 }}>
+                I build the screening criteria from it. Put it in the job folder with JD in the file name (for example <span className="mono">{job.job} JD.docx</span>), or I can write one with you.
+              </span>
+              <div className="row-wrap">
+                <button type="button" className="btn" onClick={() => void p.api.call("openFile", { path: job.path })}>
+                  Open the job folder
+                </button>
+                <button type="button" className="btn p" onClick={() => p.onAsk(`Write a job description for the "${job.job}" role with me, then save it into the job.`)}>
+                  Write one with the adviser
                 </button>
               </div>
             </div>
-          )}
-          {sel && result && (
-            <>
-              <div className="card job-head">
-                <div style={{ flexGrow: 1, minWidth: 0 }}>
-                  <h2 className="h2 ellipsis" style={{ fontSize: 19 }}>
-                    {sel}
-                  </h2>
-                  <span className="meta">
-                    {result.ingest.jdFiles[0] ?? "No job description"} · {apps} application{apps === 1 ? "" : "s"}
-                    {result.ingest.unreadable.length ? ` · ${result.ingest.unreadable.length} unreadable` : ""}
-                    {result.ingest.duplicates.length ? ` · ${result.ingest.duplicates.length} duplicate skipped` : ""}
+            {r.files.length > 0 && (
+              <div className="card" style={{ padding: "12px 16px" }}>
+                <span className="cap">In this folder</span>
+                <ul className="docs" style={{ marginTop: 6 }}>
+                  {r.files.map((f) => (
+                    <li key={f.file}>
+                      <span className="grow">{f.file}</span>
+                      <span className={f.status === "unreadable" ? "meta bad-text" : "meta"}>
+                        {f.status === "application" ? "application" : f.status === "duplicate" ? "duplicate, skipped" : `can't read: ${shortReason(f.reason)}${shortReason(f.reason) === "no text" ? " (scanned image)" : ""}`}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* A JD but no criteria yet. */}
+        {job.jd && !rubric && !p.busy && (
+          <div className="card" style={{ padding: "18px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+            <b style={{ fontSize: 16 }}>Next: the screening criteria</b>
+            <span style={{ color: "#4A5363", lineHeight: 1.5 }}>I'll read {job.jd} and draft the criteria every application is assessed against. You check them before I screen anything.</span>
+            <div>
+              <button type="button" className="btn p" onClick={p.onDraft}>
+                Draft the criteria
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Criteria drafted, waiting for the owner's OK (HiringCriteria). */}
+        {rubric && !confirmed && !screeningNow && (
+          <>
+            <p style={{ margin: 0, color: "#4A5363", lineHeight: 1.5, fontSize: 14 }}>
+              I read the job description and drafted these criteria. Every application is assessed against them only, so check they are right and fair before I start. Essential criteria decide the band; desirable ones break ties.
+            </p>
+            <div className="card confirm-card">
+              <span className="cap" style={{ color: "#8A6300" }}>
+                Needs your OK · screening criteria
+              </span>
+              <b style={{ fontSize: 16 }}>Use these criteria for screening?</b>
+              <div className="crit-list">
+                <span className="pill info">Essential</span>
+                <ul>
+                  {essential.map((c) => (
+                    <li key={c.id}>{c.text}</li>
+                  ))}
+                </ul>
+                {desirable.length > 0 && (
+                  <>
+                    <span className="pill n">Desirable</span>
+                    <ul>
+                      {desirable.map((c) => (
+                        <li key={c.id}>{c.text}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+              <p className="meta" style={{ margin: 0, lineHeight: 1.5 }}>
+                Criteria must be about the job. Age, gender, race, disability, pregnancy, family responsibilities and similar attributes can't be used, directly or through a stand-in like "recent graduate".
+              </p>
+              <div className="row-wrap" style={{ alignItems: "center" }}>
+                <button type="button" className="btn p" disabled={!!p.busy || unscreened <= 0} onClick={() => p.onConfirm(rubric.version, unscreened)}>
+                  Yes, screen {plural(unscreened, "application")}
+                </button>
+                <button type="button" className="btn" disabled={!!p.busy} onClick={() => p.onAsk(`Change the screening criteria for the "${job.job}" role: `)}>
+                  No, change them
+                </button>
+                <span className="meta">Takes about a minute. Up to 20 per run.</span>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Screening now (HiringProgress). */}
+        {screeningNow && (
+          <div className="card" style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+              <b style={{ fontSize: 16 }}>Screening {plural(p.screening ?? unscreened, "new application")}</b>
+              <span className="meta">about a minute</span>
+            </div>
+            <div className="bar">
+              <span style={{ width: `${progressPct(p.progress)}%` }} />
+            </div>
+            <span className="meta">{p.progress ?? "starting…"}</span>
+            {duplicates.length > 0 && (
+              <span className="meta">
+                Also found: {plural(duplicates.length, "duplicate")}, skipped ({duplicates.map((d) => `${d.file} is ${d.reason}`).join("; ")}).
+              </span>
+            )}
+            <span className="meta">Each application is assessed on its own, without names, photos, ages or addresses. Results are ranked by rules once all are done.</span>
+          </div>
+        )}
+
+        {/* Criteria confirmed: summary, applications, ranking (Hiring, HiringMore, HiringReport). */}
+        {rubric && confirmed && !screeningNow && (
+          <>
+            <div className="crit-grid">
+              <div className="card" style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 6, gridColumn: "span 2" }}>
+                <div style={{ display: "flex", alignItems: "baseline" }}>
+                  <span className="cap" style={{ flexGrow: 1 }}>
+                    Criteria · confirmed{rubric.confirmedAt ? ` by you ${fmtDay(localDay(rubric.confirmedAt))}` : ""}
                   </span>
+                  <button type="button" className="link-btn" style={{ fontSize: 13, fontWeight: 700 }} onClick={() => p.onAsk(`Change the screening criteria for the "${job.job}" role: `)}>
+                    Change
+                  </button>
                 </div>
-                {(!confirmed || result.remaining > 0) && (
-                  <button type="button" className="btn p" disabled={!!busy} onClick={() => void screen()}>
-                    {!confirmed ? "Review criteria and screen" : `Screen the remaining ${result.remaining}`}
+                <CritLine kind="Essential" items={essential.map((c) => c.text)} />
+                {desirable.length > 0 && <CritLine kind="Desirable" items={desirable.map((c) => c.text)} />}
+              </div>
+              <div className="card" style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 4, fontSize: 13, color: "#4A5363" }}>
+                <span className="cap">Applications</span>
+                <span>
+                  <b style={{ color: "#1B1F27" }}>{screened}</b> screened
+                </span>
+                {unreadable.length > 0 && (
+                  <span>
+                    <b style={{ color: "#B3261E" }}>{unreadable.length}</b> unreadable:{" "}
+                    {unreadable.map((u, i) => (
+                      <span key={u.file}>
+                        {i > 0 && ", "}
+                        <span className="mono" style={{ fontSize: 12 }}>
+                          {u.file}
+                        </span>{" "}
+                        ({shortReason(u.reason)})
+                      </span>
+                    ))}
+                  </span>
+                )}
+                {duplicates.length > 0 && (
+                  <span>
+                    <b style={{ color: "#1B1F27" }}>{duplicates.length}</b> duplicate skipped
+                  </span>
+                )}
+              </div>
+            </div>
+            {screened > 0 && unscreened > 0 && (
+              <div className="banner warn" style={{ alignItems: "center" }}>
+                <span className="grow">
+                  <b>
+                    {screened} of {screened + unscreened} screened.
+                  </b>{" "}
+                  I screen up to 20 applications per run. The ranking below will change once the other {unscreened} are in.
+                </span>
+                <button type="button" className="btn p sm" disabled={!!p.busy} onClick={() => p.onScreen(unscreened)}>
+                  Screen the remaining {unscreened}
+                </button>
+              </div>
+            )}
+            {screened === 0 && (
+              <div className="card empty-card" style={{ maxWidth: "none" }}>
+                <b>{unscreened > 0 ? "Ready to screen" : "No applications yet"}</b>
+                <span className="meta">{unscreened > 0 ? "The criteria are confirmed. Takes about a minute; up to 20 per run." : "Add applications with New job (same name adds to it), or drop a folder."}</span>
+                {unscreened > 0 && (
+                  <button type="button" className="btn p" disabled={!!p.busy} onClick={() => p.onScreen(unscreened)}>
+                    Screen {plural(unscreened, "application")}
                   </button>
                 )}
-                <div style={{ position: "relative" }}>
-                  <button type="button" className="btn" disabled={!screened || !!busy} aria-haspopup="menu" aria-expanded={reportOpen} onClick={(e) => (e.stopPropagation(), setReportOpen(!reportOpen))}>
-                    Report
-                    <Icon name="chevron" size={14} className="rot" />
-                  </button>
-                  {reportOpen && (
-                    <div className="menu row-menu" role="menu" onClick={(e) => e.stopPropagation()}>
-                      <button type="button" role="menuitem" className="menu-item row" onClick={() => void report("docx")}>
-                        Word report (top 10)
-                      </button>
-                      <button type="button" role="menuitem" className="menu-item row" onClick={() => void report("xlsx")}>
-                        Excel (everyone)
-                      </button>
-                      <div role="separator" className="menu-sep" />
-                      <button type="button" role="menuitem" className="menu-item row" onClick={() => (setReportOpen(false), onAsk(`Draft emails to the shortlisted candidates for "${sel}": invitations to interview for the top ones, and respectful "not this time" emails for the rest.`))}>
-                        Candidate emails (with the adviser)
-                      </button>
-                    </div>
-                  )}
-                </div>
               </div>
-              <ol className="stepper" aria-label="Steps">
-                {steps.map(([label, s], i) => (
-                  <li key={label} className={s} aria-current={s === "now" ? "step" : undefined}>
-                    <span className="n">{s === "done" ? <Icon name="check" size={13} stroke={2.6} /> : i + 1}</span>
-                    {label}
-                  </li>
-                ))}
-              </ol>
-              {busy && (
-                <div className="banner info" style={{ alignItems: "center" }}>
-                  <span className="spin" />
+            )}
+            {screened > 0 && (
+              <>
+                <div className="banner info" style={{ padding: "10px 14px", fontSize: 13.5 }}>
+                  <Icon name="shield" size={16} />
                   <span>
-                    <b>{busy}</b> {progress ?? ""}
+                    <b>Blind screening.</b> Assessed without names, photos, ages or addresses, against your criteria only. The ranking is a starting point; the decision is yours.
                   </span>
                 </div>
-              )}
-              {note && (
-                <div className="banner info">
-                  <span>{note}</span>
-                </div>
-              )}
-              {confirmed && result.rubric && (
-                <details className="card crit">
-                  <summary>
-                    <b>Criteria</b> <span className="meta">{result.rubric.criteria.length} · confirmed · {result.rubric.role}</span>
-                  </summary>
-                  <ul>
-                    {result.rubric.criteria.map((c) => (
-                      <li key={c.id}>
-                        <span className={`pill ${c.type === "essential" ? "info" : "n"}`}>{c.type}</span> {c.text}
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-              {screened > 0 ? (
-                <div className="card" style={{ overflow: "hidden" }}>
+                <div className="card" style={{ overflow: "hidden", flexShrink: 0 }}>
                   <table className="tbl">
                     <thead>
                       <tr>
-                        <th style={{ paddingLeft: 16, width: 56 }}>Rank</th>
-                        <th>Name</th>
+                        <th style={{ paddingLeft: 16, width: 40 }}>#</th>
+                        <th>Candidate</th>
                         <th>Band</th>
                         <th>Essential</th>
                         <th>Desirable</th>
@@ -247,11 +532,11 @@ export function HiringPage({ api, progress, onAsk }: { api: Api; progress: strin
                       </tr>
                     </thead>
                     <tbody>
-                      {result.ranked.map((c) => (
-                        <tr key={c.file} className={cand?.file === c.file ? "sel" : ""}>
+                      {rows.map((c) => (
+                        <tr key={c.file} className={p.cand?.file === c.file ? "sel" : ""}>
                           <td style={{ paddingLeft: 16 }}>{c.rank}</td>
                           <td className="b" style={{ whiteSpace: "nowrap" }}>
-                            <button type="button" className="name-btn" onClick={() => setCand(c)}>
+                            <button type="button" className="name-btn" onClick={() => p.onPick(c)}>
                               {c.name}
                             </button>
                           </td>
@@ -264,12 +549,12 @@ export function HiringPage({ api, progress, onAsk }: { api: Api; progress: strin
                           <td>
                             {c.desirableScore} of {c.desirableTotal}
                           </td>
-                          <td className="ellipsis" style={{ maxWidth: 260 }}>
+                          <td className="ellipsis" style={{ maxWidth: 250 }}>
                             {c.evaluation.summary}
                           </td>
                           <td>
                             {(c.evaluation.flags.suspiciousInstructions || c.evaluation.flags.differentRole) && (
-                              <span className="flag">
+                              <span className="flag" title={c.evaluation.flags.suspiciousInstructions ? "The file contains hidden instructions to the assessor" : "Applied for a different role"}>
                                 <Icon name="alert" size={14} />
                                 {c.evaluation.flags.suspiciousInstructions ? "Hidden instructions" : "Different role"}
                               </span>
@@ -279,42 +564,69 @@ export function HiringPage({ api, progress, onAsk }: { api: Api; progress: strin
                       ))}
                     </tbody>
                   </table>
+                  {!p.showAll && r.ranked.length > TOP && (
+                    <div style={{ padding: "10px 16px" }}>
+                      <button type="button" className="link-btn" style={{ fontSize: 14, fontWeight: 700 }} onClick={p.onShowAll}>
+                        Show all {r.ranked.length}
+                      </button>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                !busy && (
-                  <div className="card empty-card" style={{ maxWidth: "none" }}>
-                    <b>{apps ? "Not screened yet" : "No applications yet"}</b>
-                    <span className="meta">{apps ? "Screen them against your criteria. You'll confirm the criteria first." : "Add applications with New job (same name adds to it), or drop a folder into a conversation."}</span>
-                  </div>
-                )
-              )}
-              <p className="meta" style={{ margin: 0 }}>
-                Screening is blind: the assessment sees each application with names and contact details removed, and is told never to use protected attributes such as age, gender or origin. "Not evidenced" means the application doesn't show it, not that the person lacks it.
-              </p>
-            </>
-          )}
-        </section>
+              </>
+            )}
+            {p.saved && (
+              <div className="card" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10, flexShrink: 0 }}>
+                <span className="cap" style={{ color: "#1E6B3E" }}>
+                  Report saved to Outbox · top 10, with names
+                </span>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span className="fbadge" style={{ background: "#DCE6FA", color: "#1446A6" }}>
+                    DOC
+                  </span>
+                  <span className="grow">
+                    <b>{p.saved.name}</b>
+                    <span className="meta" style={{ display: "block" }}>
+                      Word · {kb(p.saved.size)}
+                    </span>
+                  </span>
+                  <button type="button" className="btn sm" onClick={() => void p.api.call("openFile", { path: p.saved!.path })}>
+                    Open
+                  </button>
+                  <button type="button" className="btn g sm" onClick={() => void p.api.call("revealFile", { path: p.saved!.path })}>
+                    Show in folder
+                  </button>
+                </div>
+                <span className="meta">Contains candidates' personal details: share it only with the people deciding.</span>
+              </div>
+            )}
+          </>
+        )}
       </div>
-      {cand && result && <Candidate c={cand} result={result} onClose={() => setCand(null)} onAsk={() => onAsk(`Help me prepare a phone screen for ${cand.name} for "${sel}".`)} />}
-      {newJob && (
-        <NewJob
-          api={api}
-          existing={jobs?.map((j) => j.job) ?? []}
-          onClose={() => setNewJob(false)}
-          onCreated={async (job, text) => {
-            setNewJob(false);
-            setNote(text);
-            await loadJobs();
-            setSel(job);
-            await loadResult(job);
-          }}
-        />
-      )}
-    </main>
+    </>
   );
 }
 
-function Candidate({ c, result, onClose, onAsk }: { c: Ranked; result: JobResults; onClose: () => void; onAsk: () => void }) {
+/** "screened 3/5" → 60. */
+function progressPct(progress: string | null): number {
+  const m = /(\d+)\s*\/\s*(\d+)/.exec(progress ?? "");
+  return m && Number(m[2]) ? Math.round((Number(m[1]) / Number(m[2])) * 100) : 8;
+}
+
+function CritLine({ kind, items }: { kind: "Essential" | "Desirable"; items: string[] }) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, fontSize: 13, alignItems: "center" }}>
+      <span className={`pill ${kind === "Essential" ? "info" : "n"}`}>{kind}</span>
+      {items.map((t, i) => (
+        <span key={t} style={{ display: "contents" }}>
+          {i > 0 && <span style={{ color: "#5F6878" }}>·</span>}
+          <span>{t}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function Candidate({ c, result, onClose, onOpen, onInvite, onPhone }: { c: Ranked; result: JobResults; onClose: () => void; onOpen: () => void; onInvite: () => void; onPhone: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -322,8 +634,14 @@ function Candidate({ c, result, onClose, onAsk }: { c: Ranked; result: JobResult
   }, [onClose]);
   const crit = new Map((result.rubric?.criteria ?? []).map((x) => [x.id, x]));
   const ev = c.evaluation;
+  const flagged = ev.flags.suspiciousInstructions || ev.flags.differentRole;
+  const lists: [string, string[]][] = [
+    ["Strengths", ev.strengths],
+    ["Gaps", ev.gaps],
+    ["Ask in the interview", ev.questions],
+  ];
   return (
-    <aside className="drawer side" style={{ width: 440 }} aria-label={c.name}>
+    <aside className="drawer side" style={{ width: 460 }} aria-label={c.name}>
       <div className="drawer-h">
         <div style={{ flexGrow: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
           <h2 className="h2 ellipsis" style={{ fontSize: 20 }}>
@@ -360,60 +678,169 @@ function Candidate({ c, result, onClose, onAsk }: { c: Ranked; result: JobResult
           <h3 className="cap" style={{ margin: "0 0 4px" }}>
             Against your criteria
           </h3>
-          {ev.criteria.map((r) => (
-            <div key={r.id} className="crit-row">
-              <span className={`pill ${STATUS[r.status]?.[1] ?? "n"}`} style={{ width: 112, justifyContent: "center", flexShrink: 0 }}>
-                {STATUS[r.status]?.[0] ?? r.status}
+          {ev.criteria.map((x) => (
+            <div key={x.id} className="crit-row">
+              <span className={`pill ${STATUS[x.status]?.[1] ?? "n"}`} style={{ width: 112, justifyContent: "center", flexShrink: 0 }}>
+                {STATUS[x.status]?.[0] ?? x.status}
               </span>
               <span style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: 13.5 }}>
                 <b>
-                  {crit.get(r.id)?.text ?? r.id}
-                  {crit.get(r.id)?.type === "desirable" && <span className="meta"> · desirable</span>}
+                  {crit.get(x.id)?.text ?? x.id}
+                  {crit.get(x.id)?.type === "desirable" && <span className="meta"> · desirable</span>}
                 </b>
-                {r.evidence && <span style={{ color: "#4A5363" }}>{r.evidence}</span>}
+                {x.evidence && <span style={{ color: "#4A5363" }}>{x.evidence}</span>}
               </span>
             </div>
           ))}
+          {ev.criteria.some((x) => x.status === "not_evidenced") && (
+            <p className="meta" style={{ margin: "8px 0 0", lineHeight: 1.5 }}>
+              "Not evidenced" means the application doesn't show it, not that the person lacks it. A quick phone screen can fill the gaps.
+            </p>
+          )}
         </section>
-        {[
-          ["Strengths", ev.strengths],
-          ["Gaps", ev.gaps],
-          ["Questions to ask", ev.questions],
-        ].map(([t, xs]) =>
-          (xs as string[]).length ? (
-            <section key={t as string}>
+        {lists.map(([t, xs]) =>
+          xs.length ? (
+            <section key={t}>
               <h3 className="cap" style={{ margin: "0 0 4px" }}>
-                {t as string}
+                {t}
               </h3>
               <ul style={{ margin: 0, paddingLeft: 18, fontSize: 14, lineHeight: 1.55 }}>
-                {(xs as string[]).map((x) => (
+                {xs.map((x) => (
                   <li key={x}>{x}</li>
                 ))}
               </ul>
             </section>
           ) : null,
         )}
-        <p className="meta" style={{ margin: 0 }}>
-          File: {c.file}
-        </p>
       </div>
       <div className="drawer-f">
-        <button type="button" className="btn p" style={{ flexGrow: 1 }} onClick={onAsk}>
-          Draft a phone screen
-        </button>
+        {flagged ? (
+          <>
+            <button type="button" className="btn" onClick={onOpen}>
+              Open the application
+            </button>
+            <button type="button" className="btn p" style={{ flexGrow: 1 }} onClick={onPhone}>
+              Draft a phone screen
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" className="btn p" style={{ flexGrow: 1 }} onClick={onInvite}>
+              Draft an interview invite
+            </button>
+            <button type="button" className="btn" onClick={onOpen}>
+              Open the application
+            </button>
+          </>
+        )}
       </div>
     </aside>
   );
 }
 
-function NewJob({ api, existing, onClose, onCreated }: { api: Api; existing: string[]; onClose: () => void; onCreated: (job: string, note: React.ReactNode) => void }) {
+// ---------------------------------------------------------------- new jobs
+
+type Picked = { file: File; rel: string };
+
+/** Files of a dropped folder (with their paths inside it), read through the browser's entry API. */
+async function filesFromDrop(e: React.DragEvent): Promise<Picked[]> {
+  const out: Picked[] = [];
+  const walk = async (entry: FileSystemEntry, path: string): Promise<void> => {
+    if (entry.isFile) {
+      const file = await new Promise<File>((ok, fail) => (entry as FileSystemFileEntry).file(ok, fail));
+      out.push({ file, rel: path + entry.name });
+    } else if (entry.isDirectory) {
+      const reader = (entry as FileSystemDirectoryEntry).createReader();
+      for (;;) {
+        const batch = await new Promise<FileSystemEntry[]>((ok, fail) => reader.readEntries(ok, fail));
+        if (!batch.length) break;
+        for (const x of batch) await walk(x, `${path}${entry.name}/`);
+      }
+    }
+  };
+  const entries = [...e.dataTransfer.items].map((i) => i.webkitGetAsEntry()).filter((x): x is FileSystemEntry => x !== null);
+  for (const x of entries) await walk(x, "");
+  return out;
+}
+
+/** A folder → a job: its name, the JD at its top level, every other file an application. */
+function splitFolder(files: Picked[]): { job: string; jd: File | null; apps: File[] } | null {
+  const top = files[0]?.rel.split("/")[0];
+  if (!top || !files.every((f) => f.rel.includes("/"))) return null;
+  const inside = files.map((f) => ({ ...f, rel: f.rel.slice(top.length + 1) })).filter((f) => !f.rel.split("/").pop()!.startsWith("."));
+  const jd = inside.find((f) => !f.rel.includes("/") && JD_FILE.test(f.rel)) ?? null;
+  return { job: top, jd: jd?.file ?? null, apps: inside.filter((f) => f !== jd).map((f) => f.file) };
+}
+
+function FolderDrop({ api, disabled, onCreated, onError }: { api: Api; disabled: boolean; onCreated: (job: string, note: React.ReactNode) => void; onError: (e: string) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const [over, setOver] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const create = async (files: Picked[]) => {
+    const f = splitFolder(files);
+    if (!f) return onError("Drop one folder: the job description (JD in the file name) and the applications inside it.");
+    setSaving(true);
+    try {
+      const file = async (x: File) => ({ name: x.name, base64: await toBase64(x) });
+      const r = await api.call("createJob", { job: f.job, jd: f.jd ? await file(f.jd) : null, applications: await Promise.all(f.apps.map(file)) });
+      onCreated(r.job, <>{createdNote(r, false)}</>);
+    } catch (e) {
+      onError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div
+      className={`folder-drop${over ? " over" : ""}`}
+      onDragOver={(e) => (e.preventDefault(), setOver(true))}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        if (!disabled && !saving) void filesFromDrop(e).then(create);
+      }}
+    >
+      <Icon name="folder" size={22} />
+      <b>{saving ? "Adding the folder…" : "Start a job from a folder"}</b>
+      <span>Drop a folder with the job description (JD in the file name) and the applications.</span>
+      <input
+        ref={input}
+        type="file"
+        hidden
+        multiple
+        {...{ webkitdirectory: "" }}
+        onChange={(e) => {
+          const picked = [...(e.target.files ?? [])].map((file) => ({ file, rel: file.webkitRelativePath || file.name }));
+          e.target.value = "";
+          void create(picked);
+        }}
+      />
+      <button type="button" className="btn sm" disabled={disabled || saving} onClick={() => input.current?.click()}>
+        Choose folder
+      </button>
+    </div>
+  );
+}
+
+function createdNote(r: { job: string; summary: { newApplications: number; unreadable: { file: string }[]; duplicates: unknown[] }; refused: { name: string; reason: string }[] }, adding: boolean): React.ReactNode {
+  return (
+    <>
+      <b>
+        {adding ? "Added to" : "Created"} “{r.job}”.
+      </b>{" "}
+      {plural(r.summary.newApplications, "new application")}
+      {r.summary.unreadable.length ? `, ${r.summary.unreadable.length} can't be read (${r.summary.unreadable.map((u) => u.file).join(", ")})` : ""}
+      {r.summary.duplicates.length ? `, ${plural(r.summary.duplicates.length, "duplicate")} skipped` : ""}
+      {r.refused.length ? `. Not added: ${r.refused.map((x) => `${x.name} (${x.reason})`).join("; ")}` : ""}.
+    </>
+  );
+}
+
+function NewJob({ api, existing, onClose, onCreated, onWriteJd }: { api: Api; existing: string[]; onClose: () => void; onCreated: (job: string, note: React.ReactNode) => void; onWriteJd: (name: string) => void }) {
   const [name, setName] = useState("");
   const [jd, setJd] = useState<File | null>(null);
   const [apps, setApps] = useState<File[]>([]);
-  const addApps = (fs: FileList | null) => {
-    const list = [...(fs ?? [])];
-    setApps((a) => [...a, ...list]);
-  };
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const jdInput = useRef<HTMLInputElement>(null);
@@ -423,23 +850,16 @@ function NewJob({ api, existing, onClose, onCreated }: { api: Api; existing: str
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
-  const adding = existing.includes(name.trim());
+  const role = name.trim();
+  const adding = existing.includes(role);
 
   const save = async () => {
     setSaving(true);
     setErr(null);
     try {
       const file = async (f: File) => ({ name: f.name, base64: await toBase64(f) });
-      const r = await api.call("createJob", { job: name.trim(), jd: jd ? await file(jd) : null, applications: await Promise.all(apps.map(file)) });
-      onCreated(
-        r.job,
-        <>
-          <b>{adding ? "Added to" : "Created"} “{r.job}”.</b> {r.summary.newApplications} new application{r.summary.newApplications === 1 ? "" : "s"}
-          {r.summary.unreadable.length ? `, ${r.summary.unreadable.length} can't be read (${r.summary.unreadable.map((u) => u.file).join(", ")})` : ""}
-          {r.summary.duplicates.length ? `, ${r.summary.duplicates.length} duplicate skipped` : ""}
-          {r.refused.length ? `. Not added: ${r.refused.map((x) => `${x.name} (${x.reason})`).join("; ")}` : ""}.
-        </>,
-      );
+      const r = await api.call("createJob", { job: role, jd: jd ? await file(jd) : null, applications: await Promise.all(apps.map(file)) });
+      onCreated(r.job, createdNote(r, adding));
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -451,50 +871,71 @@ function NewJob({ api, existing, onClose, onCreated }: { api: Api; existing: str
     <>
       <div className="scrim fill" onClick={onClose} />
       <div className="modal dialog" role="dialog" aria-modal="true" aria-label="New job" style={{ width: 600 }}>
-        <h2 className="h2" style={{ fontSize: 19 }}>
-          New job
-        </h2>
+        <div>
+          <h2 className="h2" style={{ fontSize: 19 }}>
+            New job
+          </h2>
+          <span className="meta">Creates a folder in Jobs for this role's job description and applications.</span>
+        </div>
         <label className="field">
-          Job name
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Team leader" autoFocus list="jobs-list" />
+          Role
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Casual cleaner (Parramatta)" autoFocus list="jobs-list" />
           <datalist id="jobs-list">
             {existing.map((j) => (
               <option key={j} value={j} />
             ))}
           </datalist>
-          {adding && <span className="hint">This job exists: the files are added to it.</span>}
+          <span className="hint">{adding ? "This job exists: the files are added to it." : `Folder: Jobs/${role || "…"}`}</span>
         </label>
         <div className="field">
-          Job description
-          <div className="row-wrap" style={{ alignItems: "center" }}>
+          <span>
+            Job description <span className="meta">· Add a file · PDF, Word or text; saved with JD in its name</span>
+          </span>
+          <div
+            className="dropzone"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              setJd(e.dataTransfer.files[0] ?? null);
+            }}
+          >
             <input ref={jdInput} type="file" hidden accept=".pdf,.docx,.txt,.md" onChange={(e) => (setJd(e.target.files?.[0] ?? null), (e.target.value = ""))} />
+            <span className="meta">{jd ? jd.name : "Drop the job description here"}</span>
             <button type="button" className="btn sm" onClick={() => jdInput.current?.click()}>
-              <Icon name="file" size={15} />
               {jd ? "Change file" : "Choose file"}
             </button>
-            <span className="meta">{jd ? jd.name : "PDF, Word or text. No JD yet? Write one with the adviser first."}</span>
           </div>
+          <span className="meta">
+            or{" "}
+            <button type="button" className="link-btn" onClick={() => onWriteJd(role)}>
+              Write one with the adviser
+            </button>{" "}
+            then save it into the job
+          </span>
         </div>
-        <div
-          className="dropzone"
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => {
-            e.preventDefault();
-            addApps(e.dataTransfer.files);
-          }}
-        >
-          <Icon name="attach" size={22} />
-          <b>Applications</b>
-          <span className="meta">Drop resumes here, or</span>
-          <input ref={appsInput} type="file" multiple hidden accept=".pdf,.docx,.txt,.md" onChange={(e) => (addApps(e.target.files), (e.target.value = ""))} />
-          <button type="button" className="btn sm" onClick={() => appsInput.current?.click()}>
-            Choose files
-          </button>
-          {apps.length > 0 && <span className="meta">{apps.length} file{apps.length === 1 ? "" : "s"}: {apps.slice(0, 4).map((f) => f.name).join(", ")}{apps.length > 4 ? "…" : ""}</span>}
+        <div className="field">
+          Applications
+          <div
+            className="dropzone"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              void filesFromDrop(e).then((fs) => setApps((a) => [...a, ...fs.map((x) => x.file)]));
+            }}
+          >
+            <span className="meta">
+              {apps.length ? `${plural(apps.length, "file")}: ${apps.slice(0, 4).map((f) => f.name).join(", ")}${apps.length > 4 ? "…" : ""}` : "Drop resumes or a folder here, or add them later"}
+            </span>
+            <input ref={appsInput} type="file" multiple hidden accept=".pdf,.docx,.txt,.md" onChange={(e) => (setApps((a) => [...a, ...(e.target.files ?? [])]), (e.target.value = ""))} />
+            <button type="button" className="btn sm" onClick={() => appsInput.current?.click()}>
+              Choose files
+            </button>
+          </div>
+          <span className="meta">Scanned PDFs without text can't be read; ask for a Word or text version.</span>
         </div>
         {err && <div className="banner bad">{err}</div>}
         <div className="row-wrap">
-          <button type="button" className="btn p lg" disabled={!name.trim() || (!jd && !apps.length) || saving} onClick={() => void save()}>
+          <button type="button" className="btn p lg" disabled={!role || (!jd && !apps.length) || saving} onClick={() => void save()}>
             {saving ? "Adding…" : adding ? "Add to job" : "Create job"}
           </button>
           <button type="button" className="btn lg" onClick={onClose}>

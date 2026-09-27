@@ -1,5 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
+import { now } from "../clock";
 
 /**
  * Application catalog: one SQLite file per files root (<root>/.assistant/catalog.sqlite).
@@ -40,6 +41,8 @@ export interface Rubric {
   jdHash: string;
   confirmed: boolean;
   createdAt: string;
+  /** When the owner confirmed these criteria (null: not confirmed, or confirmed before this was recorded). */
+  confirmedAt: string | null;
 }
 
 export interface CriterionResult {
@@ -84,6 +87,9 @@ export class Catalog {
         result TEXT NOT NULL, created_at TEXT NOT NULL,
         PRIMARY KEY (hash, job, version));
     `);
+    // Added 2026-09-27: when the criteria were confirmed (the Hiring page shows it).
+    const cols = this.db.prepare("PRAGMA table_info(rubrics)").all() as { name: string }[];
+    if (!cols.some((c) => c.name === "confirmed_at")) this.db.exec("ALTER TABLE rubrics ADD COLUMN confirmed_at TEXT");
   }
 
   close(): void {
@@ -187,11 +193,11 @@ export class Catalog {
     this.db
       .prepare("INSERT INTO rubrics (job, version, role, criteria, jd_hash, confirmed, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)")
       .run(job, version, role, JSON.stringify(criteria), jdHash, createdAt);
-    return { job, version, role, criteria, jdHash, confirmed: false, createdAt };
+    return { job, version, role, criteria, jdHash, confirmed: false, createdAt, confirmedAt: null };
   }
 
   confirmRubric(job: string, version: number): void {
-    this.db.prepare("UPDATE rubrics SET confirmed = 1 WHERE job = ? AND version = ?").run(job, version);
+    this.db.prepare("UPDATE rubrics SET confirmed = 1, confirmed_at = ? WHERE job = ? AND version = ?").run(now().toISOString(), job, version);
   }
 
   // ------------------------------------------------------------ evaluations
@@ -217,5 +223,6 @@ function toRubric(r: Record<string, unknown>): Rubric {
     jdHash: r.jd_hash as string,
     confirmed: (r.confirmed as number) === 1,
     createdAt: r.created_at as string,
+    confirmedAt: (r.confirmed_at as string | null) ?? null,
   };
 }

@@ -15,7 +15,8 @@ import { userSection } from "../memory/context";
 import { summarizeSession } from "../memory/summarize";
 import type { Preference, SessionRecord, TaskNote } from "../memory/store";
 import { attachToInbox, findDroppedPaths, importIntoJob, MAX_ATTACH_BYTES } from "../files/attach";
-import { ensureFolders, jobDir, listJobs, validateFilesRoot, walk, type Folders } from "../files/folders";
+import { ensureFolders, jobDir, listJobs, sanitizeStem, validateFilesRoot, walk, type Folders } from "../files/folders";
+import type { Rubric } from "../screening/catalog";
 import { listFolder, listInbox, type FolderEntry, type InboxEntry } from "../files/tools";
 import { profileLines, type BusinessProfile } from "../business/profile";
 import { listPolicies, type PolicyEntry } from "../business/policies";
@@ -125,6 +126,8 @@ export interface JobSummary {
   applications: number;
   /** Applications screened against the confirmed criteria. */
   screened: number;
+  /** The job folder. */
+  path: string;
   stage: "needs-jd" | "criteria" | "ready" | "screened";
 }
 
@@ -132,7 +135,11 @@ export interface JobSummary {
 const OPENABLE = [".pdf", ".docx", ".doc", ".xlsx", ".xls", ".csv", ".md", ".txt", ".rtf", ".png", ".jpg", ".jpeg", ".gif", ".webp"];
 
 /** A job's screening state for a UI: like ScreenResult, but the criteria may not exist yet. */
-export type JobResults = Omit<ScreenResult, "rubric"> & { rubric: ScreenResult["rubric"] | null };
+export type JobResults = Omit<ScreenResult, "rubric"> & {
+  rubric: ScreenResult["rubric"] | null;
+  /** Every file in the job folder but the JD, with what screening makes of it. */
+  files: { file: string; status: "application" | "unreadable" | "duplicate"; reason: string | null }[];
+};
 
 export type ScreenOutcome =
   | { status: "no-jd"; job: string }
@@ -635,7 +642,7 @@ export class AssistantApp {
     const meta = new Map(listPolicies(f).map((p) => [p.id, p]));
     const policies = listFolder(f.policies).map((e) => ({ ...e, title: meta.get(e.name)?.title ?? e.name, description: meta.get(e.name)?.description ?? "" }));
     const outbox = await Promise.all(listFolder(f.outbox).map(async (e) => ({ ...e, draft: await this.isDraft(e.path, e.modified, e.readable) })));
-    return { root: f.root, inbox: listFolder(f.inbox), outbox, policies, jobs: this.jobs().map((j) => ({ ...j, path: jobDir(f, j.job) })) };
+    return { root: f.root, inbox: listFolder(f.inbox), outbox, policies, jobs: this.jobs() };
   }
 
   private readonly drafts = new Map<string, boolean>();
@@ -709,7 +716,7 @@ export class AssistantApp {
       const screened = r?.confirmed ? cat.applications(j).filter((a) => a.status === "ok" && cat.getEvaluation(a.hash, j, r.version)).length : 0;
       const applications = files.length - (jd ? 1 : 0);
       const stage: JobSummary["stage"] = !jd && !r ? "needs-jd" : !r?.confirmed ? "criteria" : screened ? "screened" : "ready";
-      return { job: j, files: files.length, criteria: r ? `v${r.version}${r.confirmed ? " confirmed" : " not confirmed"}` : "none", jd, applications, screened, stage };
+      return { job: j, files: files.length, criteria: r ? `v${r.version}${r.confirmed ? " confirmed" : " not confirmed"}` : "none", jd, applications, screened, stage, path: jobDir(f, j) };
     });
   }
 
@@ -745,12 +752,12 @@ export class AssistantApp {
 
   /**
    * A new job from a form (a browser UI: bytes, no paths): the JD is saved as
-   * "Job description.<ext>" so screening finds it, applications go in "applications/".
+   * "<job> JD.<ext>" so screening finds it, applications go in "applications/".
    * Submitting the form is the owner's OK, so no import question is asked.
    */
   async importJobFiles(job: string, jd: Upload | null, applications: Upload[]): Promise<{ job: string; summary: IngestSummary; refused: { name: string; reason: string }[] }> {
     const uploads: Upload[] = [
-      ...(jd ? [{ name: jd.name, data: jd.data, relPath: `job/Job description${extname(jd.name).toLowerCase()}` }] : []),
+      ...(jd ? [{ name: jd.name, data: jd.data, relPath: `job/${sanitizeStem(job)} JD${extname(jd.name).toLowerCase()}` }] : []),
       ...applications.map((a) => ({ name: a.name, data: a.data, relPath: `job/applications/${a.name}` })),
     ];
     if (!uploads.length) throw new Error("add a job description or at least one application");
@@ -772,11 +779,39 @@ export class AssistantApp {
   async screenResults(job: string): Promise<JobResults> {
     const cat = this.a.catalog();
     const rubric = cat.latestRubric(job);
+    const files = () =>
+      cat.applications(job).map((a) => ({
+        file: a.sourceRef,
+        status: a.status === "unreadable" ? ("unreadable" as const) : a.status === "duplicate" ? ("duplicate" as const) : ("application" as const),
+        reason: a.status === "unreadable" ? a.error : a.status === "duplicate" ? `the same file as ${a.duplicateOf}` : null,
+      }));
     if (!rubric || !rubric.confirmed) {
       const ingest = await ingestJob(cat, this.folders(), job, () => {});
-      return { job, rubric: rubric ?? null, ingest, evaluatedThisRun: 0, failed: [], remaining: ingest.applications, ranked: [] };
+      return { job, rubric: rubric ?? null, ingest, evaluatedThisRun: 0, failed: [], remaining: ingest.applications, ranked: [], files: files() };
     }
-    return screenJob(this.a.engine, cat, this.folders(), job, { limit: 0 });
+    return { ...(await screenJob(this.a.engine, cat, this.folders(), job, { limit: 0 })), files: files() };
+  }
+
+  /**
+   * Drafts screening criteria from the job's JD (a model call) without asking to confirm them;
+   * a UI shows them for the owner's OK (confirmCriteria). Keeps criteria already drafted.
+   */
+  async draftCriteria(job: string): Promise<{ status: "no-jd" } | { status: "drafted"; rubric: Rubric }> {
+    const cat = this.a.catalog();
+    const existing = cat.latestRubric(job);
+    if (existing) return { status: "drafted", rubric: existing };
+    const s = await ingestJob(cat, this.folders(), job, this.progress);
+    const jd = await jdFromFolder(this.folders(), job, s.jdFiles);
+    if (!jd) return { status: "no-jd" };
+    this.progress(`drafting criteria from ${jd.source}...`);
+    return { status: "drafted", rubric: await proposeCriteria(this.a.engine, cat, job, jd.text) };
+  }
+
+  /** The owner's OK to the job's latest criteria (the screening form's "Yes"). */
+  confirmCriteria(job: string, version: number): void {
+    const r = this.a.catalog().latestRubric(job);
+    if (!r || r.version !== version) throw new Error("these criteria have changed; look at them again");
+    this.a.catalog().confirmRubric(job, version);
   }
 
   /** Saves a screening report from existing results to the Outbox; returns the file paths. */

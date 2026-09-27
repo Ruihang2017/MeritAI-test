@@ -630,14 +630,20 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     "Chloe Wang": "Left 2026-06-30 · records kept to 2033 [n]",
   };
   const same = (x: unknown, y: unknown) => JSON.stringify(x) === JSON.stringify(y);
+  const localIso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const rems = app.reminders().map((r) => `${r.due} ${r.overdue} ${r.title}`);
   const history = await app.history();
+  const weekendDraft = await app.draftCriteria("Weekend cleaner");
+  if (weekendDraft.status === "drafted") app.confirmCriteria("Weekend cleaner", weekendDraft.rubric.version);
+  const weekendAfter = await app.screenResults("Weekend cleaner");
   record("demo workspace (design sample data)", [
     ["profile: Wattle Lane Cleaning Pty Ltd, small business", app.profile().profile.legalName === "Wattle Lane Cleaning Pty Ltd" && app.profile().smallBusiness === true],
     ["staff: 9 active, 1 left; Marco has 3 documents not recorded", staff.filter((e) => e.status === "active").length === 9 && staff.filter((e) => e.status === "left").length === 1 && staff.find((e) => e.name === "Marco Silva")!.documentsExpected.filter((d) => !d.recorded).length === 3],
     ["Team leader: 13 ranked, Hannah first, Tariq flagged, 1 unreadable", tl.ranked.length === 13 && tl.ranked[0].name === "Hannah Cole" && tl.ranked.find((c) => c.name === "Tariq Aziz")?.evaluation.flags.suspiciousInstructions === true && tl.ingest.unreadable.length === 1],
     ["Weekend cleaner: criteria not confirmed, JD recognised", wc.rubric?.confirmed === false && wc.ingest.jdFiles[0] === "Weekend cleaner JD.pdf"],
     ["files: Inbox 4, Outbox 5, Policies 3; memory 3 + 3", files.inbox.length === 4 && files.outbox.length === 5 && files.policies.length === 3 && app.memories().preferences.length === 3],
+    ["Hiring: files listed with status, criteria confirmed on the design's day", tl.files.length === 15 && tl.files.filter((f) => f.status === "unreadable").length === 1 && tl.files.filter((f) => f.status === "duplicate").length === 1 && localIso(new Date(tl.rubric?.confirmedAt ?? 0)) === DEMO_TODAY],
+    ["Hiring: criteria drafted earlier are kept; confirming them marks the job ready", weekendDraft.status === "drafted" && weekendAfter.rubric?.confirmed === true && app.jobs().find((j) => j.job === "Weekend cleaner")?.stage === "ready"],
     ["Outbox: the two letters starting with DRAFT are marked", same(files.outbox.filter((f) => f.draft).map((f) => f.name).sort(), ["Leo Tran probation letter.docx", "Priya Nair resignation acknowledgement.docx"])],
     ["Staff next dates as in the design", same(Object.entries(nextOf).sort(), Object.entries(DESIGN_NEXT).sort())],
     ["Attention: 1 overdue (Marco, since 6 Sep), 1 this week (Leo, 2 Oct), Sam on 23 Oct", same(app.attentionSummary(), { overdue: 1, soon: 1 }) && same(rems, ["2026-09-06 true Starting paperwork not recorded in the register for Marco Silva", "2026-10-02 false Probation ends 2026-10-02: Leo Tran", "2026-10-23 false Fixed-term contract ends 2026-10-23: Sam Park"])],

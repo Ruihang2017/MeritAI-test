@@ -171,13 +171,14 @@ export type ReportFormat = "docx" | "xlsx" | "both";
  * Returns the saved file names.
  */
 export async function saveReports(engine: Engine, folders: Folders, r: ScreenResult, format: ReportFormat = "docx"): Promise<string[]> {
-  const stem = sanitizeStem(`Screening - ${r.rubric.role} - ${new Date().toISOString().slice(0, 10)}`);
+  // Named as on the design canvas; a later report gets " (2)" rather than overwriting (writeNew).
   const saved: string[] = [];
   if (format !== "xlsx") {
     const comparison = await compareShortlist(engine, r).catch(() => ({ overview: "", notes: new Map<string, string>() }));
+    const stem = sanitizeStem(`${r.job} screening report`);
     saved.push(writeNew(folders.outbox, stem, ".docx", await markdownToDocx(reportMarkdown(r, comparison), stem)));
   }
-  if (format !== "docx") saved.push(writeNew(folders.outbox, stem, ".xlsx", await reportXlsx(r)));
+  if (format !== "docx") saved.push(writeNew(folders.outbox, sanitizeStem(`${r.job} all candidates`), ".xlsx", await reportXlsx(r)));
   return saved;
 }
 

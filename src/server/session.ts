@@ -175,6 +175,14 @@ export class UiSession {
       return this.exclusive(`Screening "${job}"`, () => this.app.screen(job));
     },
     screenResults: async (p) => this.app.screenResults(this.jobName(p?.job)),
+    draftCriteria: async (p) => {
+      const job = this.jobName(p?.job);
+      return this.exclusive(`Drafting criteria for "${job}"`, () => this.app.draftCriteria(job));
+    },
+    confirmCriteria: async (p) => {
+      this.app.confirmCriteria(this.jobName(p?.job), int(p?.version));
+      return { ok: true };
+    },
     report: async (p) => {
       if (!["docx", "xlsx", "both"].includes(p?.format)) throw new Error("format must be docx, xlsx or both");
       const job = this.jobName(p.job);

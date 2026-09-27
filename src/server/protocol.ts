@@ -6,6 +6,7 @@
  */
 import type { AppEvent, AttachOutcome, ChecklistItem, FormNote, FormResult, LeavingItem, LeavingReason, JobResults, JobSummary, ScreenOutcome, StaffOverviewRow } from "../app/app";
 import type { IngestSummary } from "../screening/pipeline";
+import type { Rubric } from "../screening/catalog";
 import type { DocumentId, Employee } from "../business/register";
 import type { ConfirmRequest } from "../engine/types";
 import type { Reminder } from "../business/reminders";
@@ -41,6 +42,9 @@ export interface Methods {
   removeEmployee: { params: { id: number }; result: FormResult<{ removed: boolean }> };
   // ---- hiring (M3): screening runs in the app; criteria are confirmed through a `confirm` dialog; progress arrives as events
   jobs: { params: void; result: JobSummary[] };
+  /** Drafts criteria from the job's JD (a model call); the page then asks the owner to confirm them. */
+  draftCriteria: { params: { job: string }; result: { status: "no-jd" } | { status: "drafted"; rubric: Rubric } };
+  confirmCriteria: { params: { job: string; version: number }; result: { ok: true } };
   createJob: { params: { job: string; jd: UploadFile | null; applications: UploadFile[] }; result: { job: string; summary: IngestSummary; refused: { name: string; reason: string }[] } };
   screen: { params: { job: string }; result: ScreenOutcome };
   screenResults: { params: { job: string }; result: JobResults };
