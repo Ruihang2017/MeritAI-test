@@ -50,7 +50,9 @@ npm run ui:fake      # the same demo workspace with scripted replies: no model a
 npm run ui:dev       # UI development: hot reload, fake engine
 ```
 
-Demo options: `-- --reseed` puts the demo workspace back to the design's sample data; `FX_FAKE_SIGNED_OUT=1` starts signed out (the first-run screens); `npm run ui:fake -- --fresh` starts from an empty workspace. Voice works in the browser (microphone in Conversations; the demo engine uses a free stand-in voice).
+In the browser the conversation and the pages stay in step: what the adviser changes shows under its reply ("What changed", with the next step), the pages update at once and mark the changed rows, and a dot marks pages changed while you were elsewhere (a hire said in the chat is the same as Add to Staff). Also: email drafts that open in your email app (MeritAI never sends email), New job from 35 role templates, voice usage and a monthly limit in Settings, Connections (what's coming), and Chinese (Settings › Language; documents stay in English).
+
+Demo options: `-- --reseed` puts the demo workspace back to the design's sample data; `-- --demo-dir <name>` uses a separate copy (e.g. for checks while another demo runs); `FX_FAKE_SIGNED_OUT=1` starts signed out (the first-run screens); `npm run ui:fake -- --fresh` starts from an empty workspace. Voice works in the browser (microphone in Conversations; the demo engine uses a free stand-in voice).
 
 ### Desktop app (Windows, the alpha)
 
@@ -130,7 +132,8 @@ Tests, `npm run eval` and the `ab:*` experiments use their own engine folder, `c
 | `npm run test:files` | Inbox/Outbox guards, PDF/DOCX/TXT/MD parsing, docx output, screening from files, injection in documents |
 | `npm run test:research` | Official-source lookups, domain allowlist, no URLs from memory, prompt injection |
 | `npm run inspect` | Which skills, plugins, MCP servers, apps and features Codex exposes |
-| `npm run test:unit` | Free unit checks (no model calls): apprentices, leaving checklist, fixed-term notes, reminder wording, small business status |
+| `npm run test:unit` | Free unit checks (no model calls): apprentices, leaving checklist, fixed-term notes, reminder wording, small business status; the server protocol, changes and hires, voice on screen, usage, email drafts, job templates, Chinese |
+| `npx tsx scripts/journeys.ts [ids]` | Owner journeys with the real model through the UI's server session on copies of the sample business: the saved data and that every change reached its reply (about 30 journeys; uses the ChatGPT quota) |
 | `npm run typecheck` | Type check |
 
 After upgrading `codex`, run `npm run gen:protocol`, then all of the above.
