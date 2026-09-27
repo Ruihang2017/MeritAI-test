@@ -33,7 +33,7 @@ src/voice/                 liveSession.ts (GPT-Live WebSocket), bridge.ts (deleg
 src/screening/             catalog.ts (SQLite), pipeline.ts (ingest → criteria → blind evaluation → rank), report.ts (chat summary; Word/Excel on request), blind.ts, tools.ts
 src/files/                 folders.ts (paths + guards), parse.ts (PDF/DOCX/TXT/MD), docx.ts (markdown→docx), tools.ts (list_files/read_file/save_document), attach.ts (drag and drop, importIntoJob)
 src/protocol/              generated with `npm run gen:protocol` (--experimental); do not edit
-docs/alpha/                tester-guide.md (built to Word by scripts/build-tester-guide.mjs), distribution.md (building and handing out the installer)
+docs/alpha/                tester-guide.md (built to Word by scripts/build-tester-guide.mjs), distribution.md (building and handing out the installer), owner-test.md (the owner's end-to-end check before handing it out, in Chinese)
 prompts/                   base.md (replaces Codex's coding prompt), developer.md (small-business HR adviser role and principles), memory.md, voice.md (GPT-Live persona)
 codex_home/                isolated CODEX_HOME: config.toml + skills/ are ours; everything else is runtime (gitignored)
 codex_home_test/           CODEX_HOME for test suites, evals and ab-* (gitignored; own sign-in, npm run login:test): scripts/testHome.ts copies config.toml + skills in on each run (src/engine/codexHome.ts)
