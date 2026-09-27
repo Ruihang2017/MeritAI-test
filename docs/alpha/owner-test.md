@@ -15,7 +15,7 @@
 
 | # | 做什么 | 预期 |
 |---|---|---|
-| A1 | 运行 `release\MeritAI Setup 0.2.0.exe` | 可能弹出 SmartScreen 警告（没有签名），点 More info › Run anyway；装到当前用户下，开始菜单出现 MeritAI |
+| A1 | 运行 `release\MeritAI Setup 0.2.1.exe` | 可能弹出 SmartScreen 警告（没有签名），点 More info › Run anyway；装到当前用户下，开始菜单出现 MeritAI |
 | A2 | 从开始菜单打开 MeritAI | 一个窗口，标题 MeritAI；出现首次运行的登录页 |
 | A3 | Sign in with ChatGPT → 在浏览器里登录并输入代码 | 回到 app 后自动进入下一步，**不用**手动刷新 |
 | A4 | 工作区保留默认的 `C:\Users\<你>\MeritAI` | 下一步是选企业 |
@@ -101,7 +101,7 @@
 | G1 | 在一条回答下点 👍 | 显示 "Thanks: marked helpful." |
 | G2 | 在另一条下点 👎，选两个原因，写一句话，Save feedback | 显示 "Thanks: noted what went wrong." |
 | G3 | 名字 › Send feedback：写一句话，三项都勾上，保存 | 显示 Saved；Show in folder 打开 `C:\Users\<你>\MeritAI\Feedback\` |
-| G4 | 用记事本打开那个 json | 有你写的话、2 条评分（包括问题和回答开头）、当前对话、版本号 0.2.0；**没有** key 或密码 |
+| G4 | 用记事本打开那个 json | 有你写的话、2 条评分（包括问题和回答开头）、当前对话、版本号 0.2.1；**没有** key 或密码 |
 
 ## H 切换到自己的企业（5 分钟）
 
