@@ -89,6 +89,8 @@ export interface Methods {
   exportFeedback: { params: { note: string; ratings: boolean; conversation: boolean; technical: boolean }; result: { path: string } };
   /** First run: the sample business (synthetic Wattle Lane Cleaning) in its own folder, seeded once, as the workspace. */
   useSampleBusiness: { params: void; result: Settings };
+  /** The owner's language (the app and the adviser's replies; documents stay in English). */
+  setLanguage: { params: { language: "en" | "zh" }; result: { language: "en" | "zh" } };
   /** Voice use on this computer (estimated US$: today, this month, all time) and the monthly limit. */
   voiceUsage: { params: void; result: VoiceUsageSummary };
   setVoiceLimit: { params: { usd: number | null }; result: VoiceUsageSummary };
@@ -134,6 +136,8 @@ export interface ShellState {
   /** The current conversation's thread, and the page it was started from (the side panel's "From …"). */
   threadId: string | null;
   from: SessionFrom | null;
+  /** The owner's language for the app (Settings). */
+  language: "en" | "zh";
   /** Voice needs an OpenAI API key (Settings); without one the microphone is off. */
   voice: { keySet: boolean; on: boolean };
   /** Overdue and this-week counts for the Attention button and badges. */

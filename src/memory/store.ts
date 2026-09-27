@@ -48,6 +48,8 @@ export interface UserSettings {
   filesRoot?: string;
   /** DirectShow microphone name for voice mode; absent = the first one found. */
   micDevice?: string;
+  /** The owner's language for the app and the adviser's replies (documents stay in English); absent = English. */
+  language?: "en" | "zh";
   /** Voice stops once this month's estimated cost reaches it (US$); absent = no limit. */
   voiceMonthlyLimitUsd?: number;
 }

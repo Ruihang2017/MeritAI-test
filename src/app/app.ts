@@ -41,6 +41,7 @@ import { createJobWithJd, linkHire } from "../business/hiring";
 import { INDUSTRIES, industriesFor, JOB_TEMPLATES, type IndustryId, type JobTemplate } from "../business/jobTemplates";
 import type { ChangeSink } from "../changes";
 import { readEml } from "../files/email";
+import { LANGUAGE_ZH } from "../assistant";
 
 /**
  * The application layer: everything a user interface needs, with no terminal code.
@@ -396,7 +397,10 @@ export class AssistantApp {
    */
   async *send(text: string, opts: { skill?: string; title?: string; from?: SessionFrom } = {}): AsyncIterable<AppEvent> {
     this.recordSession(opts.title ?? text, opts.from);
-    const message = [...this.pending.notes, text].filter(Boolean).join(" ");
+    // A language changed in Settings reaches a conversation already open with its next message.
+    const lang = this.languageNote ? [`[reply language: ${this.a.mem.settings().language === "zh" ? LANGUAGE_ZH : "English from now on (documents too)."}]`] : [];
+    this.languageNote = false;
+    const message = [...this.pending.notes, ...lang, text].filter(Boolean).join(" ");
     const images = this.pending.images;
     this.pending = { notes: [], images: [] };
     yield* this.withGuards(this.a.engine.send(message, { skill: opts.skill, images }));
@@ -1193,6 +1197,21 @@ export class AssistantApp {
     this.a.mem.updateSettings({ voiceMonthlyLimitUsd: usd === null ? undefined : Math.round(usd * 100) / 100 });
     return this.voiceUsage();
   }
+
+  // --- the owner's language (Settings): the app and the adviser's replies; documents stay in English
+
+  language(): "en" | "zh" {
+    return this.a.mem.settings().language ?? "en";
+  }
+
+  setLanguage(lang: "en" | "zh"): "en" | "zh" {
+    if (lang === this.language()) return lang;
+    this.a.mem.updateSettings({ language: lang === "en" ? undefined : lang });
+    // New conversations get it in their instructions; the open one with its next message.
+    this.languageNote = this.hasConversation();
+    return lang;
+  }
+  private languageNote = false;
 
   setMicrophone(device: string): void {
     this.a.mem.updateSettings({ micDevice: device });

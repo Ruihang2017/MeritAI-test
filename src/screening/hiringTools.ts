@@ -117,7 +117,8 @@ export function hiringTools(opts: { folders: () => Folders; catalog: () => Catal
     {
       name: "update_job",
       description:
-        "Change a job's settings: how many people it is for (openings), or close it (open: false; everything is kept, read-only) or reopen it (open: true). Pass null for what doesn't change. Call it directly: the app asks the owner to confirm.",
+        "Change a job's settings: how many people it is for (openings: the total, including anyone already hired), or close it (open: false; everything is kept, read-only) or reopen it (open: true). " +
+        "Reopening a filled job to hire more: set openings to the number already hired plus the new ones, in the same call (list_candidates or list_jobs shows how many are hired). Pass null for what doesn't change. Call it directly: the app asks the owner to confirm.",
       inputSchema: {
         type: "object",
         properties: { job: jobProp, openings: { type: ["integer", "null"], description: "1 to 99" }, open: { type: ["boolean", "null"] } },
@@ -140,7 +141,13 @@ export function hiringTools(opts: { folders: () => Folders; catalog: () => Catal
         if (!(await confirm({ kind: "hiring", title: `Change ${job}?`, items }))) return { success: true, text: "The owner did not confirm; nothing was saved.", display: "hiring: not saved" };
         if (a.openings && a.openings !== cur.openings) opts.catalog().setOpenings(job, a.openings);
         if (a.open !== null && a.open !== undefined && a.open === (cur.closedAt !== null)) opts.catalog().setClosed(job, !a.open);
-        return { success: true, text: `Saved. ${countLine(job)}`, display: `hiring: ${job} updated` };
+        const now = hireCount(opts.catalog(), opts.register(), job);
+        const full = a.open === true && now.hired >= now.openings;
+        return {
+          success: true,
+          text: full ? `Saved: reopened, but it still has everyone it's for (${now.hired} of ${now.openings} hired). If the owner wants more people, call update_job again with openings = ${now.hired} + how many more (the owner's OK is asked again).` : `Saved. ${countLine(job)}`,
+          display: `hiring: ${job} updated`,
+        };
       },
     },
     {

@@ -31,6 +31,26 @@ import { listJobs } from "./files/folders";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
+/**
+ * The app's today for the model (journeys, 2026-09-27): the sample business runs on its own date
+ * (src/clock.ts), and "done today" or "starts next Monday" must mean the same day to the adviser
+ * as to the register and the reminders.
+ */
+/** The owner's language (Settings; owner, 2026-09-27): replies in it, documents for others in English. */
+export function languageLine(lang: "en" | "zh" | undefined): string {
+  return lang === "zh" ? LANGUAGE_ZH : "";
+}
+export const LANGUAGE_ZH =
+  "Language: the owner reads Simplified Chinese. Reply in Simplified Chinese. Keep the names of laws, agencies, awards, forms, tools and official pages in English (a short Chinese explanation in brackets is fine, e.g. Fair Work Information Statement（公平工作信息说明）). " +
+  "Write documents for other people (letters, contracts, emails, job descriptions and ads, policies, messages to candidates or employees) in English, as Australian workplaces use English, unless the owner asks for another language; tell the owner in Chinese what you drafted.";
+
+function todayLine(): string {
+  const iso = todayLocal();
+  const d = new Date(`${iso}T12:00:00`);
+  const day = d.toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  return `Today is ${day} (${iso}). Use this date for "today", "tomorrow", "next Monday" and other relative dates.`;
+}
+
 export interface Assistant {
   engine: Engine;
   mem: UserMemory;
@@ -148,6 +168,8 @@ export function createAssistant(opts: {
     developerInstructions: () =>
       [
         read("prompts/developer.md"),
+        todayLine(),
+        languageLine(mem.settings().language),
         renderProfile(business()),
         renderPolicyIndex(folders()),
         buildMemoryContext(mem, read("prompts/memory.md")),

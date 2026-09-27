@@ -356,6 +356,10 @@ export class UiSession {
       this.voice?.ctl.stop();
       return null;
     },
+    setLanguage: async (p) => {
+      if (p?.language !== "en" && p?.language !== "zh") throw new Error("language must be en or zh");
+      return { language: this.app.setLanguage(p.language) };
+    },
     voiceUsage: async () => this.app.voiceUsage(),
     setVoiceLimit: async (p) => {
       if (p?.usd !== null && typeof p?.usd !== "number") throw new Error("usd must be a number or null");
@@ -447,6 +451,7 @@ export class UiSession {
       threadId: threadId ?? null,
       from: rec?.from ?? null,
       voice: { keySet: this.app.voiceKeyStatus().set, on: this.voice !== null },
+      language: this.app.language(),
       attention: this.app.attentionSummary(),
       usageLimit: this.limit,
       attachments: this.app.pendingAttachments(),

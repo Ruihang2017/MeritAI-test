@@ -108,6 +108,15 @@ export function registerTools(opts: { register: () => Register; business: () => 
           if (!f.ok) return fail(`Not saved: ${f.error}.`);
           hire = { job: String(hiredFrom.job), file: f.file, name: f.name };
         }
+        // Not said, but their name is a candidate of exactly one open job: the same question offers the link
+        // (one question for one hire, as Add to Staff does; the owner sees it before saying yes).
+        if (!hire && !hiredFrom && opts.hires && typeof details.name === "string") {
+          const jobs = opts.hires.jobsWith(details.name);
+          if (jobs.length === 1) {
+            const f = opts.hires.find(jobs[0], details.name);
+            if (f.ok) hire = { job: jobs[0], file: f.file, name: f.name };
+          }
+        }
         const c = checkNewEmployee(opts.register(), details);
         if (!c.ok) {
           const dup = c.duplicate;

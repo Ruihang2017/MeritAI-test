@@ -11,6 +11,7 @@ import { refKey } from "../../src/changes";
 import { ArrivalNote } from "./components/Changes";
 import { VoiceStage } from "./components/Stage";
 import { ConnectionsPage } from "./components/Connections";
+import { applyLanguage } from "./i18n";
 import { ConversationPage } from "./components/Conversation";
 import { Icon } from "./components/Icon";
 import { AppBar, AttentionPanel, Nav, type AskButton, type Page } from "./components/Shell";
@@ -548,6 +549,11 @@ function Shell({ api }: { api: Api }) {
     return <ArrivalNote items={[...last.values()].map((s) => ({ summary: s.change.summary, title: s.title }))} onDismiss={() => setArrivals(null)} />;
   };
 
+  // The owner's language (Settings): the page in Chinese, or English again (a reload).
+  useEffect(() => {
+    if (state?.language) applyLanguage(state.language);
+  }, [state?.language]);
+
   const currentThread = state?.threadId ?? null;
   const showPanel = page === "conversations" && wide;
   const askButton: AskButton = !dockable ? "none" : showDock ? "open" : waitingOnYou ? "waiting" : running ? "working" : "closed";
@@ -634,7 +640,7 @@ function Shell({ api }: { api: Api }) {
         {page === "profile" && <ProfilePage api={api} onAsk={() => ask({ text: "Set up my business profile", mode: "setup", from: FROM_PROFILE })} onChanged={() => void refresh()} refreshKey={refreshKey} arrival={arrivalNote("profile")} />}
         {page === "connections" && <ConnectionsPage api={api} />}
         {page === "memory" && <MemoryPage api={api} onProfile={() => setPage("profile")} />}
-        {page === "settings" && <SettingsPage api={api} login={login} onChanged={() => void refresh()} />}
+        {page === "settings" && <SettingsPage api={api} login={login} language={state?.language ?? "en"} onChanged={() => void refresh()} />}
         {page === "hiring" && <HiringPage api={api} progress={lastProgress} onAsk={ask} asking={{ running: turns.find((t) => t.status === "running")?.user.text ?? null, queued: queue.map((q) => q.text) }} openJob={hiringJob} refreshKey={refreshKey} arrival={arrivalNote("hiring")} onHire={(c, job) => (setStaffOpen(null), setStaffAdd({ name: c?.name ?? "", role: job, ...(c ? { hireFrom: { job, file: c.file } } : {}) }), setPage("staff"))} onOpenEmployee={(id) => openEmployee(id)} />}
         {/* Kept while closed on a page (a half-typed message survives closing it); hidden, not removed. */}
         {dockable && (

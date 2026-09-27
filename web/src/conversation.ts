@@ -126,7 +126,7 @@ export function turnsFromTranscript(entries: { role: "user" | "assistant"; text:
   for (const [i, e] of entries.entries()) {
     if (e.role === "user") {
       const attachments = [...e.text.matchAll(/\[attached: "([^"]+)"[^\]]*\]/g)].map((m) => m[1]);
-      const text = e.text.replace(/\[(attached|imported folder as job)[^\]]*\]\s*/g, "").trim();
+      const text = e.text.replace(/\[(attached|imported folder as job|reply language)[^\]]*\]\s*/g, "").trim();
       turns.push({ id: `stored-${i}`, at, user: { text, attachments }, steps: [], blocks: [], status: "completed" });
     } else {
       if (!turns.length) turns.push({ id: `stored-${i}`, at, user: { text: "", attachments: [] }, steps: [], blocks: [], status: "completed" });

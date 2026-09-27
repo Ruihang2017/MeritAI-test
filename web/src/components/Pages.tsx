@@ -983,7 +983,7 @@ function VoiceUsageBlock({ api, demo }: { api: Api; demo: boolean }) {
   );
 }
 
-export function SettingsPage({ api, onChanged, login }: { api: Api; onChanged: () => void; login: { url: string | null; code: string | null; message: string } | null }) {
+export function SettingsPage({ api, onChanged, login, language }: { api: Api; onChanged: () => void; login: { url: string | null; code: string | null; message: string } | null; /** The owner's language (design: SettingsLanguage). */ language: "en" | "zh" }) {
   const load = useCallback(() => api.call("settings"), [api]);
   const { data, error, reload } = useLoad<Settings>(load);
   const [s, setS] = useState<Settings | null>(null);
@@ -1031,6 +1031,24 @@ export function SettingsPage({ api, onChanged, login }: { api: Api; onChanged: (
         )}
         {cur && (
           <div className="two-col">
+            <section className="card set" style={{ gridColumn: "1 / -1" }}>
+              <h2 className="h2 no-i18n">Language · 语言</h2>
+              <div className="seg no-i18n" role="radiogroup" aria-label="Language · 语言">
+                {(
+                  [
+                    ["en", "English"],
+                    ["zh", "中文（简体）"],
+                  ] as ["en" | "zh", string][]
+                ).map(([k, l]) => (
+                  <button key={k} type="button" role="radio" aria-checked={language === k} className={language === k ? "on" : ""} onClick={() => void api.call("setLanguage", { language: k }).then(onChanged, (e: Error) => setErr(e.message))}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+              <p className="meta no-i18n" style={{ margin: 0 }}>
+                {language === "zh" ? "界面和顾问的回答使用中文。信件、合同、邮件和职位描述仍用英文写（澳大利亚职场的语言），顾问会用中文向你解释。法律名称保留英文，例如 Fair Work、NES。" : "The app and the adviser's replies in English or Chinese. Letters, contracts, emails and job descriptions stay in English."}
+              </p>
+            </section>
             <section className="card set">
               <h2 className="h2">Account</h2>
               <p className="sub" style={{ margin: 0 }}>
