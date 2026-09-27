@@ -125,12 +125,15 @@ function Shell({ api }: { api: Api }) {
   /** What changed on this page while the owner was elsewhere (its note), until dismissed or they leave. */
   const [arrivals, setArrivals] = useState<{ page: Page; items: Seen[] } | null>(null);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  /** Pages reload shortly after a change (several changes in a row: once). */
+  /** The shell's refresh (reminders, badges), set once it is defined below. */
+  const refreshShell = useRef<() => Promise<void>>(async () => {});
+  /** Pages, reminders and badges reload shortly after a change (several changes in a row: once). */
   const bumpRefresh = () => {
     if (refreshTimer.current) return;
     refreshTimer.current = setTimeout(() => {
       refreshTimer.current = null;
       setRefreshKey((k) => k + 1);
+      void refreshShell.current();
     }, 250);
   };
   const [hiringJob, setHiringJob] = useState<{ job: string } | null>(null);
@@ -262,6 +265,7 @@ function Shell({ api }: { api: Api }) {
     }
   }, [api]);
 
+  refreshShell.current = refresh;
   useEffect(() => api.onConnection((c) => (setConnection(c), c === "open" && void refresh())), [api, refresh]);
   useEffect(() => {
     if (api.connection === "open") void refresh();
