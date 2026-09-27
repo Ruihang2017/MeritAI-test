@@ -23,6 +23,8 @@ export interface BridgeCallbacks {
   /** Every assistant event, for on-screen display. */
   onEvent: (ev: EngineEvent) => void;
   onError: (message: string) => void;
+  /** A short spoken answer to a question waiting on screen ("yes", "no"): true when it answered one. */
+  answer?: (text: string) => boolean;
 }
 
 export class VoiceBridge {
@@ -63,6 +65,12 @@ export class VoiceBridge {
       return;
     }
     if (this.turnRunning) {
+      // A change waiting for the owner's OK on screen: "yes" or "no" answers it (the turn is blocked on it).
+      if (this.cb.answer?.(text)) {
+        this.cb.onRequest(text, "steer");
+        this.live.thinking(id, "The owner answered the question on the screen.");
+        return;
+      }
       if (await this.engine.steer(text)) {
         this.cb.onRequest(text, "steer");
         this.live.thinking(id, "Added the user's new words to the task already in progress.");
@@ -73,6 +81,11 @@ export class VoiceBridge {
       return;
     }
     await this.runTurn(text);
+  }
+
+  /** A note for the voice to say now, about the task in progress (e.g. a change waiting for the owner's OK). */
+  say(note: string): void {
+    if (this.currentDelegation) this.live.commentary(this.currentDelegation, note);
   }
 
   private async runTurn(text: string): Promise<void> {

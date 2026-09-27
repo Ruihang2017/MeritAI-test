@@ -74,7 +74,7 @@ Do them in any order. For each, notice: did it tell you what to do, clearly and 
 
 - English only. Answers follow Australian employment law and official sources; they are not legal advice.
 - No automatic updates: a new version comes as a new installer.
-- Voice needs your own API key and costs money; changes that need your OK aren't saved during voice (you confirm them in the chat afterwards).
+- Voice needs your own API key and costs money. During voice, a change that needs your OK waits on the right of the screen: press Yes, save, or say "yes" (deleting always needs a press).
 - The ChatGPT plan's usage can run out; the app says when, and when it resets.
 
 ## 8 Where your data is, and removing it

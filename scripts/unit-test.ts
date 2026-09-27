@@ -1006,6 +1006,60 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   ], JSON.stringify({ questions, changed: changed.map((c) => [c.by, c.turnId, c.change.summary]), list: list.text.slice(0, 200), created: created.text }).slice(0, 900));
 }
 
+// ------------------------------------------------------------------ voice with a screen: a question waits on screen; a spoken "yes" answers it
+{
+  process.env.FX_FAKE_DELAY_MS = "2";
+  const root = join(TMP, "vstage-files");
+  const hadToday = process.env.FX_TODAY;
+  process.env.FX_TODAY = DEMO_TODAY;
+  await seedDemo({ filesRoot: root, memoryRoot: join(TMP, "vstage-mem"), userId: "unit-vstage", memory: false });
+  const session = new UiSession({ engine: "fake" });
+  const app = new AssistantApp({ userId: "unit-vstage", memoryRoot: join(TMP, "vstage-mem"), filesRoot: root, format: "markdown", engine: "fake", ui: { confirm: session.confirm } });
+  session.attach(app);
+  await app.start();
+  await app.openSession();
+  const mine: ServerEvent[] = [];
+  const me = (e: ServerEvent) => mine.push(e);
+  session.subscribe(me);
+  await session.handle({ id: 1, method: "voiceStart", params: undefined }, me);
+  const loud = Buffer.alloc(4800);
+  for (let i = 0; i < 2400; i++) loud.writeInt16LE(i % 2 ? 6000 : -6000, i * 2);
+  const quiet = Buffer.alloc(4800);
+  const speak = async () => {
+    for (let i = 0; i < 10; i++) await session.handle({ id: 10, method: "voiceAudio", params: { pcm: loud.toString("base64") } }, me);
+    for (let i = 0; i < 10; i++) await session.handle({ id: 11, method: "voiceAudio", params: { pcm: quiet.toString("base64") } }, me);
+  };
+  const until = (p: () => boolean, ms = 8000) => new Promise<boolean>((ok) => { const t0 = Date.now(); const t = setInterval(() => (p() ? (clearInterval(t), ok(true)) : Date.now() - t0 > ms && (clearInterval(t), ok(false))), 20); });
+  // 1st request (this week's reminders), then the hire: its question waits on screen during voice.
+  await speak();
+  await until(() => mine.filter((e) => e.event === "turnDone").length === 1);
+  await speak();
+  const asked = await until(() => mine.some((e) => e.event === "confirm"));
+  const q = mine.find((e): e is Extract<ServerEvent, { event: "confirm" }> => e.event === "confirm");
+  const req2 = mine.filter((e): e is Extract<ServerEvent, { event: "voice"; kind: "request" }> => e.event === "voice" && e.kind === "request")[1];
+  const notSkipped = !mine.some((e) => e.event === "voice" && e.kind === "skipped");
+  // The stand-in voice was told to ask for the OK; the owner says "yes".
+  await speak();
+  const answered = await until(() => mine.some((e) => e.event === "confirmAnswered"));
+  const yes = mine.find((e): e is Extract<ServerEvent, { event: "confirmAnswered" }> => e.event === "confirmAnswered");
+  const saved = await until(() => app.staff().some((e) => e.name === "Hannah Cole"));
+  const hired = app.jobs().find((j) => j.job === "Team leader")?.hired;
+  const changedInVoice = mine.some((e) => e.event === "changed" && e.by === "adviser" && e.turnId === req2?.turnId);
+  await session.handle({ id: 50, method: "voiceStop", params: undefined }, me);
+  await until(() => mine.some((e) => e.event === "voice" && e.kind === "ended"));
+  // Spoken answers never delete.
+  const spokenDelete = app.answerSpoken("yes");
+  await app.close();
+  if (hadToday === undefined) delete process.env.FX_TODAY;
+  else process.env.FX_TODAY = hadToday;
+  record("voice with a screen: OK on screen or a spoken yes", [
+    ["the question waits on screen, in the voice reply (not skipped)", asked && notSkipped && q?.turnId === req2?.turnId && /Add to the employee register/.test(q?.req.title ?? "")],
+    ["a spoken yes answers it; every tab sees the answer", answered && yes?.yes === true && yes?.id === q?.id],
+    ["saved, and the hire linked; changes belong to the voice reply", saved && hired === 1 && changedInVoice],
+    ["no spoken answers once voice is off", spokenDelete === false],
+  ], JSON.stringify(mine.filter((e) => e.event === "voice" || e.event === "confirm" || e.event === "confirmAnswered")).slice(0, 900));
+}
+
 try {
   rmSync(TMP, { recursive: true, force: true });
 } catch {

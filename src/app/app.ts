@@ -203,6 +203,9 @@ export class AssistantApp {
   private voice: VoiceController | null = null;
   private readonly engineKind: "codex" | "fake";
   private voiceHandlers: VoiceHandlers | null = null;
+  /** Voice with a screen (a UI): questions wait on screen instead of being declined. */
+  private voiceOnScreen = false;
+  private voiceBridge: VoiceBridge | null = null;
   private readonly confirms = new PendingConfirms();
 
   constructor(opts: {
@@ -225,11 +228,13 @@ export class AssistantApp {
     this.userId = opts.userId;
     this.launcher = opts.launcher ?? spawnLauncher;
     const confirm: Confirm = async (req) => {
-      // A yes/no needs a keyboard or a click; during voice mode it is declined and reported.
-      if (this.voice) {
+      // A yes/no needs a keyboard or a click. In a terminal's voice mode it is declined and reported; a UI
+      // with a screen shows it and waits (a click, or a spoken "yes": answerSpoken), and the voice asks for it.
+      if (this.voice && !this.voiceOnScreen) {
         this.voiceHandlers?.onConfirmSkipped(req);
         return false;
       }
+      if (this.voice) this.voiceBridge?.say(`A change needs the owner's OK before it is saved: ${req.title}. Ask them, in a few words, to check it on the screen and say yes, or press Yes, save.${req.destructive ? " Deleting needs a press on the screen; saying yes is not enough." : ""}`);
       // Tracked, so stop(), close() and cancelPendingConfirms() can withdraw it.
       return this.confirms.ask(opts.ui.confirm, req);
     };
@@ -1127,7 +1132,23 @@ export class AssistantApp {
    * defaults to the local microphone and speaker via ffmpeg/ffplay; a UI can pass its own.
    * Throws with a user-facing reason if voice cannot start.
    */
-  async startVoice(h: VoiceHandlers, audio?: VoiceAudio): Promise<VoiceController> {
+  /**
+   * A short spoken answer to the latest question waiting on screen during voice: "yes" (save) or
+   * "no". Never for a destructive one (deleting needs a press). Returns whether it answered one.
+   */
+  answerSpoken(text: string): boolean {
+    if (!this.voice || !this.voiceOnScreen) return false;
+    const t = text.trim().toLowerCase().replace(/[.!,]+$/g, "");
+    if (!t || t.split(/\s+/).length > 6) return false;
+    const yes = /^(yes|yeah|yep|yup|sure|ok|okay|go ahead|do it|save it|save|please do|confirm|confirmed|correct|that's right|that's correct)\b/.test(t);
+    const no = /^(no|nope|don't|do not|cancel|not now|leave it|don't save)\b/.test(t);
+    if (yes === no) return false;
+    const open = this.confirms.list().filter((c) => !c.req.destructive);
+    const last = open[open.length - 1];
+    return last ? this.confirms.answer(last.id, yes) : false;
+  }
+
+  async startVoice(h: VoiceHandlers, audio?: VoiceAudio, opts: { confirmOnScreen?: boolean } = {}): Promise<VoiceController> {
     if (this.voice) throw new Error("voice is already on");
     // The demo engine uses a stand-in voice (src/voice/fakeLive.ts): no key, no cost.
     const fake = this.engineKind === "fake";
@@ -1166,6 +1187,8 @@ export class AssistantApp {
       sink.stop();
       this.voice = null;
       this.voiceHandlers = null;
+      this.voiceBridge = null;
+      this.voiceOnScreen = false;
     };
     let stopReason = "stopped";
 
@@ -1189,7 +1212,9 @@ export class AssistantApp {
         h.onEnded({ reason, byUser: false, billedSeconds: seconds });
       }
     });
-    new VoiceBridge(live, engine, {
+    this.voiceOnScreen = opts.confirmOnScreen === true;
+    this.voiceBridge = new VoiceBridge(live, engine, {
+      answer: (text) => this.answerSpoken(text),
       onRequest: (text, mode) => {
         said = "";
         this.recordSession(text);

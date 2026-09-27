@@ -2677,3 +2677,17 @@ button.sample {
 .arrival-wrap {
   padding: 16px 28px 0;
 }
+
+/* voice: the On screen panel (design: SyncVoice) */
+.stage .attention-list > .confirm {
+  border-color: #f0d58a;
+  border-left: 4px solid #d9a400;
+  padding: 14px 16px;
+}
+.stage .attention-list > .confirm.destructive {
+  border-color: #f1b8b2;
+  border-left-color: #b3261e;
+}
+.stage .attention-h {
+  justify-content: center;
+}

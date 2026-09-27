@@ -13,6 +13,7 @@ import { SAMPLE_RATE } from "./liveSession";
 const CHUNK_MS = 100;
 const SCRIPT = [
   "What do I need to do this week?",
+  "Hannah accepted the Team leader offer, she starts Monday.",
   "Priya is resigning, her last day is Friday 9 October.",
   "When is final pay due?",
 ];
@@ -50,15 +51,20 @@ export class FakeLiveSession extends EventEmitter<LiveEvents> {
     }
   }
 
+  /** The app asked for the owner's OK on screen: the next thing "heard" is a yes. */
+  private okAsked = false;
+
   private heard(): void {
     this.speechMs = 0;
-    const text = SCRIPT[this.next++ % SCRIPT.length];
+    const text = this.okAsked ? "Yes, save it." : SCRIPT[this.next++ % SCRIPT.length];
+    this.okAsked = false;
     const start = this.clock;
     this.emit("inputTranscript", { text: `${text} `, startMs: start, endMs: start + 2000 });
     this.emit("delegation", `fake-${++this.delegations}`, start + 2000);
   }
 
   commentary(_delegationId: string | null, content: string): void {
+    if (/needs the owner's OK/.test(content)) this.okAsked = true;
     // What the real voice would paraphrase: its first sentence, marked as the demo.
     const line = (content.split(/(?<=[.!?])\s/)[0] ?? content).slice(0, 160);
     this.say(`(Demo voice) ${line}`);

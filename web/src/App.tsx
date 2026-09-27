@@ -9,6 +9,7 @@ import { addChange, addConfirm, applyEvent, setConfirm, turnsFromTranscript, typ
 import { LiveContext, pageOf, RECENT_MS, type Live, type OpenTarget, type Seen } from "./live";
 import { refKey } from "../../src/changes";
 import { ArrivalNote } from "./components/Changes";
+import { VoiceStage } from "./components/Stage";
 import { ConversationPage } from "./components/Conversation";
 import { Icon } from "./components/Icon";
 import { AppBar, AttentionPanel, Nav, type AskButton, type Page } from "./components/Shell";
@@ -155,8 +156,11 @@ function Shell({ api }: { api: Api }) {
     bv.current = null;
     voiceLive.current = false;
   };
+  /** The turns of this voice call start here (the On screen panel shows only them). */
+  const voiceFrom = useRef(0);
   const startVoice = async () => {
     if (bv.current) return;
+    voiceFrom.current = turnsRef.current.length;
     const micId = savedMicrophone();
     setVoiceNote(null);
     setPage("conversations");
@@ -288,6 +292,8 @@ function Shell({ api }: { api: Api }) {
             // A reply's question is a card in that reply; any other (delete from Staff, screening criteria) a dialog.
             if (m.turnId && turnsRef.current.some((t) => t.id === m.turnId)) {
               setTurns((ts) => ts.map((t) => (t.id === m.turnId ? addConfirm(t, m.id, m.req) : t)));
+              // Voice: the question waits on screen (the On screen panel); the voice asks for it.
+              setVoiceUi((v) => (v ? { ...v, line: `Waiting for your OK: ${m.req.title}` } : v));
               // The side panel is closed on another page: a short popup under its button.
               if (!dockVisible.current && pageRef.current !== "conversations") setAskPopup(m.req.title);
             } else setDialog({ id: m.id, req: m.req });
@@ -658,7 +664,8 @@ function Shell({ api }: { api: Api }) {
             onEndVoice={voiceProps.onEnd}
           />
         )}
-        {showPanel && <AttentionPanel reminders={reminders} rulesChecked={state?.rulesChecked ?? null} onAsk={(r) => void send(`Help me with this: ${r.title}`)} onOpenEmployee={openEmployee} />}
+        {showPanel && voiceUi && <VoiceStage turns={turns.slice(voiceFrom.current).filter((t) => t.voice)} api={api} onAnswer={(id, yes) => void answer(id, yes)} />}
+        {showPanel && !voiceUi && <AttentionPanel reminders={reminders} rulesChecked={state?.rulesChecked ?? null} onAsk={(r) => void send(`Help me with this: ${r.title}`)} onOpenEmployee={openEmployee} />}
       </div>
       )}
       {attentionOpen && !showPanel && (

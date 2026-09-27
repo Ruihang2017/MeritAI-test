@@ -56,13 +56,16 @@ export class UiSession {
     new Promise<boolean>((resolve) => {
       const id = ctx?.id ?? randomUUID();
       const store = this.origin.getStore();
-      const turnId = store ? store.turnId : this.turn;
+      // A voice reply's questions belong to its turn (voice has no send request).
+      const turnId = store ? store.turnId : (this.turn ?? this.voiceTurn);
       this.waiting.set(id, { req, turnId, resolve });
       ctx?.signal.addEventListener(
         "abort",
         () => {
-          if (this.waiting.delete(id)) this.emit({ event: "confirmWithdrawn", id });
-          resolve(false);
+          // Answered by voice ("yes"): every tab shows the answer; otherwise the question was withdrawn.
+          const reason = ctx.signal.reason as { answered?: boolean } | undefined;
+          if (this.waiting.delete(id)) this.emit(typeof reason?.answered === "boolean" ? { event: "confirmAnswered", id, yes: reason.answered } : { event: "confirmWithdrawn", id });
+          resolve(typeof reason?.answered === "boolean" ? reason.answered : false);
         },
         { once: true },
       );
@@ -304,7 +307,9 @@ export class UiSession {
       return this.exclusive("Starting voice", async () => {
         const source = new PushSource();
         const sink = { start() {}, stop() {}, play: (pcm: Buffer) => owner({ event: "voiceAudio", pcm: pcm.toString("base64") }) };
-        const ctl = await this.app.startVoice(
+        // Voice's own work (the live session, its delegations and replies) runs outside this request, so
+        // its questions and changes belong to the voice reply, not to a form (see `origin`).
+        const ctl = await this.origin.exit(() => this.app.startVoice(
           {
             onRequest: (text, mode) => {
               if (mode === "new" || !this.voiceTurn) this.voiceTurn = randomUUID();
@@ -326,7 +331,9 @@ export class UiSession {
             },
           },
           { source, sink },
-        );
+          // The page shows questions during voice: a click or a spoken "yes" answers them.
+          { confirmOnScreen: true },
+        ));
         this.voice = { ctl, source, owner };
         return { started: true as const };
       });
@@ -334,7 +341,8 @@ export class UiSession {
     voiceAudio: async (p) => {
       const v = this.voice;
       if (!v || this.caller.getStore() !== v.owner) return null;
-      v.source.push(Buffer.from(str(p?.pcm, "pcm", 40_000), "base64"));
+      const pcm = Buffer.from(str(p?.pcm, "pcm", 40_000), "base64");
+      this.origin.exit(() => v.source.push(pcm));
       return null;
     },
     voiceStop: async () => {
