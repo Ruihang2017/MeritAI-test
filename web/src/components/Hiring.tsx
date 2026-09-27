@@ -5,6 +5,7 @@ import type { Api } from "../api";
 import { fmtDate, fmtDay, localDay } from "../format";
 import { Icon } from "./Icon";
 import { fromJob, type Ask, type Asking } from "../ask";
+import { markLabel, marks, useLive } from "../live";
 
 // The Hiring page as on the design canvas (Hiring*, artboards): jobs on the left, the selected
 // job's steps, criteria, applications and ranked candidates on the right.
@@ -41,7 +42,10 @@ export function HiringPage({
   refreshKey,
   onHire,
   onOpenEmployee,
+  arrival,
 }: {
+  /** What the adviser changed here meanwhile (design: SyncStaff, for Hiring). */
+  arrival?: React.ReactNode;
   api: Api;
   progress: string | null;
   /** Asks MeritAI in the side panel, about a job. */
@@ -236,6 +240,7 @@ export function HiringPage({
       </section>
 
       <section className="job-pane">
+        {arrival && <div className="arrival-wrap">{arrival}</div>}
         {jobs?.length === 0 && (
           <div className="center dots" style={{ flexGrow: 1 }}>
             <div className="card empty-card">
@@ -370,6 +375,8 @@ function JobPane(p: {
   onDuplicate: () => void;
 }) {
   const { job, result: r } = p;
+  const { recent } = useLive();
+  const candMarks = marks(recent, (x) => (x.kind === "candidate" && x.job === job.job ? x.file : null));
   const rubric = r.rubric;
   const confirmed = rubric?.confirmed ?? false;
   const screened = r.ranked.length;
@@ -859,12 +866,13 @@ function JobPane(p: {
                     </thead>
                     <tbody>
                       {rows.map((c) => (
-                        <tr key={c.file} className={p.cand?.file === c.file ? "sel" : ""}>
+                        <tr key={c.file} className={`${p.cand?.file === c.file ? "sel" : ""}${candMarks.has(c.file) ? " fresh" : ""}`}>
                           <td style={{ paddingLeft: 16 }}>{c.rank}</td>
                           <td className="b" style={{ whiteSpace: "nowrap" }}>
                             <button type="button" className="name-btn" onClick={() => p.onPick(c)}>
                               {c.name}
                             </button>
+                            {candMarks.has(c.file) && <span className="pill info fresh-pill">{markLabel(candMarks.get(c.file)!)}</span>}
                             {(c.evaluation.flags.suspiciousInstructions || c.evaluation.flags.differentRole) && (
                               <span className="flag-ic" role="img" aria-label={c.evaluation.flags.suspiciousInstructions ? "Hidden instructions in the file" : "Applied for a different role"} title={c.evaluation.flags.suspiciousInstructions ? "The file contains hidden instructions to the assessor" : "Applied for a different role"}>
                                 <Icon name="alert" size={14} />
@@ -997,11 +1005,13 @@ function HiredButton({ onClick, small }: { onClick: () => void; small?: boolean 
 
 /** One job in the list: open or closed, where it is, and how many are hired of how many. */
 function JobCard({ j, on, onPick }: { j: Job; on: boolean; onPick: () => void }) {
+  const { recent } = useLive();
+  const fresh = marks(recent, (r) => (r.kind === "job" || r.kind === "candidate" ? r.job : null)).get(j.job);
   const closed = !!j.closedAt;
   const pill = j.stage === "decided" ? `${j.shortlisted} shortlisted` : STAGE[j.stage];
   const tone = closed ? "n" : j.stage === "screened" || j.stage === "decided" || j.stage === "filled" ? "ok" : "warn";
   return (
-    <button type="button" className={`job${on ? " on" : ""}${closed ? " closed" : ""}`} onClick={onPick}>
+    <button type="button" className={`job${on ? " on" : ""}${closed ? " closed" : ""}${fresh ? " fresh" : ""}`} onClick={onPick} title={fresh ? fresh.change.summary : undefined}>
       <span className="job-top">
         <b className="ellipsis grow">{j.job}</b>
         <span className={closed ? "job-state closed" : "job-state"}>{closed ? "Closed" : "Open"}</span>

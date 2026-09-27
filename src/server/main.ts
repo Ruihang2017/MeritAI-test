@@ -46,8 +46,10 @@ async function demoWorkspace(): Promise<{ filesRoot: string; memoryRoot: string 
     const stamp = new Date().toISOString().replace(/\D/g, "").slice(0, 14);
     return { filesRoot: ensureFolders(resolve(ROOT, "workspace-demo", "fresh", stamp)).root, memoryRoot: resolve(ROOT, "memory-demo", "fresh", stamp) };
   }
-  const filesRoot = resolve(ROOT, "workspace-demo", "Wattle Lane");
-  const memoryRoot = resolve(ROOT, "memory-demo");
+  // --demo-dir <name>: a separate copy (e.g. for automated checks while another demo runs).
+  const dir = value("--demo-dir");
+  const filesRoot = resolve(ROOT, "workspace-demo", dir ?? "Wattle Lane");
+  const memoryRoot = resolve(ROOT, dir ? `memory-demo-${dir}` : "memory-demo");
   // The design's day (src/clock.ts), set before seeding, so the sample data reads as on the canvas.
   process.env.FX_TODAY ??= DEMO_TODAY;
   if (flag("--reseed")) {

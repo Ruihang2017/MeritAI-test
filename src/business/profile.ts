@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { now } from "../clock";
+import type { ChangeSink } from "../changes";
 
 /**
  * The business profile: one per business workspace (files root), stored as
@@ -208,7 +209,8 @@ export function describeChanges(current: BusinessProfile, patch: ProfilePatch): 
 export class BusinessStore {
   readonly path: string;
 
-  constructor(dataDir: string) {
+  /** `onChange`: told when the profile is saved (src/changes.ts). */
+  constructor(dataDir: string, private readonly onChange: ChangeSink = () => {}) {
     this.path = join(dataDir, "business.json");
   }
 
@@ -228,6 +230,7 @@ export class BusinessStore {
   update(patch: ProfilePatch): BusinessProfile {
     const next: BusinessProfile = { ...this.get(), ...patch, updatedAt: now().toISOString() };
     writeFileSync(this.path, JSON.stringify(next, null, 2) + "\n");
+    this.onChange({ ref: { kind: "profile" }, action: "updated", summary: "Business profile updated" });
     return next;
   }
 

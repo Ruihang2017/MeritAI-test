@@ -8,6 +8,7 @@ import { fmtDate, fmtDatesIn, fmtDay } from "../format";
 import { Icon } from "./Icon";
 import { todayIso } from "../clock";
 import { fromEmployee, type Ask } from "../ask";
+import { markLabel, marks, useLive } from "../live";
 
 const TYPES: EmployeeFields["employmentType"][] = ["full-time", "part-time", "casual", "fixed-term"];
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -24,7 +25,9 @@ type Panel =
   | { kind: "leftDone"; id: number; name: string; lines: string[]; checklist: LeavingItem[] }
   | null;
 
-export function StaffPage({ api, openId, addPrefill, onAsk: ask, onChanged, refreshKey }: { api: Api; openId?: number | null; addPrefill?: { name: string; role: string; hireFrom?: { job: string; file: string } } | null; onAsk: (a: Ask) => void; onChanged: () => void; refreshKey: number }) {
+export function StaffPage({ api, openId, openDocs, addPrefill, onAsk: ask, onChanged, refreshKey, arrival }: { api: Api; openId?: number | null; /** Open on the record-documents form (a card's "Record paperwork"). */ openDocs?: boolean; addPrefill?: { name: string; role: string; hireFrom?: { job: string; file: string } } | null; onAsk: (a: Ask) => void; onChanged: () => void; refreshKey: number; /** What the adviser changed here meanwhile (design: SyncStaff). */ arrival?: React.ReactNode }) {
+  const { recent } = useLive();
+  const marked = marks(recent, (r) => (r.kind === "employee" ? r.id : null));
   /** A request about someone; `draft`: fill the side panel's box and wait for the owner's words. */
   const onAsk = (r: { id: number; name: string }, text: string, draft = false) => ask({ text, from: fromEmployee(r.id, r.name), ...(draft ? { draft } : {}) });
   const [rows, setRows] = useState<StaffRow[] | null>(null);
@@ -33,7 +36,7 @@ export function StaffPage({ api, openId, addPrefill, onAsk: ask, onChanged, refr
   const [type, setType] = useState("");
   const [showLeft, setShowLeft] = useState(false);
   // Opened on someone (Attention's "Open employee"), or on the add form for a hire (Hiring's "Add to Staff").
-  const [panel, setPanel] = useState<Panel>(openId ? { kind: "detail", id: openId } : addPrefill ? { kind: "add", prefill: addPrefill } : null);
+  const [panel, setPanel] = useState<Panel>(openId ? { kind: openDocs ? "docs" : "detail", id: openId } : addPrefill ? { kind: "add", prefill: addPrefill } : null);
   const [menu, setMenu] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -106,6 +109,7 @@ export function StaffPage({ api, openId, addPrefill, onAsk: ask, onChanged, refr
       </div>
 
       <div className="staff-body">
+        {arrival}
         {error && (
           <div className="banner bad" role="alert" style={{ alignItems: "center" }}>
             <span className="grow">
@@ -179,12 +183,14 @@ export function StaffPage({ api, openId, addPrefill, onAsk: ask, onChanged, refr
                   {shown.map((r) => {
                     const missing = r.status === "active" ? r.documentsExpected.filter((d) => !d.recorded).length : 0;
                     const sel = panel && "id" in panel && panel.id === r.id;
+                    const mark = marked.get(r.id);
                     return (
-                      <tr key={r.id} className={`${sel ? "sel" : ""}${r.status === "left" ? " left" : ""}`}>
+                      <tr key={r.id} className={`${sel ? "sel" : ""}${r.status === "left" ? " left" : ""}${mark ? " fresh" : ""}`}>
                         <td className="b" style={{ paddingLeft: 16 }}>
                           <button type="button" className="name-btn" onClick={() => setPanel({ kind: "detail", id: r.id })}>
                             {r.name}
                           </button>
+                          {mark && <span className="pill info fresh-pill">{markLabel(mark)}</span>}
                           {r.status === "left" && <span className="pill n" style={{ marginLeft: 8 }}>Left</span>}
                         </td>
                         <td>{r.role}</td>

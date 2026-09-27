@@ -12,6 +12,7 @@ import { dayLabel, fmtDatesIn, fmtTime } from "../format";
 import { Icon } from "./Icon";
 import { MicButton, VoiceBanner, VoiceBar, type VoiceLevels, type VoiceNote, type VoiceUi } from "./Voice";
 import { ReplyFeedback } from "./Feedback";
+import { ChangeCards } from "./Changes";
 
 /** Voice in the browser, as the Conversations page shows it. */
 export interface VoiceProps {
@@ -209,7 +210,7 @@ function Welcome({ resumed, onPick, demo }: { resumed: string | null; onPick: (t
   );
 }
 
-export function TurnView({ turn, showDay, onAnswer, api, domains, onRedo }: { turn: Turn; showDay: boolean; onAnswer: (id: string, yes: boolean) => void; api: Api; domains: string[]; onRedo?: (text: string) => void }) {
+export function TurnView({ turn, showDay, onAnswer, api, domains, onRedo, compact }: { turn: Turn; showDay: boolean; onAnswer: (id: string, yes: boolean) => void; api: Api; domains: string[]; onRedo?: (text: string) => void; compact?: boolean }) {
   const [stepsOpen, setStepsOpen] = useState(false);
   const src = sources(turn, domains);
   const flagged = flaggedLinks(turn);
@@ -292,6 +293,7 @@ export function TurnView({ turn, showDay, onAnswer, api, domains, onRedo }: { tu
               ))}
             </div>
           )}
+          {turn.changes?.length ? <ChangeCards items={turn.changes} api={api} compact={compact} /> : null}
           {turn.status === "completed" && turn.blocks.some((b) => b.kind === "text") && <ReplyFeedback turn={turn} api={api} />}
           {src.length > 0 && turn.status !== "running" && (
             <div className="row-wrap">

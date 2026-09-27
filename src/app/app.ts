@@ -36,6 +36,8 @@ import { extractText } from "../files/parse";
 import { checkWithOpenAI, keyFormatProblem, VoiceKeyStore, type VoiceKeyStatus } from "../voice/keyStore";
 import { FakeLiveSession } from "../voice/fakeLive";
 import { FeedbackLog, RATING_REASONS, writeFeedbackFile } from "./feedback";
+import { linkHire } from "../business/hiring";
+import type { ChangeSink } from "../changes";
 
 /**
  * The application layer: everything a user interface needs, with no terminal code.
@@ -878,7 +880,10 @@ export class AssistantApp {
     const exists = listJobs(this.folders()).includes(job);
     if (exists) this.assertOpen(job);
     const result = await this.importJobFilesInto(job, jd, applications);
-    if (!exists && listJobs(this.folders()).includes(result.job)) this.setOpenings(result.job, opts.openings ?? 1);
+    if (!exists && listJobs(this.folders()).includes(result.job)) {
+      this.setOpenings(result.job, opts.openings ?? 1);
+      this.a.catalog().notify({ ref: { kind: "job", job: result.job }, action: "created", summary: `${result.job} created` });
+    }
     return result;
   }
 
@@ -986,6 +991,7 @@ export class AssistantApp {
       if (r.confirmed) cat.confirmRubric(to, copy.version);
     }
     this.setOpenings(to, openings);
+    cat.notify({ ref: { kind: "job", job: to }, action: "created", summary: `${to} created (a copy of ${job})` });
     return { job: to };
   }
 
@@ -994,13 +1000,13 @@ export class AssistantApp {
    * (the Staff form opened from the Hiring page). It also shortlists them.
    */
   recordHire(job: string, file: string, employeeId: number): void {
-    const cat = this.a.catalog();
-    const r = cat.latestRubric(job);
-    const app = cat.applications(job).find((a) => a.sourceRef === file && a.status === "ok");
-    if (!app || !r?.confirmed || !cat.getEvaluation(app.hash, job, r.version)) throw new Error(`"${file}" isn't a screened application of "${job}"`);
-    if (!this.a.register().get(employeeId)) throw new Error("no such employee");
-    cat.setDecision(job, app.hash, "shortlist");
-    cat.addHire(job, app.hash, employeeId);
+    // The same step as the adviser's add_employee with hiredFrom (src/business/hiring.ts).
+    linkHire(this.a.catalog(), this.a.register(), job, file, employeeId);
+  }
+
+  /** Every write to the register, jobs, profile and saved files, from a form or the adviser (src/changes.ts). */
+  onChange(f: ChangeSink): () => void {
+    return this.a.changes.on(f);
   }
 
   /**

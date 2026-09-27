@@ -5,7 +5,10 @@ import type { ShellState } from "../../src/server/protocol";
 import type { ConfirmRequest } from "../../src/engine/types";
 import { fmtDatesIn } from "./format";
 import { Api, type Connection } from "./api";
-import { addConfirm, applyEvent, setConfirm, turnsFromTranscript, type Turn } from "./conversation";
+import { addChange, addConfirm, applyEvent, setConfirm, turnsFromTranscript, type Turn } from "./conversation";
+import { LiveContext, pageOf, RECENT_MS, type Live, type OpenTarget, type Seen } from "./live";
+import { refKey } from "../../src/changes";
+import { ArrivalNote } from "./components/Changes";
 import { ConversationPage } from "./components/Conversation";
 import { Icon } from "./components/Icon";
 import { AppBar, AttentionPanel, Nav, type AskButton, type Page } from "./components/Shell";
@@ -46,8 +49,8 @@ function Shell({ api }: { api: Api }) {
   const [state, setState] = useState<ShellState | null>(null);
   const [page, setPage] = useState<Page>("conversations");
   /** An employee to open on the Staff page (Attention's "Open employee"). */
-  const [staffOpen, setStaffOpen] = useState<number | null>(null);
-  const openEmployee = (id: number) => (setStaffOpen(id), setPage("staff"));
+  const [staffOpen, setStaffOpen] = useState<{ id: number; docs: boolean; n: number } | null>(null);
+  const openEmployee = (id: number, docs = false) => (setStaffAdd(null), setStaffOpen((o) => ({ id, docs, n: (o?.n ?? 0) + 1 })), setPage("staff"));
   /** Someone hired from Hiring: the Staff page's add form, with their name and role filled in; saving records the hire. */
   const [staffAdd, setStaffAdd] = useState<{ name: string; role: string; hireFrom?: { job: string; file: string } } | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -111,6 +114,22 @@ function Shell({ api }: { api: Api }) {
   const [askPopup, setAskPopup] = useState<string | null>(null);
   /** Bumped after a reply or an answered question: open pages reload what the adviser may have changed. */
   const [refreshKey, setRefreshKey] = useState(0);
+  // ---- the conversation and the pages in step (design: SyncRules)
+  /** The adviser's recent changes (rows marked "New · MeritAI"). */
+  const [recentChanges, setRecentChanges] = useState<Seen[]>([]);
+  /** The adviser's changes to pages the owner wasn't on (a dot in the navigation until they look). */
+  const [unseen, setUnseen] = useState<Seen[]>([]);
+  /** What changed on this page while the owner was elsewhere (its note), until dismissed or they leave. */
+  const [arrivals, setArrivals] = useState<{ page: Page; items: Seen[] } | null>(null);
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Pages reload shortly after a change (several changes in a row: once). */
+  const bumpRefresh = () => {
+    if (refreshTimer.current) return;
+    refreshTimer.current = setTimeout(() => {
+      refreshTimer.current = null;
+      setRefreshKey((k) => k + 1);
+    }, 250);
+  };
   const [hiringJob, setHiringJob] = useState<{ job: string } | null>(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
@@ -289,6 +308,17 @@ function Shell({ api }: { api: Api }) {
             setTurns((ts) => ts.map((t) => setConfirm(t, m.id, "withdrawn")));
             setState((s) => (s ? { ...s, confirms: s.confirms.filter((c) => c.id !== m.id) } : s));
             break;
+          case "changed": {
+            bumpRefresh();
+            if (m.by !== "adviser") break;
+            // A new conversation has no stored title yet: its first message stands in.
+            const title = stateRef.current?.title ?? turnsRef.current.find((t) => t.id === m.turnId)?.user.text.slice(0, 60) ?? null;
+            const seen: Seen = { change: m.change, by: m.by, at: Date.now(), turnId: m.turnId, title };
+            setRecentChanges((r) => [...r.filter((x) => Date.now() - x.at < RECENT_MS), seen].slice(-100));
+            if (pageOf(m.change.ref) !== pageRef.current) setUnseen((u) => [...u, seen]);
+            if (m.turnId) setTurns((ts) => ts.map((t) => (t.id === m.turnId ? addChange(t, m.change) : t)));
+            break;
+          }
           case "progress":
             setLastProgress(m.message);
             if (pageRef.current !== "hiring") setToast(m.message);
@@ -474,12 +504,48 @@ function Shell({ api }: { api: Api }) {
     setPage(f.page);
   };
 
+  // Opening a page shows what changed there meanwhile and clears its dot.
+  useEffect(() => {
+    setArrivals((a) => (a && a.page !== page ? null : a));
+    const here = unseen.filter((s) => pageOf(s.change.ref) === page);
+    if (!here.length) return;
+    setArrivals((a) => ({ page, items: [...(a?.page === page ? a.items : []), ...here] }));
+    setUnseen((u) => u.filter((s) => pageOf(s.change.ref) !== page));
+  }, [page, unseen]);
+  const freshPages = new Set(unseen.map((s) => pageOf(s.change.ref)));
+  const openTarget = (t: OpenTarget) => {
+    switch (t.kind) {
+      case "employee":
+        return openEmployee(t.id, t.docs === true);
+      case "job":
+        setStaffOpen(null);
+        setHiringJob({ job: t.job });
+        return setPage("hiring");
+      case "files":
+        return setPage("files");
+      case "profile":
+        return setPage("profile");
+      case "conversation":
+        // Next to the page when it has the side panel; else the full view.
+        if (dockable) setDockOpen(true);
+        else setPage("conversations");
+    }
+  };
+  const live: Live = { recent: recentChanges, refreshKey, open: openTarget };
+  // One line per thing (a hire also shortlists: only the hire is said).
+  const arrivalNote = (p: Page) => {
+    if (arrivals?.page !== p) return null;
+    const last = new Map(arrivals.items.map((s) => [refKey(s.change.ref), s]));
+    return <ArrivalNote items={[...last.values()].map((s) => ({ summary: s.change.summary, title: s.title }))} onDismiss={() => setArrivals(null)} />;
+  };
+
   const currentThread = state?.threadId ?? null;
   const showPanel = page === "conversations" && wide;
   const askButton: AskButton = !dockable ? "none" : showDock ? "open" : waitingOnYou ? "waiting" : running ? "working" : "closed";
   const docked = showDock && wide;
 
   return (
+    <LiveContext.Provider value={live}>
     <div className={`m app${docked ? " dock-open" : ""}`}>
       <AppBar
         state={state}
@@ -532,7 +598,7 @@ function Shell({ api }: { api: Api }) {
         />
       ) : (
       <div className="body">
-        <Nav page={page} collapsed={docked} onFeedback={() => setFeedbackOpen(true)} onPage={(p) => (setStaffOpen(null), setStaffAdd(null), setPage(p))} onNew={() => void newConversation()} recent={recent} onRecent={(id) => void resume(id)} currentThread={currentThread} state={state} />
+        <Nav page={page} fresh={freshPages} collapsed={docked} onFeedback={() => setFeedbackOpen(true)} onPage={(p) => (setStaffOpen(null), setStaffAdd(null), setPage(p))} onNew={() => void newConversation()} recent={recent} onRecent={(id) => void resume(id)} currentThread={currentThread} state={state} />
         {page === "conversations" && (
           <ConversationPage
             api={api}
@@ -554,12 +620,12 @@ function Shell({ api }: { api: Api }) {
           />
         )}
         {page === "all" && <AllConversations api={api} onResume={(id) => void resume(id)} onNew={() => void newConversation()} />}
-        {page === "staff" && <StaffPage key={staffOpen ?? (staffAdd ? `add:${staffAdd.name}` : "list")} api={api} openId={staffOpen} addPrefill={staffAdd} onAsk={ask} onChanged={() => void refresh()} refreshKey={refreshKey} />}
-        {page === "files" && <FilesPage api={api} onAsk={ask} refreshKey={refreshKey} />}
-        {page === "profile" && <ProfilePage api={api} onAsk={() => ask({ text: "Set up my business profile", mode: "setup", from: FROM_PROFILE })} onChanged={() => void refresh()} refreshKey={refreshKey} />}
+        {page === "staff" && <StaffPage key={staffOpen ? `${staffOpen.id}:${staffOpen.n}` : staffAdd ? `add:${staffAdd.name}` : "list"} api={api} openId={staffOpen?.id ?? null} openDocs={staffOpen?.docs ?? false} addPrefill={staffAdd} onAsk={ask} onChanged={() => void refresh()} refreshKey={refreshKey} arrival={arrivalNote("staff")} />}
+        {page === "files" && <FilesPage api={api} onAsk={ask} refreshKey={refreshKey} arrival={arrivalNote("files")} />}
+        {page === "profile" && <ProfilePage api={api} onAsk={() => ask({ text: "Set up my business profile", mode: "setup", from: FROM_PROFILE })} onChanged={() => void refresh()} refreshKey={refreshKey} arrival={arrivalNote("profile")} />}
         {page === "memory" && <MemoryPage api={api} onProfile={() => setPage("profile")} />}
         {page === "settings" && <SettingsPage api={api} login={login} onChanged={() => void refresh()} />}
-        {page === "hiring" && <HiringPage api={api} progress={lastProgress} onAsk={ask} asking={{ running: turns.find((t) => t.status === "running")?.user.text ?? null, queued: queue.map((q) => q.text) }} openJob={hiringJob} refreshKey={refreshKey} onHire={(c, job) => (setStaffOpen(null), setStaffAdd({ name: c?.name ?? "", role: job, ...(c ? { hireFrom: { job, file: c.file } } : {}) }), setPage("staff"))} onOpenEmployee={openEmployee} />}
+        {page === "hiring" && <HiringPage api={api} progress={lastProgress} onAsk={ask} asking={{ running: turns.find((t) => t.status === "running")?.user.text ?? null, queued: queue.map((q) => q.text) }} openJob={hiringJob} refreshKey={refreshKey} arrival={arrivalNote("hiring")} onHire={(c, job) => (setStaffOpen(null), setStaffAdd({ name: c?.name ?? "", role: job, ...(c ? { hireFrom: { job, file: c.file } } : {}) }), setPage("staff"))} onOpenEmployee={(id) => openEmployee(id)} />}
         {/* Kept while closed on a page (a half-typed message survives closing it); hidden, not removed. */}
         {dockable && (
           <Dock
@@ -657,5 +723,6 @@ function Shell({ api }: { api: Api }) {
         </div>
       )}
     </div>
+    </LiveContext.Provider>
   );
 }

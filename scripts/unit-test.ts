@@ -954,6 +954,58 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   ]);
 }
 
+// ------------------------------------------------------------------ the conversation and the pages in step (changes, one path for hires)
+{
+  process.env.FX_FAKE_DELAY_MS = "2";
+  const root = join(TMP, "sync-files");
+  const hadToday = process.env.FX_TODAY;
+  process.env.FX_TODAY = DEMO_TODAY;
+  await seedDemo({ filesRoot: root, memoryRoot: join(TMP, "sync-mem"), userId: "unit-sync", memory: false });
+  const session = new UiSession({ engine: "fake" });
+  const app = new AssistantApp({ userId: "unit-sync", memoryRoot: join(TMP, "sync-mem"), filesRoot: root, format: "markdown", engine: "fake", ui: { confirm: session.confirm } });
+  session.attach(app);
+  await app.start();
+  await app.openSession();
+  const events: ServerEvent[] = [];
+  const questions: string[] = [];
+  session.subscribe((e) => {
+    events.push(e);
+    if (e.event === "confirm") {
+      questions.push(e.req.title + " | " + (e.req.items ?? []).join("; "));
+      void session.handle({ id: 99, method: "answerConfirm", params: { id: e.id, yes: true } });
+    }
+  });
+  const before = app.jobs().find((j) => j.job === "Team leader")!;
+  await session.handle({ id: 1, method: "send", params: { text: "Hannah accepted the Team leader offer, she starts Monday", turnId: "h1" } });
+  await new Promise<void>((ok) => { const t = setInterval(() => events.some((e) => e.event === "turnDone") && (clearInterval(t), ok()), 10); });
+  const after = app.jobs().find((j) => j.job === "Team leader")!;
+  const changed = events.filter((e): e is Extract<ServerEvent, { event: "changed" }> => e.event === "changed");
+  const hannah = app.staff().find((e) => e.name === "Hannah Cole");
+  // A form action (the owner's own) is marked "you", with no reply.
+  const n = changed.length;
+  await session.handle({ id: 2, method: "decide", params: { job: "Team leader", file: "Tariq Aziz CV.docx", decision: null } });
+  const mine = events.filter((e): e is Extract<ServerEvent, { event: "changed" }> => e.event === "changed").slice(n);
+  // The adviser's hiring tools: each asks first.
+  const tool = (name: string) => (app as unknown as { a: { engine: { opts: { tools: () => { name: string; handle: (a: unknown) => Promise<{ success: boolean; text: string }> }[] } } } }).a.engine.opts.tools().find((t) => t.name === name)!;
+  const list = await tool("list_candidates").handle({ job: "Team leader" });
+  const decided = await tool("decide_candidates").handle({ job: "Team leader", decisions: [{ candidate: "Daniel", decision: "not" }] });
+  const ambiguous = await tool("decide_candidates").handle({ job: "Team leader", decisions: [{ candidate: "Zed Nobody", decision: "not" }] });
+  const created = await tool("create_job").handle({ job: "Barista", openings: 2, jd: "# Barista\n\n(Synthetic test JD.)\n\n- Make coffee" });
+  const closed = await tool("update_job").handle({ job: "Barista", openings: null, open: false });
+  const barista = app.jobs().find((j) => j.job === "Barista");
+  await app.close();
+  if (hadToday === undefined) delete process.env.FX_TODAY;
+  else process.env.FX_TODAY = hadToday;
+  record("in step: changes and one path for hires", [
+    ["chat hire = Add to Staff: employee added, the job counts the hire", !!hannah && after.hired === before.hired + 1 && questions.some((q) => /Hired from: Team leader/.test(q))],
+    ["changes reported by the adviser, in the reply", changed.some((c) => c.by === "adviser" && c.turnId === "h1" && c.change.ref.kind === "employee" && c.change.action === "added") && changed.some((c) => c.by === "adviser" && c.turnId === "h1" && c.change.ref.kind === "candidate" && c.change.action === "hired")],
+    ["a form change is the owner's (no reply)", mine.length === 1 && mine[0].by === "you" && mine[0].turnId === null && mine[0].change.action === "cleared"],
+    ["list_candidates shows decisions and the hire", /Hannah Cole/.test(list.text) && /hired \(employee/.test(list.text) && /of 2 hired/.test(list.text)],
+    ["decide_candidates: asks, saves; an unknown name lists who there is", decided.success && /Not this time/.test(decided.text) && !ambiguous.success && /Candidates:/.test(ambiguous.text)],
+    ["create_job and update_job: asked, created with its JD, then closed", created.success && closed.success && barista?.openings === 2 && !!barista?.jd && !!barista?.closedAt && questions.some((q) => /Create the job "Barista"/.test(q))],
+  ], JSON.stringify({ questions, changed: changed.map((c) => [c.by, c.turnId, c.change.summary]), list: list.text.slice(0, 200), created: created.text }).slice(0, 900));
+}
+
 try {
   rmSync(TMP, { recursive: true, force: true });
 } catch {

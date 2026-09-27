@@ -68,7 +68,7 @@ export interface ToolOutcome {
  * confirmText() renders it for a terminal.
  */
 export interface ConfirmRequest {
-  kind: "profile" | "register" | "memory" | "folder-import" | "criteria" | "setup";
+  kind: "profile" | "register" | "memory" | "folder-import" | "criteria" | "setup" | "hiring";
   /** The question, e.g. "Save to the business profile?" */
   title: string;
   /** What would change, one line each. */

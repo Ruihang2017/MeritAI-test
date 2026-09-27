@@ -88,6 +88,7 @@ export async function ingestJob(cat: Catalog, folders: Folders, job: string, onP
   }
   cat.removeUnseen(job, FOLDER_SOURCE, seen);
   summary.applications = apps.length;
+  if (summary.newApplications > 0) cat.notify({ ref: { kind: "job", job }, action: "applications", summary: `${job}: ${summary.newApplications} new application(s)` });
   return summary;
 }
 
@@ -319,6 +320,7 @@ export async function screenJob(
     }
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, batch.length) }, worker));
+  if (batch.length > failed.length) cat.notify({ ref: { kind: "job", job }, action: "screened", summary: `${job}: ${batch.length - failed.length} screened` });
 
   const evaluated = apps.flatMap((a) => {
     const e = cat.getEvaluation(a.hash, job, rubric.version);

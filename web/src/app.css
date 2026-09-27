@@ -2545,3 +2545,135 @@ button.sample {
 .fb-box b {
   font-weight: 600;
 }
+
+/* ---- the conversation and the pages in step (design: SyncChat, SyncStaff, SyncRules) */
+.changes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chg {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 1px 3px rgba(27, 31, 39, 0.06);
+}
+.changes.compact .chg {
+  padding: 12px 12px;
+}
+.chg-h {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.chg-av,
+.chg-ic {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: #dce6fa;
+  color: #1446a6;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.chg-ic {
+  border-radius: 10px;
+  background: #eef3fc;
+}
+.chg-t {
+  flex-grow: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.chg-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.chg-name b {
+  font-size: 15px;
+}
+.chg-name .pill {
+  height: 22px;
+}
+.chg-where {
+  font-size: 11px;
+}
+.changes.compact .chg-where {
+  display: none;
+}
+.chg-body {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #4a5363;
+}
+.chg-body b {
+  color: #1b1f27;
+}
+.chg-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: #ebeef3;
+  overflow: hidden;
+}
+.chg-bar span {
+  display: block;
+  height: 6px;
+  background: #2e9d5b;
+}
+.fresh-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #1a57cc;
+  flex-shrink: 0;
+}
+.nav-icon .fresh-dot {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  box-sizing: content-box;
+  border: 2px solid #fafbfd;
+}
+.tbl tr.fresh td {
+  background: #eef3fc;
+}
+.tbl tr.fresh td:first-child {
+  box-shadow: inset 4px 0 0 #1a57cc;
+}
+.fresh-pill {
+  height: 20px;
+  font-size: 11px;
+  margin-left: 8px;
+  vertical-align: 1px;
+}
+.job.fresh {
+  box-shadow: inset 4px 0 0 #1a57cc;
+}
+.arrival {
+  align-items: center;
+}
+.arrival-av {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: #1a57cc;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.arrival-wrap {
+  padding: 16px 28px 0;
+}

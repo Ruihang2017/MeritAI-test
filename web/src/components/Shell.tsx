@@ -124,7 +124,10 @@ export function Nav({
   state,
   collapsed = false,
   onFeedback,
+  fresh,
 }: {
+  /** Pages the adviser changed while the owner was elsewhere (a blue dot until they open them). */
+  fresh?: Set<Page>;
   /** "Send feedback" in the account menu. */
   onFeedback: () => void;
   /** Icons only (the side panel is open and needs the room). */
@@ -182,12 +185,14 @@ export function Nav({
               {badge.n}
             </span>
           )}
+          {!on && fresh?.has(it.key) && <span className="fresh-dot" title="Changed by MeritAI" />}
         </button>
       );
     return (
       <button key={it.key} type="button" className={`nav-item${on ? " on" : ""}`} aria-current={on ? "page" : undefined} onClick={() => onPage(it.key)}>
         <Icon name={it.icon} />
         <span className="grow">{it.label}</span>
+        {!on && fresh?.has(it.key) && <span className="fresh-dot" title="Changed by MeritAI" aria-label="changed by MeritAI" />}
         {badge && (
           <span className="badge" style={{ background: badge.bg, color: badge.fg }}>
             {badge.n}

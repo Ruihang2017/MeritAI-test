@@ -44,7 +44,8 @@ export function checkNewEmployee(register: Register, raw: unknown): Checked<{ in
   }
   const dup = register.list().find((x) => x.name.toLowerCase() === input.name!.toLowerCase());
   if (dup) return { ok: false, error: `"${dup.name}" is already in the register as [${dup.id}]`, duplicate: dup };
-  return { ok: true, input, lines: describeFields(input) };
+  const filled = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== null && v !== undefined && v !== "")) as EmployeeInput;
+  return { ok: true, input, lines: describeFields(filled) };
 }
 
 export function checkEmployeeChanges(register: Register, id: number, raw: unknown): Checked<{ current: Employee; changes: EmployeeInput; lines: string[] }> {

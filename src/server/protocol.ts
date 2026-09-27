@@ -13,6 +13,7 @@ import type { Reminder } from "../business/reminders";
 import type { Preference, SessionFrom, SessionRecord, TaskNote } from "../memory/store";
 import type { BusinessProfile } from "../business/profile";
 import type { VoiceKeyStatus } from "../voice/keyStore";
+import type { EntityChange } from "../changes";
 
 /** Everything the UI can call. Anything else is refused by the server. */
 export interface Methods {
@@ -193,6 +194,11 @@ export type ServerEvent =
   | { event: "confirmAnswered"; id: string; yes: boolean }
   | { event: "confirmWithdrawn"; id: string }
   | { event: "progress"; message: string }
+  /**
+   * Something in the business's data changed (src/changes.ts): by the adviser (in the reply `turnId`,
+   * or voice) or by the owner with a form. Pages showing it refresh; the adviser's changes are marked.
+   */
+  | { event: "changed"; change: EntityChange; by: "adviser" | "you"; turnId: string | null }
   /** Sign-in: open `url` and enter `code` (parsed from the engine prompt; `message` is the full text). */
   | { event: "login"; url: string | null; code: string | null; message: string }
   | VoiceEvent

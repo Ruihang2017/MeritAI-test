@@ -24,6 +24,10 @@ import { parentalLeaveTools } from "./business/parentalLeave";
 import { basePrompt, type ReplyFormat } from "./basePrompt";
 import { FakeEngine } from "./engine/fakeEngine";
 import { codexHomeFor } from "./engine/codexHome";
+import { Changes } from "./changes";
+import { hiringTools } from "./screening/hiringTools";
+import { candidates, findCandidate, hireCount, linkHire } from "./business/hiring";
+import { listJobs } from "./files/folders";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -39,6 +43,8 @@ export interface Assistant {
   /** The employee register of the current workspace. */
   register: () => Register;
   paths: { projectRoot: string; codexHome: string; memoryRoot: string };
+  /** Every write to the register, jobs, profile and saved files (src/changes.ts). */
+  changes: Changes;
 }
 
 /**
@@ -73,9 +79,10 @@ export function createAssistant(opts: {
   // The desktop app keeps memory in the user's app data (FX_MEMORY_ROOT).
   const memoryRoot = opts.memoryRoot ?? process.env.FX_MEMORY_ROOT ?? resolve(ROOT, "memory");
   const mem = new UserMemory(memoryRoot, opts.userId);
+  const changes = new Changes();
   const codexHome = codexHomeFor(ROOT);
   const folders = () => ensureFolders(mem.settings().filesRoot ?? defaultFilesRoot(ROOT));
-  const business = () => new BusinessStore(folders().data);
+  const business = () => new BusinessStore(folders().data, changes.emit);
 
   // One catalog per workspace; reopened if the user moves their folders (/files set).
   let cat: { dir: string; db: Catalog } | null = null;
@@ -83,7 +90,7 @@ export function createAssistant(opts: {
     const dir = folders().data;
     if (cat?.dir !== dir) {
       cat?.db.close();
-      cat = { dir, db: new Catalog(dir) };
+      cat = { dir, db: new Catalog(dir, changes.emit) };
     }
     return cat.db;
   };
@@ -92,7 +99,7 @@ export function createAssistant(opts: {
     const dir = folders().data;
     if (reg?.dir !== dir) {
       reg?.db.close();
-      reg = { dir, db: new Register(dir) };
+      reg = { dir, db: new Register(dir, changes.emit) };
     }
     return reg.db;
   };
@@ -102,13 +109,34 @@ export function createAssistant(opts: {
     ...businessTools({ store: business, confirm: opts.confirm }),
     ...policyTools(folders),
     ...onboardingTools(business),
-    ...registerTools({ register, business, confirm: opts.confirm }),
+    ...registerTools({
+      register,
+      business,
+      confirm: opts.confirm,
+      hires: {
+        find: (job, who) => {
+          if (!listJobs(folders()).includes(job)) return { ok: false, error: `no job called "${job}"` };
+          const f = findCandidate(catalog(), job, who);
+          return f.ok ? { ok: true, file: f.candidate.file, name: f.candidate.name } : f;
+        },
+        link: (job, file, employeeId) => {
+          linkHire(catalog(), register(), job, file, employeeId);
+          const c = hireCount(catalog(), register(), job);
+          return `${c.hired} of ${c.openings} hired.${c.hired >= c.openings && !c.closed ? " Everyone the job needs is hired: ask the owner whether to close it (update_job with open: false)." : ""}`;
+        },
+        jobsWith: (name) => {
+          const n = name.toLowerCase().trim();
+          return listJobs(folders()).filter((j) => !catalog().jobSettings(j).closedAt && candidates(catalog(), j).some((c) => !c.employeeId && c.name.toLowerCase().trim() === n));
+        },
+      },
+    }),
     ...leavingTools(business),
     ...parentalLeaveTools(todayLocal),
     ...reminderTools({ register, business }),
     officialSourcesTool(() => engine),
-    ...fileTools(folders),
+    ...fileTools(folders, changes.emit),
     ...screeningTools({ engine: () => engine, folders, catalog, onProgress: opts.onProgress }),
+    ...hiringTools({ folders, catalog, register, confirm: opts.confirm }),
   ];
 
   const engine: Engine = opts.engine === "fake" ? new FakeEngine({ tools, codexHome, ...(process.env.FX_FAKE_DELAY_MS ? { delayMs: Number(process.env.FX_FAKE_DELAY_MS) } : {}) }) : new AppServerEngine({
@@ -130,5 +158,5 @@ export function createAssistant(opts: {
     onLog: opts.onLog,
   });
 
-  return { engine, mem, folders, business, catalog, register, paths: { projectRoot: ROOT, codexHome, memoryRoot } };
+  return { engine, mem, folders, business, catalog, register, paths: { projectRoot: ROOT, codexHome, memoryRoot }, changes };
 }

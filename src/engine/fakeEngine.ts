@@ -231,6 +231,7 @@ export class FakeEngine implements Engine {
       yield { type: "turn_end", status: "failed", error: "usage limit" };
       return;
     }
+    if (/accepted|hired|录用|接受了/.test(t)) return yield* this.hired(text);
     if (/resign|quit|leaving|辞职|离职/.test(t)) return yield* this.leaving(text);
     if (/this week|remind|what('s| is) due|提醒|到期/.test(t) && !/final pay|最终工资/.test(t)) return yield* this.reminders();
     if (/calculat|算一下|总共/.test(t)) {
@@ -274,6 +275,33 @@ export class FakeEngine implements Engine {
     } else {
       yield* this.say("I couldn't find them in the register, so I haven't changed it.");
     }
+  }
+
+  /** "Hannah accepted the offer": find the candidate in the open jobs, then add her with the hire linked (as Add to Staff does). */
+  private async *hired(text: string): AsyncIterable<EngineEvent> {
+    const jobs = yield* this.tool("list_jobs", {});
+    const names = [...(jobs?.text ?? "").matchAll(/^- ([^:]+):/gm)].map((m) => m[1]);
+    let found: { job: string; name: string } | null = null;
+    for (const job of names) {
+      const c = yield* this.tool("list_candidates", { job });
+      for (const m of (c?.text ?? "").matchAll(/^- ([^(]+) \(file: /gm)) {
+        const name = m[1].trim();
+        if (!found && text.toLowerCase().includes(name.split(" ")[0].toLowerCase())) found = { job, name };
+      }
+      if (found) break;
+    }
+    if (!found) {
+      yield* this.say("I couldn't find that candidate in your open jobs. Who accepted, and for which job?");
+      return;
+    }
+    const start = /monday|mon|周一/i.test(text) ? "2026-10-05" : "2026-10-12";
+    const r = yield* this.tool("add_employee", { name: found.name, role: found.job, employmentType: /part/i.test(text) ? "part-time" : /casual/i.test(text) ? "casual" : "full-time", startDate: start, endDate: null, award: null, classification: null, probationEnd: null, visaExpiry: null, notes: null, hiredFrom: { job: found.job, candidate: found.name } });
+    if (!r?.success || /not saved|did not confirm/i.test(r.text)) {
+      yield* this.say(r?.success ? "Okay, I haven't added her." : `I couldn't add them: ${r?.text ?? "unknown error"}`);
+      return;
+    }
+    yield* this.tool("new_starter_checklist", { employment_type: "full-time", may_need_visa_check: true, is_apprentice_or_trainee: false, works_on_construction_sites: false, first_employee: false, working_holiday_maker: false });
+    yield* this.say(`Great news. ${found.name} is on your staff list now, and the ${found.job} job counts the hire. Before day one, give the Fair Work Information Statement and a TFN declaration, and ask for their super choice.\n\n_Demo reply from the fake engine._`);
   }
 
   private async *reminders(): AsyncIterable<EngineEvent> {

@@ -43,7 +43,15 @@ export function fixedTermSpan(start: string, end: string): string {
     : `${span} That is within the 2-year limit only if there were no earlier contracts or extensions for this role. Tell the owner this counts as the one extension allowed: if the contract was already extended or renewed once, another extension isn't allowed unless an exception applies. Steps: 1. check earlier contracts and extensions; 2. put the extension in writing (a new contract also needs the FTCIS); 3. offer to draft the letter.`;
 }
 
-export function registerTools(opts: { register: () => Register; business: () => BusinessStore; confirm: Confirm }): ClientTool[] {
+/** A hire from a job, for add_employee's hiredFrom (the jobs and candidates live in the screening catalog). */
+export interface HireLink {
+  find(job: string, candidate: string): { ok: true; file: string; name: string } | { ok: false; error: string };
+  link(job: string, file: string, employeeId: number): string;
+  /** Open jobs with a candidate of this name (to suggest linking a hire the owner didn't mention). */
+  jobsWith(name: string): string[];
+}
+
+export function registerTools(opts: { register: () => Register; business: () => BusinessStore; confirm: Confirm; hires?: HireLink }): ClientTool[] {
   const { confirm } = opts;
 
   return [
@@ -75,23 +83,52 @@ export function registerTools(opts: { register: () => Register; business: () => 
     {
       name: "add_employee",
       description:
-        "Add a new employee to the register (after an offer is accepted or when the owner lists their staff). Call it directly: the app shows the details to the owner and asks [y/n] itself, so do not ask for confirmation in the chat first. Work details only.",
+        "Add a new employee to the register (after an offer is accepted or when the owner lists their staff). Call it directly: the app shows the details to the owner and asks [y/n] itself, so do not ask for confirmation in the chat first. Work details only. " +
+        "When they were hired from a job on the Hiring page (a candidate who accepted an offer), pass hiredFrom with the job and the candidate (list_candidates shows them), so the job counts the hire, as Add to Staff on the Hiring page does.",
       inputSchema: {
         type: "object",
-        properties: EMPLOYEE_FIELDS,
-        required: ["name", "role", "employmentType", "startDate", "endDate", "award", "classification", "probationEnd", "visaExpiry", "notes"],
+        properties: {
+          ...EMPLOYEE_FIELDS,
+          hiredFrom: {
+            type: ["object", "null"],
+            description: "The job and candidate they were hired from, or null.",
+            properties: { job: { type: "string", description: "Job folder name, as list_jobs shows it." }, candidate: { type: "string", description: "Candidate name or application file, as list_candidates shows it." } },
+            required: ["job", "candidate"],
+            additionalProperties: false,
+          },
+        },
+        required: ["name", "role", "employmentType", "startDate", "endDate", "award", "classification", "probationEnd", "visaExpiry", "notes", "hiredFrom"],
         additionalProperties: false,
       },
       handle: async (args) => {
-        const c = checkNewEmployee(opts.register(), args);
+        const { hiredFrom, ...details } = (args ?? {}) as Record<string, unknown> & { hiredFrom?: { job?: string; candidate?: string } | null };
+        let hire: { job: string; file: string; name: string } | null = null;
+        if (hiredFrom && opts.hires) {
+          const f = opts.hires.find(String(hiredFrom.job ?? ""), String(hiredFrom.candidate ?? ""));
+          if (!f.ok) return fail(`Not saved: ${f.error}.`);
+          hire = { job: String(hiredFrom.job), file: f.file, name: f.name };
+        }
+        const c = checkNewEmployee(opts.register(), details);
         if (!c.ok) {
           const dup = c.duplicate;
           return fail(dup ? `Not saved: "${dup.name}" is already in the register as [${dup.id}]. Use update_employee to change their details, or ask the owner if this is a different person.` : `Not saved: ${c.error}.`);
         }
         const e = c.input;
-        if (!(await confirm({ kind: "register", title: "Add to the employee register?", items: c.lines }))) return { success: true, text: "The owner did not confirm; nothing was saved.", display: "register: not saved" };
+        const items = hire ? [...c.lines, `Hired from: ${hire.job} (${hire.name}'s application)`] : c.lines;
+        if (!(await confirm({ kind: "register", title: "Add to the employee register?", items }))) return { success: true, text: "The owner did not confirm; nothing was saved.", display: "register: not saved" };
         const saved = opts.register().add(e);
-        return { success: true, text: `Added: ${employeeLine(saved)}`, display: `register: added [${saved.id}] ${saved.name}` };
+        let note = "";
+        if (hire && opts.hires) {
+          try {
+            note = `\n\nHired from "${hire.job}": ${opts.hires.link(hire.job, hire.file, saved.id)}`;
+          } catch (err) {
+            note = `\n\nThe hire couldn't be linked to "${hire.job}" (${(err as Error).message}); the employee is saved.`;
+          }
+        } else if (opts.hires) {
+          const jobs = opts.hires.jobsWith(saved.name);
+          if (jobs.length) note = `\n\n${saved.name} is also a candidate for: ${jobs.join(", ")}. If they were hired from that job, call record_hire so the job counts the hire.`;
+        }
+        return { success: true, text: `Added: ${employeeLine(saved)}${note}`, display: `register: added [${saved.id}] ${saved.name}` };
       },
     },
     {

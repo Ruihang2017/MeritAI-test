@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import { now } from "../clock";
+import type { ChangeSink, EntityChange } from "../changes";
 
 /**
  * Application catalog: one SQLite file per files root (<root>/.assistant/catalog.sqlite).
@@ -67,7 +68,8 @@ export type Decision = "shortlist" | "not";
 export class Catalog {
   private db: DatabaseSync;
 
-  constructor(dataDir: string) {
+  /** `onChange`: told about the owner-visible writes (decisions, hires, criteria, job settings; src/changes.ts). */
+  constructor(dataDir: string, private readonly onChange: ChangeSink = () => {}) {
     this.db = new DatabaseSync(join(dataDir, "catalog.sqlite"));
     this.db.exec(`
       PRAGMA journal_mode = WAL;
@@ -104,6 +106,17 @@ export class Catalog {
 
   close(): void {
     this.db.close();
+  }
+
+  /** Reports a change made outside the catalog's own writes (screening runs, new applications, saved files). */
+  notify(c: EntityChange): void {
+    this.onChange(c);
+  }
+
+  /** The candidate (file and name) behind a screened application's content hash. */
+  private candidate(job: string, hash: string): { kind: "candidate"; job: string; file: string; name: string } | null {
+    const r = this.db.prepare("SELECT source_ref, display_name FROM applications WHERE job = ? AND hash = ? AND status = 'ok' LIMIT 1").get(job, hash) as { source_ref: string; display_name: string | null } | undefined;
+    return r ? { kind: "candidate", job, file: r.source_ref, name: r.display_name ?? r.source_ref } : null;
   }
 
   // ---------------------------------------------------------------- texts
@@ -199,6 +212,8 @@ export class Catalog {
   setDecision(job: string, hash: string, decision: Decision | null): void {
     if (decision === null) this.db.prepare("DELETE FROM decisions WHERE job = ? AND hash = ?").run(job, hash);
     else this.db.prepare("INSERT OR REPLACE INTO decisions (job, hash, decision, decided_at) VALUES (?, ?, ?, ?)").run(job, hash, decision, now().toISOString());
+    const ref = this.candidate(job, hash);
+    if (ref) this.onChange({ ref, action: decision === "shortlist" ? "shortlisted" : decision === "not" ? "not" : "cleared", summary: `${ref.name}: ${decision === "shortlist" ? "shortlisted" : decision === "not" ? "not this time" : "decision cleared"}` });
   }
 
   decisions(job: string): Map<string, { decision: Decision; decidedAt: string }> {
@@ -216,12 +231,14 @@ export class Catalog {
 
   setOpenings(job: string, openings: number): void {
     this.db.prepare("INSERT INTO job_settings (job, openings) VALUES (?, ?) ON CONFLICT(job) DO UPDATE SET openings = excluded.openings").run(job, openings);
+    this.onChange({ ref: { kind: "job", job }, action: "openings", summary: `${job}: ${openings} to hire` });
   }
 
   /** Closes the job (now, or at `when`: the demo seed) or reopens it. */
   setClosed(job: string, closed: boolean, when?: string): void {
     const at = closed ? (when ?? now().toISOString()) : null;
     this.db.prepare("INSERT INTO job_settings (job, closed_at) VALUES (?, ?) ON CONFLICT(job) DO UPDATE SET closed_at = excluded.closed_at").run(job, at);
+    this.onChange({ ref: { kind: "job", job }, action: closed ? "closed" : "reopened", summary: `${job} ${closed ? "closed" : "reopened"}` });
   }
 
   hires(job: string): Map<string, { employeeId: number; hiredAt: string }> {
@@ -231,10 +248,13 @@ export class Catalog {
 
   addHire(job: string, hash: string, employeeId: number): void {
     this.db.prepare("INSERT OR REPLACE INTO hires (job, hash, employee_id, hired_at) VALUES (?, ?, ?, ?)").run(job, hash, employeeId, now().toISOString());
+    const ref = this.candidate(job, hash);
+    if (ref) this.onChange({ ref, action: "hired", summary: `${ref.name} hired for ${job}` });
   }
 
   removeHire(job: string, hash: string): void {
     this.db.prepare("DELETE FROM hires WHERE job = ? AND hash = ?").run(job, hash);
+    this.onChange({ ref: { kind: "job", job }, action: "openings", summary: `${job}: a hire was undone` });
   }
 
   // ---------------------------------------------------------------- rubrics
@@ -250,11 +270,13 @@ export class Catalog {
     this.db
       .prepare("INSERT INTO rubrics (job, version, role, criteria, jd_hash, confirmed, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)")
       .run(job, version, role, JSON.stringify(criteria), jdHash, createdAt);
+    this.onChange({ ref: { kind: "job", job }, action: "criteria-drafted", summary: `${job}: criteria drafted (v${version})` });
     return { job, version, role, criteria, jdHash, confirmed: false, createdAt, confirmedAt: null };
   }
 
   confirmRubric(job: string, version: number): void {
     this.db.prepare("UPDATE rubrics SET confirmed = 1, confirmed_at = ? WHERE job = ? AND version = ?").run(now().toISOString(), job, version);
+    this.onChange({ ref: { kind: "job", job }, action: "criteria-confirmed", summary: `${job}: criteria confirmed` });
   }
 
   // ------------------------------------------------------------ evaluations

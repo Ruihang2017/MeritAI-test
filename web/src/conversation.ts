@@ -1,5 +1,6 @@
 import type { AppEvent } from "../../src/app/app";
 import type { ConfirmRequest } from "../../src/engine/types";
+import { refKey, type ChangeAction, type EntityChange, type EntityRef } from "../../src/changes";
 
 /** One part of an assistant reply, in the order it arrived. */
 export type Block =
@@ -17,8 +18,18 @@ export interface Step {
   files?: string[];
 }
 
+/** A thing a reply changed (design: SyncChat's "What changed"), with what happened to it, in order. */
+export interface TurnChange {
+  key: string;
+  ref: EntityRef;
+  actions: ChangeAction[];
+  summary: string;
+}
+
 export interface Turn {
   id: string;
+  /** What the reply changed (employees, jobs, candidates, files, the profile). */
+  changes?: TurnChange[];
   at: Date;
   user: { text: string; attachments: string[] };
   skill?: string;
@@ -123,6 +134,15 @@ export function turnsFromTranscript(entries: { role: "user" | "assistant"; text:
     }
   }
   return turns;
+}
+
+/** A change the adviser made during this turn joins its "What changed" (one entry per thing). */
+export function addChange(turn: Turn, c: EntityChange): Turn {
+  const key = refKey(c.ref);
+  const list = turn.changes ?? [];
+  const i = list.findIndex((x) => x.key === key);
+  const next = i >= 0 ? list.map((x, j) => (j === i ? { ...x, ref: c.ref, actions: [...x.actions, c.action], summary: c.summary } : x)) : [...list, { key, ref: c.ref, actions: [c.action], summary: c.summary }];
+  return { ...turn, changes: next };
 }
 
 /** A confirmation question joins the running turn. */

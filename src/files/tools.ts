@@ -4,6 +4,7 @@ import type { ClientTool, ToolOutcome } from "../engine/types";
 import { resolveInside, sanitizeStem, type Folders } from "./folders";
 import { extractText, READABLE, UnreadableFileError } from "./parse";
 import { markdownToDocx } from "./docx";
+import type { ChangeSink } from "../changes";
 
 /** Content accepted by save_document; far above any real document. */
 const MAX_SAVE_CHARS = 200_000;
@@ -66,7 +67,8 @@ export function writeNew(outbox: string, stem: string, ext: string, data: string
 
 const fail = (text: string): ToolOutcome => ({ success: false, text });
 
-export function fileTools(getFolders: () => Folders): ClientTool[] {
+/** `onChange`: told about saved files (src/changes.ts). */
+export function fileTools(getFolders: () => Folders, onChange: ChangeSink = () => {}): ClientTool[] {
   return [
     {
       name: "list_files",
@@ -142,6 +144,7 @@ export function fileTools(getFolders: () => Folders): ClientTool[] {
         const { outbox } = getFolders();
         const data = format === "docx" ? await markdownToDocx(content, stem) : content.endsWith("\n") ? content : content + "\n";
         const saved = writeNew(outbox, stem, `.${format}`, data);
+        onChange({ ref: { kind: "file", path: join(outbox, saved), name: saved }, action: "saved", summary: `${saved} saved to the Outbox` });
         return {
           success: true,
           text: `Saved to the Outbox as "${saved}". Tell the user the file name.`,

@@ -73,6 +73,12 @@ export class UiSession {
 
   attach(app: AssistantApp): this {
     this.app = app;
+    // A form request runs with turnId null; the adviser's tool calls run in a reply (or outside any request: the real engine).
+    app.onChange((change) => {
+      const store = this.origin.getStore();
+      const by = store && store.turnId === null ? "you" : "adviser";
+      this.emit({ event: "changed", change, by, turnId: by === "adviser" ? (store?.turnId ?? this.turn ?? this.voiceTurn) : null });
+    });
     return this;
   }
 

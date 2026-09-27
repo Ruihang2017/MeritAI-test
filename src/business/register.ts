@@ -2,6 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import { findPii } from "../memory/store";
 import { EMPLOYMENT_TYPES } from "./profile";
+import type { ChangeSink } from "../changes";
 
 /**
  * The lightweight employee register (plan P2): who works here, on what terms,
@@ -118,7 +119,8 @@ type Row = Record<string, string | number | null>;
 export class Register {
   private db: DatabaseSync;
 
-  constructor(dataDir: string) {
+  /** `onChange`: told about every write (src/changes.ts), for a UI to keep its pages in step. */
+  constructor(dataDir: string, private readonly onChange: ChangeSink = () => {}) {
     this.db = new DatabaseSync(join(dataDir, "register.sqlite"));
     this.db.exec(`
       PRAGMA journal_mode = WAL;
@@ -179,31 +181,44 @@ export class Register {
     const r = this.db
       .prepare(`INSERT INTO employees (${keys.map((k) => COLS[k]).join(", ")}, created_at, updated_at) VALUES (${keys.map(() => "?").join(", ")}, ?, ?)`)
       .run(...keys.map((k) => (e as Record<string, string | null>)[k] ?? null), now, now);
-    return this.get(Number(r.lastInsertRowid))!;
+    const saved = this.get(Number(r.lastInsertRowid))!;
+    this.onChange({ ref: { kind: "employee", id: saved.id, name: saved.name }, action: "added", summary: `${saved.name} added` });
+    return saved;
   }
 
   update(id: number, changes: EmployeeInput): Employee {
     const keys = Object.keys(changes).filter((k) => COLS[k]);
-    if (!this.get(id)) throw new Error(`no employee with id ${id}`);
+    const before = this.get(id);
+    if (!before) throw new Error(`no employee with id ${id}`);
     if (keys.length) {
       this.db
         .prepare(`UPDATE employees SET ${keys.map((k) => `${COLS[k]} = ?`).join(", ")}, updated_at = ? WHERE id = ?`)
         .run(...keys.map((k) => (changes as Record<string, string | null>)[k] ?? null), new Date().toISOString(), id);
     }
-    return this.get(id)!;
+    const saved = this.get(id)!;
+    if (keys.length) {
+      const left = saved.status === "left" && before.status !== "left";
+      this.onChange({ ref: { kind: "employee", id, name: saved.name }, action: left ? "left" : "updated", summary: left ? `${saved.name} marked as left` : `${saved.name} updated` });
+    }
+    return saved;
   }
 
   recordDocuments(id: number, docs: DocumentId[], on: string): Employee {
     if (!this.get(id)) throw new Error(`no employee with id ${id}`);
     const st = this.db.prepare("INSERT INTO documents (employee_id, doc, done_on) VALUES (?, ?, ?) ON CONFLICT (employee_id, doc) DO UPDATE SET done_on = excluded.done_on");
     for (const d of docs) st.run(id, d, on);
-    return this.get(id)!;
+    const saved = this.get(id)!;
+    this.onChange({ ref: { kind: "employee", id, name: saved.name }, action: "documents", summary: `${docs.length} starting item(s) recorded for ${saved.name}` });
+    return saved;
   }
 
   /** Deletes the employee and their document records. */
   remove(id: number): Employee | null {
     const e = this.get(id);
-    if (e) this.db.prepare("DELETE FROM employees WHERE id = ?").run(id);
+    if (e) {
+      this.db.prepare("DELETE FROM employees WHERE id = ?").run(id);
+      this.onChange({ ref: { kind: "employee", id, name: e.name }, action: "removed", summary: `${e.name} deleted from the register` });
+    }
     return e;
   }
 }

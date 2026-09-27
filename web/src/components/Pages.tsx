@@ -58,7 +58,7 @@ function LoadError({ what, error, retry }: { what: string; error: string; retry:
 
 type Tab = "inbox" | "outbox" | "jobs" | "policies";
 
-export function FilesPage({ api, onAsk, refreshKey }: { api: Api; onAsk: (a: Ask) => void; refreshKey: number }) {
+export function FilesPage({ api, onAsk, refreshKey, arrival }: { api: Api; onAsk: (a: Ask) => void; refreshKey: number; arrival?: React.ReactNode }) {
   const load = useCallback(() => api.call("files"), [api]);
   const { data, error, reload } = useLoad<WorkspaceFiles>(load);
   // After a reply (drafts may have been saved to the Outbox).
@@ -98,6 +98,7 @@ export function FilesPage({ api, onAsk, refreshKey }: { api: Api; onAsk: (a: Ask
         )}
       </PageHead>
       <div className="staff-body">
+        {arrival}
         {error && <LoadError what="your files" error={error} retry={() => void reload()} />}
         <nav className="tabs" aria-label="Folders">
           {(
@@ -287,7 +288,7 @@ function adviserText(kind: string | null): string {
   return "For dismissals, disputes or legal risk, I'll point you to an employment lawyer, an employer association or the Fair Work Infoline (13 13 94).";
 }
 
-export function ProfilePage({ api, onAsk, onChanged, refreshKey }: { api: Api; onAsk: () => void; onChanged: () => void; refreshKey: number }) {
+export function ProfilePage({ api, onAsk, onChanged, refreshKey, arrival }: { api: Api; onAsk: () => void; onChanged: () => void; refreshKey: number; arrival?: React.ReactNode }) {
   const load = useCallback(() => api.call("profile"), [api]);
   const { data, error, reload } = useLoad(load);
   // After a reply or an answered question (the profile may have changed in the side panel).
@@ -353,6 +354,7 @@ export function ProfilePage({ api, onAsk, onChanged, refreshKey }: { api: Api; o
         )}
       </PageHead>
       <div className="staff-body">
+        {arrival}
         {error && <LoadError what="your business profile" error={error} retry={() => void reload()} />}
         {receipt && (
           <div className="receipt" style={{ alignItems: "flex-start" }}>

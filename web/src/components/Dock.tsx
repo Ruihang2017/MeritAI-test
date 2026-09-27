@@ -216,7 +216,7 @@ export function Dock(p: {
             </>
           )}
           {turns.map((t, i) => (
-            <TurnView key={t.id} turn={t} showDay={i > 0 && dayLabel(turns[i - 1].at) !== dayLabel(t.at)} onAnswer={p.onAnswer} api={p.api} domains={p.state?.officialDomains ?? []} />
+            <TurnView key={t.id} turn={t} showDay={i > 0 && dayLabel(turns[i - 1].at) !== dayLabel(t.at)} onAnswer={p.onAnswer} api={p.api} domains={p.state?.officialDomains ?? []} compact />
           ))}
           {p.queue.map((q, i) => (
             <div key={i} className="you queued">
