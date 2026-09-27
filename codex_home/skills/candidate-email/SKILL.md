@@ -37,3 +37,5 @@ Onboarding next steps: start date, time, location, who to ask for, what to bring
 ## Output
 
 Give the email ready to copy. If the user asks for several variants (e.g. warmer vs more formal), give at most 2 and label them.
+
+When the user wants to send it (or asks for it "as an email", or to email a document): save it with draft_email (plain text, the address only if they gave it, attachments by their Outbox file name: list_files with folder "outbox" if unsure). It opens in their own email app to check and send; say that MeritAI doesn't send email. For several candidates, one draft each.

@@ -454,6 +454,7 @@ function JobPane(p: {
           <span className="meta ellipsis">{sub}</span>
         </div>
         {screeningNow && <span className="pill info">Screening</span>}
+        <AdvertiseMenu onWrite={() => p.onAsk(`Write a job ad for "${job.job}" from its job description, ready to post on a job board. Save it to the Outbox as a Word document.`)} />
         {screened > 0 && (
           <>
             <button type="button" className="btn hide-docked" onClick={() => p.onAsk(kitPrompt)}>
@@ -978,6 +979,47 @@ function AskButton({ prompt, asking, busyLabel, primary, disabled, onAsk, childr
     <button type="button" className={`btn${primary ? " p" : ""}`} disabled={disabled} onClick={() => onAsk(prompt)}>
       {children}
     </button>
+  );
+}
+
+/** Advertise the job (design: SoonHiring): the ad today; posting to job boards is coming (Connections). */
+function AdvertiseMenu({ onWrite }: { onWrite: () => void }) {
+  const [open, setOpen] = useState(false);
+  const { open: go } = useLive();
+  return (
+    <div style={{ position: "relative" }}>
+      <button type="button" className="btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        Advertise
+        <Icon name="down" size={14} stroke={2} />
+      </button>
+      {open && (
+        <>
+          <div className="fill" style={{ zIndex: 29 }} onClick={() => setOpen(false)} />
+          <div className="menu adv-menu" role="menu" aria-label="Advertise the job">
+            <button type="button" role="menuitem" className="menu-item" onClick={() => (setOpen(false), onWrite())}>
+              <b>Write the job ad</b>
+              <span className="meta">MeritAI drafts it from the job description; you post it</span>
+            </button>
+            {[
+              ["Post to SEEK", "Applications come straight into this job"],
+              ["Post to LinkedIn Jobs", "Applicants collected here"],
+              ["Post to Indeed", "Applicants collected here"],
+            ].map(([t, d]) => (
+              <button key={t} type="button" role="menuitem" className="menu-item row" disabled title="Coming soon">
+                <span className="grow" style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                  <b style={{ color: "#5F6878" }}>{t}</b>
+                  <span className="meta">{d}</span>
+                </span>
+                <span className="pill soon">Coming soon</span>
+              </button>
+            ))}
+            <button type="button" className="link-btn" style={{ padding: "8px 10px", fontSize: 13, fontWeight: 700, textAlign: "left" }} onClick={() => (setOpen(false), go({ kind: "connections" }))}>
+              See all connections
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

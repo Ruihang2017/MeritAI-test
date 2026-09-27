@@ -48,6 +48,8 @@ export interface UserSettings {
   filesRoot?: string;
   /** DirectShow microphone name for voice mode; absent = the first one found. */
   micDevice?: string;
+  /** Voice stops once this month's estimated cost reaches it (US$); absent = no limit. */
+  voiceMonthlyLimitUsd?: number;
 }
 
 export const TASK_TTL_DAYS = 30;

@@ -1060,6 +1060,60 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   ], JSON.stringify(mine.filter((e) => e.event === "voice" || e.event === "confirm" || e.event === "confirmAnswered")).slice(0, 900));
 }
 
+// ------------------------------------------------------------------ voice usage (Settings): today, this month, all time; the monthly limit
+{
+  const { VoiceUsage, usdFor } = await import("../src/voice/usage");
+  const log = new VoiceUsage(join(TMP, "voice-usage.jsonl"));
+  const now = new Date(2026, 8, 27, 15, 0);
+  log.add(120, new Date(2026, 8, 27, 9, 0));
+  log.add(600, new Date(2026, 8, 3, 9, 0));
+  log.add(300, new Date(2026, 7, 30, 9, 0));
+  log.add(0, now);
+  const s = log.summary(5, now);
+  const app = new AssistantApp({ userId: "unit-usage", memoryRoot: join(TMP, "usage-mem"), filesRoot: ensureFolders(join(TMP, "usage-files")).root, ui: { confirm: async () => false } });
+  const set = app.setVoiceLimit(12.5);
+  const bad = (() => { try { app.setVoiceLimit(-1); return false; } catch { return true; } })();
+  const cleared = app.setVoiceLimit(null);
+  record("voice usage and monthly limit", [
+    ["today, this month, all time (empty calls not kept)", s.today.calls === 1 && s.today.seconds === 120 && s.month.calls === 2 && s.month.seconds === 720 && s.all.calls === 3 && s.all.seconds === 1020],
+    ["US$ at about 0.05 a minute", s.today.usd === 0.1 && s.month.usd === 0.6 && usdFor(1020) === 0.85 && s.limitUsd === 5],
+    ["limit saved, refused when not above 0, cleared with null", set.limitUsd === 12.5 && bad && cleared.limitUsd === null],
+  ], JSON.stringify(s));
+}
+
+// ------------------------------------------------------------------ email drafts (.eml for the owner's email app) and coming connections
+{
+  const { fileTools } = await import("../src/files/tools");
+  const { readEml } = await import("../src/files/email");
+  const f = ensureFolders(join(TMP, "email-files"));
+  writeFileSync(join(f.outbox, "Offer letter – Zoë.docx"), "PK fake docx bytes");
+  const tools = fileTools(() => f);
+  const draft = tools.find((t) => t.name === "draft_email")!;
+  const ok = await draft.handle({ to: ["hannah.cole@example.com"], cc: [], subject: "Your offer: Team leader – Zoë", body: "Hi Hannah,\n\nAttached is your offer.\n\nKind regards,\nJo", attachments: ["Offer letter – Zoë.docx"] });
+  const badAddr = await draft.handle({ to: ["not an address"], cc: [], subject: "x", body: "y", attachments: [] });
+  const missing = await draft.handle({ to: [], cc: [], subject: "x", body: "y", attachments: ["nope.docx"] });
+  const outside = await draft.handle({ to: [], cc: [], subject: "x", body: "y", attachments: ["../secret.txt"] });
+  const path = ok.files?.[0] ?? "";
+  const eml = path ? readFileSync(path, "utf8") : "";
+  const back = readEml(eml);
+  const listed = await tools.find((t) => t.name === "list_files")!.handle({ folder: "outbox" });
+  const app = new AssistantApp({ userId: "unit-conn", memoryRoot: join(TMP, "conn-mem"), filesRoot: f.root, ui: { confirm: async () => false } });
+  app.wantConnection("SEEK", true);
+  app.wantConnection("Xero, MYOB and Employment Hero", true);
+  const after = app.wantConnection("SEEK", false);
+  const card = app.emailDraft(path);
+  const notEml = app.emailDraft(join(f.outbox, "Offer letter – Zoë.docx"));
+  const fb = JSON.parse(readFileSync(await app.exportFeedback({ note: "n", ratings: false, conversation: false, technical: null }), "utf8"));
+  record("email drafts and coming connections", [
+    ["a draft in the Outbox, marked unsent, never sent", ok.success && path.endsWith(".eml") && /^X-Unsent: 1$/m.test(eml) && /doesn't send email/.test(ok.text)],
+    ["recipients, subject (non-ASCII), attachment and text read back", back.to[0] === "hannah.cole@example.com" && back.subject === "Your offer: Team leader – Zoë" && back.attachments[0] === "Offer letter – Zoë.docx" && /Attached is your offer/.test(back.preview)],
+    ["refused: bad address, unknown or outside attachment", !badAddr.success && !missing.success && !outside.success],
+    ["list_files shows the Outbox", /Outbox files/.test(listed.text) && /Offer letter/.test(listed.text)],
+    ["the email card reads only .eml drafts", card.ok && card.subject.includes("Team leader") && !notEml.ok],
+    ["wanted connections kept and in the feedback file", after.join() === "Xero, MYOB and Employment Hero" && fb.wantedConnections?.[0] === "Xero, MYOB and Employment Hero"],
+  ], JSON.stringify({ ok: ok.text, back, badAddr: badAddr.text, outside: outside.text }).slice(0, 700));
+}
+
 try {
   rmSync(TMP, { recursive: true, force: true });
 } catch {

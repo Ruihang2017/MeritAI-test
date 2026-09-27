@@ -10,6 +10,7 @@ import { LiveContext, pageOf, RECENT_MS, type Live, type OpenTarget, type Seen }
 import { refKey } from "../../src/changes";
 import { ArrivalNote } from "./components/Changes";
 import { VoiceStage } from "./components/Stage";
+import { ConnectionsPage } from "./components/Connections";
 import { ConversationPage } from "./components/Conversation";
 import { Icon } from "./components/Icon";
 import { AppBar, AttentionPanel, Nav, type AskButton, type Page } from "./components/Shell";
@@ -531,6 +532,8 @@ function Shell({ api }: { api: Api }) {
         return setPage("files");
       case "profile":
         return setPage("profile");
+      case "connections":
+        return setPage("connections");
       case "conversation":
         // Next to the page when it has the side panel; else the full view.
         if (dockable) setDockOpen(true);
@@ -629,6 +632,7 @@ function Shell({ api }: { api: Api }) {
         {page === "staff" && <StaffPage key={staffOpen ? `${staffOpen.id}:${staffOpen.n}` : staffAdd ? `add:${staffAdd.name}` : "list"} api={api} openId={staffOpen?.id ?? null} openDocs={staffOpen?.docs ?? false} addPrefill={staffAdd} onAsk={ask} onChanged={() => void refresh()} refreshKey={refreshKey} arrival={arrivalNote("staff")} />}
         {page === "files" && <FilesPage api={api} onAsk={ask} refreshKey={refreshKey} arrival={arrivalNote("files")} />}
         {page === "profile" && <ProfilePage api={api} onAsk={() => ask({ text: "Set up my business profile", mode: "setup", from: FROM_PROFILE })} onChanged={() => void refresh()} refreshKey={refreshKey} arrival={arrivalNote("profile")} />}
+        {page === "connections" && <ConnectionsPage api={api} />}
         {page === "memory" && <MemoryPage api={api} onProfile={() => setPage("profile")} />}
         {page === "settings" && <SettingsPage api={api} login={login} onChanged={() => void refresh()} />}
         {page === "hiring" && <HiringPage api={api} progress={lastProgress} onAsk={ask} asking={{ running: turns.find((t) => t.status === "running")?.user.text ?? null, queued: queue.map((q) => q.text) }} openJob={hiringJob} refreshKey={refreshKey} arrival={arrivalNote("hiring")} onHire={(c, job) => (setStaffOpen(null), setStaffAdd({ name: c?.name ?? "", role: job, ...(c ? { hireFrom: { job, file: c.file } } : {}) }), setPage("staff"))} onOpenEmployee={(id) => openEmployee(id)} />}

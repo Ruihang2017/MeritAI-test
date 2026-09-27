@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { BusinessProfile } from "../../../src/business/profile";
 import type { Preference, TaskNote } from "../../../src/memory/store";
 import type { FileRow, Settings, WorkspaceFiles } from "../../../src/server/protocol";
+import type { VoiceUsageSummary } from "../../../src/voice/usage";
 import type { Api } from "../api";
 import { dayLabel, fmtDate, fmtDatesIn, fmtDay, fmtWhen, localDay } from "../format";
 import { now } from "../clock";
@@ -889,9 +890,96 @@ function VoiceCard({ api, onChanged }: { api: Api; onChanged: () => void }) {
       <ul className="meta" style={{ margin: 0, paddingLeft: 18, lineHeight: 1.6, fontSize: 13.5 }}>
         <li>Costs about US$0.05 a minute, billed to the API key's OpenAI account.</li>
         <li>Stops by itself after 60 seconds of silence.</li>
-        <li>Changes that need your OK aren't saved during voice; you confirm them in the chat.</li>
+        <li>During voice, a change that needs your OK waits on the screen: say “yes” or press Yes, save. Deleting always needs a press.</li>
       </ul>
+      {status?.set && <VoiceUsageBlock api={api} demo={status.source === "demo"} />}
     </section>
+  );
+}
+
+const money = (usd: number) => `US$${usd.toFixed(2)}`;
+const mins = (s: number) => (s < 60 ? `${Math.round(s)} s` : `${Math.round(s / 60)} min`);
+
+/** Voice use on this computer (design: SettingsUsage): today, this month, all time, and a monthly limit. */
+function VoiceUsageBlock({ api, demo }: { api: Api; demo: boolean }) {
+  const [u, setU] = useState<VoiceUsageSummary | null>(null);
+  const [limit, setLimit] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    api.call("voiceUsage").then((x) => (setU(x), setLimit(x.limitUsd === null ? "" : String(x.limitUsd))), (e: Error) => setErr(e.message));
+  }, [api]);
+  if (!u) return err ? <div className="banner bad">{err}</div> : null;
+  const save = async () => {
+    setErr(null);
+    setSaved(false);
+    const v = limit.trim() === "" ? null : Number(limit.replace(/[$,\s]/g, ""));
+    if (v !== null && !(v > 0)) return setErr("Enter an amount above 0, or leave it empty for no limit.");
+    try {
+      const x = await api.call("setVoiceLimit", { usd: v });
+      setU(x);
+      setSaved(true);
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  };
+  const tile = (label: string, p: { calls: number; seconds: number; usd: number }, sub: string) => (
+    <div className="use-tile">
+      <span className="cap" style={{ fontSize: 11 }}>
+        {label}
+      </span>
+      <b>{money(p.usd)}</b>
+      <span className="meta">
+        {mins(p.seconds)} · {sub}
+      </span>
+    </div>
+  );
+  const pct = u.limitUsd ? Math.min(100, (u.month.usd / u.limitUsd) * 100) : 0;
+  return (
+    <div className="use">
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+        <h3 className="h3" style={{ flexGrow: 1 }}>
+          Usage
+        </h3>
+        <span className="meta">{demo ? "demo engine: the stand-in voice is free, so nothing is counted" : "estimated, on this computer"}</span>
+      </div>
+      <div className="use-tiles">
+        {tile("Today", u.today, `${u.today.calls} call${u.today.calls === 1 ? "" : "s"}`)}
+        {tile(u.month.label, u.month, `${u.month.calls} call${u.month.calls === 1 ? "" : "s"}`)}
+        {tile("All time", u.all, u.all.since ? `since ${fmtDay(localDay(u.all.since))}` : "no calls yet")}
+      </div>
+      {u.limitUsd !== null && (
+        <div className="use-bar" aria-hidden="true">
+          <span style={{ width: `${pct}%`, background: pct >= 90 ? "#B3261E" : "#1A57CC" }} />
+        </div>
+      )}
+      <form
+        className="field"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save();
+        }}
+      >
+        <label htmlFor="vlimit">Monthly limit</label>
+        <span className="hint" style={{ marginTop: -4 }}>
+          Voice won't start, and stops, once this month's estimate reaches it. Empty: no limit.
+        </span>
+        <span className="row-wrap" style={{ alignItems: "center" }}>
+          <span className="money-in">
+            <span>US$</span>
+            <input id="vlimit" className="input" inputMode="decimal" value={limit} onChange={(e) => (setLimit(e.target.value), setSaved(false))} placeholder="No limit" />
+          </span>
+          <button type="submit" className="btn">
+            Save limit
+          </button>
+          <span className="meta">{saved ? "Saved." : u.limitUsd !== null ? `${money(u.month.usd)} of ${money(u.limitUsd)} used this month` : ""}</span>
+        </span>
+      </form>
+      {err && <div className="banner bad">{err}</div>}
+      <p className="meta" style={{ margin: 0, fontSize: 12.5, lineHeight: 1.5 }}>
+        Worked out from voice time on this computer at about US${u.usdPerMinute.toFixed(2)} a minute. The real amount is on your OpenAI bill (platform.openai.com › Usage), which also counts the key's use elsewhere.
+      </p>
+    </div>
   );
 }
 
@@ -1045,6 +1133,12 @@ export function SettingsPage({ api, onChanged, login }: { api: Api; onChanged: (
                 <div>
                   <dt>Privacy</dt>
                   <dd>Everything stays in the workspace folder on this computer, except what is sent to the model to answer you. The register refuses TFNs, bank details, dates of birth and health information.</dd>
+                </div>
+                <div>
+                  <dt>Plan and updates</dt>
+                  <dd>
+                    Alpha tester (free). A new version comes as a new installer. <span className="pill soon">Coming soon</span> a subscription with automatic updates, online backup and connections to your email, job boards and payroll (see Connections).
+                  </dd>
                 </div>
               </dl>
             </section>

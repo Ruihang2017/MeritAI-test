@@ -66,6 +66,8 @@ Deviation from the plan: there is no cancel event, so "stop" or "never mind" arr
 - **Confirmations:** in the terminal they need a keyboard `[y/n]`, so in its voice mode they are not saved and a note says so (type the request again after voice mode). In the browser (2026-09-27) they wait on screen (`startVoice(…, { confirmOnScreen: true })`): the app tells the voice to ask for the OK (`VoiceBridge.say`), and while a question is open a short spoken answer ("yes", "yeah, save it", "no") answers the latest one instead of being steered into the task (`AssistantApp.answerSpoken`, `PendingConfirms.answer`; the page's copy closes as answered). Deleting always needs a press. Voice's own work runs outside the request that started it, so its questions and changes belong to the voice reply.
 - **Echo:** with laptop speakers and the built-in mic, the model can hear itself and treat it as barge-in. Use headphones.
 
+- **Usage and a monthly limit** (2026-09-27): when a call ends its billed seconds are added to `voice-usage.jsonl` in the user's memory folder (the stand-in voice isn't counted); Settings shows today, this month and all time at US$0.05 a minute. With a monthly limit set (`voiceMonthlyLimitUsd`), a call can't start once the month's estimate reaches it, and a running call stops when it does.
+
 ## 4 Security and privacy
 
 - Audio and transcripts, plus the answer summaries we send as commentary, go to the OpenAI organisation of the voice key. Use a company key before any real data.

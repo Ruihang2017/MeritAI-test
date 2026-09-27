@@ -35,9 +35,11 @@ import { Microphone, Speaker, ffmpegAvailable, listMicrophones } from "../voice/
 import { extractText } from "../files/parse";
 import { checkWithOpenAI, keyFormatProblem, VoiceKeyStore, type VoiceKeyStatus } from "../voice/keyStore";
 import { FakeLiveSession } from "../voice/fakeLive";
+import { usdFor, VoiceUsage, type VoiceUsageSummary } from "../voice/usage";
 import { FeedbackLog, RATING_REASONS, writeFeedbackFile } from "./feedback";
 import { linkHire } from "../business/hiring";
 import type { ChangeSink } from "../changes";
+import { readEml } from "../files/email";
 
 /**
  * The application layer: everything a user interface needs, with no terminal code.
@@ -145,7 +147,7 @@ export interface JobSummary {
 }
 
 /** File types the Open button may start (documents and images). */
-const OPENABLE = [".pdf", ".docx", ".doc", ".xlsx", ".xls", ".csv", ".md", ".txt", ".rtf", ".png", ".jpg", ".jpeg", ".gif", ".webp"];
+const OPENABLE = [".pdf", ".docx", ".doc", ".xlsx", ".xls", ".csv", ".md", ".txt", ".rtf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".eml"];
 
 /** A job's screening state for a UI: like ScreenResult, but the criteria may not exist yet. */
 export type JobResults = Omit<ScreenResult, "rubric"> & {
@@ -706,6 +708,14 @@ export class AssistantApp {
     return this.launch("open", path);
   }
 
+  /** An email draft this app saved (.eml in the workspace): recipients, subject, attachments, the start of the text. */
+  emailDraft(path: string): { ok: true; to: string[]; cc: string[]; subject: string; attachments: string[]; preview: string } | { ok: false; error: string } {
+    const p = openablePath(this.folders(), path);
+    if (!p.ok) return p;
+    if (extname(p.path).toLowerCase() !== ".eml") return { ok: false, error: "not an email draft" };
+    return { ok: true, ...readEml(readFileSync(p.path, "utf8")) };
+  }
+
   /** Shows a workspace file in the file manager (Explorer / Finder; the folder on Linux). */
   revealFile(path: string): Promise<OpenResult> {
     return this.launch("reveal", path);
@@ -749,6 +759,28 @@ export class AssistantApp {
     this.feedbackLog().add({ at: now().toISOString(), ...r, reasons: r.reasons.filter((x) => (RATING_REASONS as readonly string[]).includes(x)), conversation: title, threadId });
   }
 
+  // --- connections that are coming (the Connections page): what the owner would use first
+
+  private wantedFile(): string {
+    return join(this.a.mem.dir, "connections-wanted.json");
+  }
+
+  wantedConnections(): string[] {
+    try {
+      const v = JSON.parse(readFileSync(this.wantedFile(), "utf8")) as unknown;
+      return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+    } catch {
+      return [];
+    }
+  }
+
+  wantConnection(name: string, want: boolean): string[] {
+    const cur = this.wantedConnections().filter((x) => x !== name);
+    const next = want ? [...cur, name] : cur;
+    writeFileSync(this.wantedFile(), JSON.stringify(next, null, 2) + "\n");
+    return next;
+  }
+
   feedbackSummary(): { up: number; down: number } {
     const all = this.feedbackLog().all();
     return { up: all.filter((r) => r.rating === "up").length, down: all.filter((r) => r.rating === "down").length };
@@ -763,6 +795,8 @@ export class AssistantApp {
       savedAt: new Date().toISOString(),
       note: opts.note,
       ...(opts.ratings ? { ratings: this.feedbackLog().all() } : {}),
+      // Which coming connections the tester would use first (the Connections page's "I want this").
+      ...(this.wantedConnections().length ? { wantedConnections: this.wantedConnections() } : {}),
       ...(opts.conversation && threadId ? { conversation: { title, messages: await this.conversation() } } : {}),
       ...(opts.technical ? { technical: opts.technical } : {}),
     };
@@ -1123,6 +1157,24 @@ export class AssistantApp {
     return this.voiceKeyStatus();
   }
 
+  // --- voice usage (Settings): see src/voice/usage.ts
+
+  private usageLog(): VoiceUsage {
+    return new VoiceUsage(join(this.a.mem.dir, "voice-usage.jsonl"));
+  }
+
+  /** Today, this month and all time on this computer (estimated US$), and the monthly limit. */
+  voiceUsage(): VoiceUsageSummary {
+    return this.usageLog().summary(this.a.mem.settings().voiceMonthlyLimitUsd ?? null);
+  }
+
+  /** The monthly limit in US$ (null: none). */
+  setVoiceLimit(usd: number | null): VoiceUsageSummary {
+    if (usd !== null && (!Number.isFinite(usd) || usd <= 0 || usd > 10_000)) throw new Error("the limit must be an amount above 0 (US$), or empty for none");
+    this.a.mem.updateSettings({ voiceMonthlyLimitUsd: usd === null ? undefined : Math.round(usd * 100) / 100 });
+    return this.voiceUsage();
+  }
+
   setMicrophone(device: string): void {
     this.a.mem.updateSettings({ micDevice: device });
   }
@@ -1154,6 +1206,10 @@ export class AssistantApp {
     const fake = this.engineKind === "fake";
     const apiKey = fake ? "" : ((await this.keyStore().load()) ?? this.envVoiceKey() ?? "");
     if (!fake && !apiKey) throw new Error("voice needs an OpenAI API key: add it in Settings, or VOICE_OPENAI_API_KEY in .env (see .env.example)");
+    // The monthly limit (Settings): no new call once this month's estimate reaches it; a call stops when it does.
+    const limit = fake ? null : (this.a.mem.settings().voiceMonthlyLimitUsd ?? null);
+    const usedThisMonth = limit === null ? 0 : this.usageLog().monthUsd();
+    if (limit !== null && usedThisMonth >= limit) throw new Error(`this month's voice use (about US$${usedThisMonth.toFixed(2)}) has reached your monthly limit of US$${limit.toFixed(2)}. Change the limit in Settings`);
     let device = "custom audio";
     if (!audio) {
       if (!ffmpegAvailable()) throw new Error("voice needs ffmpeg and ffplay on PATH");
@@ -1193,7 +1249,14 @@ export class AssistantApp {
     let stopReason = "stopped";
 
     live.on("audio", (pcm) => sink.play(pcm));
-    live.on("usage", (s) => (seconds = s));
+    live.on("usage", (s) => {
+      seconds = s;
+      if (limit !== null && usedThisMonth + usdFor(s) >= limit) controller.stop(`it reached your monthly voice limit (US$${limit.toFixed(2)})`);
+    });
+    // Each call's billed seconds are kept for Settings (the demo's stand-in voice costs nothing).
+    const record = () => {
+      if (!fake) this.usageLog().add(seconds);
+    };
     live.on("inputTranscript", () => (lastActivity = Date.now()));
     live.on("outputTranscript", (d) => {
       lastActivity = Date.now();
@@ -1205,6 +1268,7 @@ export class AssistantApp {
     });
     live.on("error", (m) => h.onError(m));
     live.once("closed", (reason) => {
+      record();
       if (stopping) {
         h.onEnded({ reason: stopReason, byUser: true, billedSeconds: seconds });
       } else {

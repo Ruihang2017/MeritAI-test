@@ -23,6 +23,7 @@ export type OpenTarget =
   | { kind: "job"; job: string }
   | { kind: "files" }
   | { kind: "profile" }
+  | { kind: "connections" }
   | { kind: "conversation" };
 
 export interface Live {

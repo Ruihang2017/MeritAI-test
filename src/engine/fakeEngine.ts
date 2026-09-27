@@ -231,6 +231,7 @@ export class FakeEngine implements Engine {
       yield { type: "turn_end", status: "failed", error: "usage limit" };
       return;
     }
+    if (/\bemail\b|邮件/.test(t)) return yield* this.email(text);
     if (/accepted|hired|录用|接受了/.test(t)) return yield* this.hired(text);
     if (/resign|quit|leaving|辞职|离职/.test(t)) return yield* this.leaving(text);
     if (/this week|remind|what('s| is) due|提醒|到期/.test(t) && !/final pay|最终工资/.test(t)) return yield* this.reminders();
@@ -302,6 +303,18 @@ export class FakeEngine implements Engine {
     }
     yield* this.tool("new_starter_checklist", { employment_type: "full-time", may_need_visa_check: true, is_apprentice_or_trainee: false, works_on_construction_sites: false, first_employee: false, working_holiday_maker: false });
     yield* this.say(`Great news. ${found.name} is on your staff list now, and the ${found.job} job counts the hire. Before day one, give the Fair Work Information Statement and a TFN declaration, and ask for their super choice.\n\n_Demo reply from the fake engine._`);
+  }
+
+  /** "Email Hannah her offer": an email draft to open in the email app, with a matching Outbox file attached. */
+  private async *email(text: string): AsyncIterable<EngineEvent> {
+    const out = yield* this.tool("list_files", { folder: "outbox" });
+    const files = [...(out?.text ?? "").matchAll(/^- (.+?) \(\d+ KB/gm)].map((m) => m[1]);
+    const to = /[\w.+-]+@[\w-]+\.[\w.]+/.exec(text)?.[0] ?? null;
+    const words = text.toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 3);
+    const attach = files.filter((f) => !f.endsWith(".eml") && words.some((w) => f.toLowerCase().includes(w))).slice(0, 2);
+    const who = /email (\w+)/i.exec(text)?.[1] ?? "there";
+    const r = yield* this.tool("draft_email", { to: to ? [to] : [], cc: [], subject: attach.length ? `${attach[0].replace(/\.[^.]+$/, "")}` : "Following up", body: `Hi ${who},\n\nPlease find attached the document we discussed. Let me know if you have any questions.\n\nKind regards,\nJo Kim\nWattle Lane Cleaning`, attachments: attach });
+    yield* this.say(r?.success ? `The email is ready in your Outbox${attach.length ? ` with ${attach.join(" and ")} attached` : ""}. Open it in your email app, check it and press Send: I don't send email myself.\n\n_Demo reply from the fake engine._` : `I couldn't save the draft: ${r?.text ?? "unknown error"}`);
   }
 
   private async *reminders(): AsyncIterable<EngineEvent> {

@@ -13,7 +13,7 @@ const whenStarted = (iso: string) => {
 };
 import { Icon, type IconName } from "./Icon";
 
-export type Page = "conversations" | "all" | "staff" | "hiring" | "profile" | "files" | "memory" | "settings";
+export type Page = "conversations" | "all" | "staff" | "hiring" | "profile" | "files" | "connections" | "memory" | "settings";
 
 /** The side panel's button in the app bar (every page except Conversations). */
 export type AskButton = "none" | "closed" | "open" | "working" | "waiting";
@@ -107,6 +107,8 @@ const MAIN: { key: Page; label: string; icon: IconName }[] = [
   { key: "hiring", label: "Hiring", icon: "hiring" },
   { key: "profile", label: "Profile & policies", icon: "profile" },
   { key: "files", label: "Files", icon: "files" },
+  // What MeritAI will connect to (owner, 2026-09-27): shown now, marked Soon.
+  { key: "connections", label: "Connections", icon: "plug" },
 ];
 /** Under the owner's name, not in the list (owner, 2026-09-27; design: ShellAccountMenu). */
 const ACCOUNT: { key: Page; label: string; hint: string; icon: IconName }[] = [
@@ -175,7 +177,7 @@ export function Nav({
   );
   const item = (it: (typeof MAIN)[number]) => {
     const on = it.key === page || (it.key === "conversations" && page === "all");
-    const badge = it.key === "conversations" && state?.confirms.length ? { n: state.confirms.length, bg: "#F0D58A", fg: "#4A3600" } : it.key === "staff" && state?.attention.overdue ? { n: state.attention.overdue, bg: "#B3261E", fg: "#FFFFFF" } : null;
+    const badge = it.key === "connections" ? { n: "Soon", bg: "#F1ECFB", fg: "#5B3AA8" } : it.key === "conversations" && state?.confirms.length ? { n: state.confirms.length, bg: "#F0D58A", fg: "#4A3600" } : it.key === "staff" && state?.attention.overdue ? { n: state.attention.overdue, bg: "#B3261E", fg: "#FFFFFF" } : null;
     if (collapsed)
       return (
         <button key={it.key} type="button" className={`nav-icon${on ? " on" : ""}`} aria-current={on ? "page" : undefined} aria-label={it.label} title={badge ? `${it.label} · ${badge.n}` : it.label} onClick={() => onPage(it.key)}>

@@ -349,6 +349,11 @@ export class UiSession {
       this.voice?.ctl.stop();
       return null;
     },
+    voiceUsage: async () => this.app.voiceUsage(),
+    setVoiceLimit: async (p) => {
+      if (p?.usd !== null && typeof p?.usd !== "number") throw new Error("usd must be a number or null");
+      return this.app.setVoiceLimit(p.usd);
+    },
     voiceKey: async () => this.app.voiceKeyStatus(),
     setVoiceKey: async (p) => this.app.setVoiceKey(str(p?.key, "key", 400)),
     removeVoiceKey: async () => this.app.removeVoiceKey(),
@@ -368,6 +373,9 @@ export class UiSession {
       }),
     openFile: async (p) => this.app.openFile(str(p?.path, "path", 2000)),
     revealFile: async (p) => this.app.revealFile(str(p?.path, "path", 2000)),
+    emailDraft: async (p) => this.app.emailDraft(str(p?.path, "path", 2000)),
+    connections: async () => ({ wanted: this.app.wantedConnections() }),
+    wantConnection: async (p) => ({ wanted: this.app.wantConnection(str(p?.name, "name", 100), p?.want === true) }),
   };
 
   private async run(turnId: string, events: AsyncIterable<AppEvent>): Promise<void> {

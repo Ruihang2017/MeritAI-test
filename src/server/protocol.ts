@@ -14,6 +14,7 @@ import type { Preference, SessionFrom, SessionRecord, TaskNote } from "../memory
 import type { BusinessProfile } from "../business/profile";
 import type { VoiceKeyStatus } from "../voice/keyStore";
 import type { EntityChange } from "../changes";
+import type { VoiceUsageSummary } from "../voice/usage";
 
 /** Everything the UI can call. Anything else is refused by the server. */
 export interface Methods {
@@ -83,6 +84,9 @@ export interface Methods {
   exportFeedback: { params: { note: string; ratings: boolean; conversation: boolean; technical: boolean }; result: { path: string } };
   /** First run: the sample business (synthetic Wattle Lane Cleaning) in its own folder, seeded once, as the workspace. */
   useSampleBusiness: { params: void; result: Settings };
+  /** Voice use on this computer (estimated US$: today, this month, all time) and the monthly limit. */
+  voiceUsage: { params: void; result: VoiceUsageSummary };
+  setVoiceLimit: { params: { usd: number | null }; result: VoiceUsageSummary };
   voiceStart: { params: void; result: { started: true } };
   voiceAudio: { params: { pcm: string }; result: null };
   voiceStop: { params: void; result: null };
@@ -90,6 +94,11 @@ export interface Methods {
   login: { params: void; result: { ok: boolean; error?: string } };
   openFile: { params: { path: string }; result: { ok: true } | { ok: false; error: string } };
   revealFile: { params: { path: string }; result: { ok: true } | { ok: false; error: string } };
+  /** Connections that are coming (Connections page): which ones the owner wants, kept for the feedback file. */
+  connections: { params: void; result: { wanted: string[] } };
+  wantConnection: { params: { name: string; want: boolean }; result: { wanted: string[] } };
+  /** An email draft (.eml) the adviser saved: what the chat's email card shows. */
+  emailDraft: { params: { path: string }; result: { ok: true; to: string[]; cc: string[]; subject: string; attachments: string[]; preview: string } | { ok: false; error: string } };
 }
 export type Method = keyof Methods;
 
