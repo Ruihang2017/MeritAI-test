@@ -151,7 +151,7 @@ export function ConversationPage(props: {
       </div>
 
       <div className="composer-wrap">
-        {props.voice.note && !props.voice.ui && <VoiceBanner note={props.voice.note} onAgain={props.voice.onStart} onSettings={props.voice.onSettings} onClose={props.voice.onCloseNote} />}
+        {props.voice.note && !props.voice.ui && <VoiceBanner note={props.voice.note} demo={props.voice.demo} onAgain={props.voice.onStart} onSettings={props.voice.onSettings} onClose={props.voice.onCloseNote} />}
         {props.voice.ui ? (
           <VoiceBar v={props.voice.ui} levels={props.voice.levels} demo={props.voice.demo} onMute={props.voice.onMute} onEnd={props.voice.onEnd} onMic={props.voice.onMic} />
         ) : (

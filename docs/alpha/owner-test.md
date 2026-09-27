@@ -79,9 +79,9 @@
 |---|---|---|
 | Fa1 | Conversations › 麦克风 | 浏览器问麦克风权限（由你决定点允许）；出现语音条：listening |
 | Fa2 | 随便说一句话，停一下 | 替身按顺序"听到"脚本里的请求（先是 "What do I need to do this week?"），聊天里显示成你说的话，AI 回答；语音条显示 working，然后 speaking（一个轻音） |
-| Fa3 | 第二、第三句 | 第二句是 "Hannah accepted…"：确认卡片出现在右边的 On screen 面板等你；替身下一句会说 "Yes, save it." 自动确认（详见 K 节） |
+| Fa3 | 第二、第三句 | 第二句是 "Daniel Ortiz accepted…"：确认卡片出现在右边的 On screen 面板等你；替身下一句会说 "Yes, save it." 自动确认（详见 K 节） |
 | Fa4 | 静音 / 取消静音，换麦克风（Settings） | 静音时替身听不到 |
-| Fa5 | End | 显示 Voice ended、时长和估算的费用（替身不会真的扣费） |
+| Fa5 | End | 显示 Voice ended 和时长；替身显示"demo voice, not billed"（真实语音显示估算费用） |
 | Fa6 | 语音中切到别的页面，或在另一个标签页打开 | 别的标签页里不能开始其它操作（提示 Voice is on）；关掉开始语音的那个标签页，语音会停止 |
 
 **F-b 真实语音（桌面程序，要花钱）**：在第 E 步存好 key 之后。
@@ -130,9 +130,9 @@
 
 | # | 做什么 | 预期 |
 |---|---|---|
-| K1 | `npm run ui:fake` › Conversations › 麦克风；说一句话停一下，再说一句话停一下 | 替身先"听到"本周提醒，第二句是"Hannah accepted the Team leader offer…" |
-| K2 | 看右边 | Attention 面板变成 **On screen / 屏幕上**：添加 Hannah 的确认卡片在这里等你（聊天里也有），语音条显示"Waiting for your OK: …" |
-| K3 | 再说一句话 | 替身这次说的是 "Yes, save it."，确认卡片自动变成已保存；右边出现 Hannah 和 Team leader 的卡片 |
+| K1 | `npm run ui:fake` › Conversations › 麦克风；说一句话停一下，再说一句话停一下 | 替身先"听到"本周提醒，第二句是"Daniel Ortiz accepted the Team leader offer…" |
+| K2 | 看右边 | Attention 面板变成 **On screen / 屏幕上**：添加 Daniel 的确认卡片在这里等你（聊天里也有），语音条显示"Waiting for your OK: …" |
+| K3 | 再说一句话 | 替身这次说的是 "Yes, save it."，确认卡片自动变成已保存；右边出现 Daniel 和 Team leader 的卡片 |
 | K4 | 真实语音（要花钱）时直接说 "yes" | 同上。删除类的改动必须点按钮，说 yes 无效 |
 
 ## L 语音用量（Settings）

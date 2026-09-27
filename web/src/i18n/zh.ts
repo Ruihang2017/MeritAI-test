@@ -985,6 +985,8 @@ export const ZH_PATTERNS: [RegExp, string][] = [
   [/^Your decision · (\d+) of (\d+)$/, "你的决定 · $1/$2"],
   [/^(\d+) helpful, (\d+) not helpful$/, "$1 条有帮助，$2 条没帮助"],
   [/^(\d+) calls?$/, "$1 次通话"],
+  [/^(\d+:\d{2}) · demo voice, not billed$/, "$1 · 演示语音，不计费"],
+  [/^(\d+:\d{2}) billed, about (US\$[\d.]+)$/, "$1 计费，约 $2"],
   [/^(\d+) min$/, "$1 分钟"],
   [/^(\d+) s$/, "$1 秒"],
   [/^Before day one: (\d+) things?\.$/, "入职前：$1 件事。"],

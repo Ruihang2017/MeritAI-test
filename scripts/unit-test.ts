@@ -1042,7 +1042,7 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   await speak();
   const answered = await until(() => mine.some((e) => e.event === "confirmAnswered"));
   const yes = mine.find((e): e is Extract<ServerEvent, { event: "confirmAnswered" }> => e.event === "confirmAnswered");
-  const saved = await until(() => app.staff().some((e) => e.name === "Hannah Cole"));
+  const saved = await until(() => app.staff().some((e) => e.name === "Daniel Ortiz"));
   const hired = app.jobs().find((j) => j.job === "Team leader")?.hired;
   const changedInVoice = mine.some((e) => e.event === "changed" && e.by === "adviser" && e.turnId === req2?.turnId);
   await session.handle({ id: 50, method: "voiceStop", params: undefined }, me);

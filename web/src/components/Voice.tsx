@@ -128,12 +128,12 @@ export type VoiceNote =
   | { kind: "service"; message: string };
 
 /** After voice, or when it couldn't start (design: VoiceStates). */
-export function VoiceBanner({ note, onAgain, onSettings, onClose }: { note: VoiceNote; onAgain: () => void; onSettings: () => void; onClose: () => void }) {
+export function VoiceBanner({ note, onAgain, onSettings, onClose, demo = false }: { note: VoiceNote; onAgain: () => void; onSettings: () => void; onClose: () => void; /** The demo's stand-in voice: nothing is billed. */ demo?: boolean }) {
   if (note.kind === "ended")
     return note.byUser ? (
       <div className="banner n voice-note" style={{ alignItems: "center" }}>
         <span className="grow">
-          <b>Voice ended</b> · {mmss(note.seconds)} billed, {cost(note.seconds)}
+          <b>Voice ended</b> · {demo ? `${mmss(note.seconds)} · demo voice, not billed` : `${mmss(note.seconds)} billed, ${cost(note.seconds)}`}
         </span>
         <button type="button" className="btn g sm" onClick={onAgain}>
           Talk again

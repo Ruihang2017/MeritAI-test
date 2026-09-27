@@ -18,6 +18,177 @@ An HR adviser for **small business owners with no HR department**, as a CLI and 
 | Award and pay | `award-finder`: the likely award and classification with reasons and official sources, plus the Fair Work tools to confirm pay. It never calculates pay: a warning shows if a reply contains pay arithmetic |
 | Policy and law questions | Your business profile and policies, plus official Australian government sources |
 
+## Using MeritAI (user guide)
+
+The screenshots and the video come from the demo: the made-up sample business **Wattle Lane Cleaning** (synthetic data) and the demo engine (scripted replies, no model). With the real adviser the replies are its own; everything else looks the same.
+
+![Telling the adviser about a hire: one question, then the new employee and the job update on their pages](docs/images/hire-in-the-chat.gif)
+
+*Above: "Hannah Cole accepted the Team leader offer…". The adviser finds her application, asks once, and saves. Staff and Hiring update at once: Hannah is marked "New · MeritAI" and the job counts the hire. ([MP4](docs/images/hire-in-the-chat.mp4))*
+
+### 1 Start
+
+Install the desktop app (`MeritAI Setup <version>.exe` from the GitHub releases) or run `npm run ui`. The first run asks you to:
+
+1. sign in with ChatGPT;
+2. choose where your files go;
+3. set up your business.
+
+To look around first, choose **Try it with a sample business**. It opens a made-up cleaning business with staff, jobs and paperwork due, kept in its own folder. The **Sample data** label at the top switches back to your own business.
+
+![First run: how to set up the business](docs/images/01-first-run.png)
+
+### 2 Getting around
+
+- **Conversations**: talk to the adviser.
+- **Staff**: the register.
+- **Hiring**: jobs, screening and your decisions.
+- **Profile & policies**, **Files**: what the adviser knows about the business.
+- **Connections**: what's coming.
+- **Attention** (the right-hand panel on Conversations): what is overdue or due soon, worked out from the register.
+- **Your name** (bottom left): Memory, Settings and Send feedback.
+
+![Conversations with the Attention panel](docs/images/02-conversations.png)
+
+### 3 Tell it what happened: it does the paperwork, after your OK
+
+Say it in your own words ("Priya resigned, her last day is Friday 9 October", "Hannah accepted the offer"). The adviser tells you what to do, with official sources.
+
+**Saving:** anything it wants to save (the register, a job, the business profile) comes as a **Needs your OK** card. Nothing changes until you say yes, and only a green receipt means something was saved.
+
+**What changed:** under the reply you see what it changed, as it is now, with the next step:
+- **Record paperwork** for a new starter;
+- **Close the job** when everyone it needs is hired.
+
+![A reply with its question, receipt and What changed cards](docs/images/03-what-changed.png)
+
+### 4 The pages keep up
+
+The conversation and the pages stay in step, whether you type, talk, or use the side panel.
+
+- **Pages update at once:** an open page updates the moment something is saved.
+- **Changed rows are marked:** rows the adviser changed show **New · MeritAI** or **Updated · MeritAI** for a few minutes.
+- **A dot on the navigation:** marks pages the adviser changed while you were elsewhere. Opening one shows a short note of what changed, linking back to the conversation.
+- **A hire said in the chat counts on the job:** the same as **Add to Staff** on the Hiring page.
+
+![Staff after the adviser added Hannah](docs/images/04-staff-updated.png)
+![Hiring: the job counts the hire; Hannah shows "Hired · in Staff"](docs/images/05-hiring.png)
+
+### 5 Ask from any page: the side panel
+
+**Ask MeritAI** (top right, or Ctrl J) opens the conversation next to the page you are on. The page stays in view and updates as you answer the adviser's questions.
+
+A button on a page (Interview kit, Draft the letter, Ask about this…) sends its request there. It continues the conversation when it's about the same thing; otherwise it starts a new one and links back to the old one.
+
+![The side panel next to Staff, asking for an OK](docs/images/06-side-panel.png)
+![After yes: the receipt, What changed, and the register behind it](docs/images/07-side-panel-saved.png)
+
+### 6 Hiring
+
+**The screening flow:**
+1. A job has a job description and applications. Drop a folder, or use **Add applications**.
+2. The adviser drafts screening criteria from the JD, and you confirm them.
+3. Every application is assessed on its own, blind (no names, photos, ages or addresses), and ranked by rules.
+4. You decide: **Shortlist** or **Not this time**.
+5. Next steps: an interview kit, candidate emails as drafts, and **Add to Staff** for the person you hire.
+
+You can also make any of these decisions just by telling the adviser.
+
+**New job:**
+- **From a template:** 35 common roles in 10 industries, your own industry first. You can search by any name ("chef", "sparky").
+- The job description on the right follows what you choose. Bracketed parts are yours to fill in.
+- The likely award is shown as a hint to confirm with the Award finder. MeritAI never works out pay.
+- **Create job** saves the JD into the new job. **Create and ask MeritAI to tailor it** also has the adviser fill in what it can from your profile.
+- The other tabs: **My own job description** (upload a file) and **Write it with MeritAI**.
+
+![New job: pick a role](docs/images/08-new-job-templates.png)
+![New job: make it yours](docs/images/09-new-job-editor.png)
+
+**Advertise** writes the job ad with the adviser. Posting to SEEK, LinkedIn Jobs and Indeed is coming.
+
+![Advertise the job](docs/images/10-advertise.png)
+
+### 7 Emails: drafts you send yourself
+
+MeritAI never sends email. Ask for an email (an offer with the contract, an interview invite, a letter) and it saves a draft with the files attached.
+
+**Open in email app** opens it in Outlook (or your default mail app) as a new message: check it, then press Send there. Sending from MeritAI is coming (see Connections).
+
+![An email draft in the reply](docs/images/11-email-draft.png)
+
+### 8 Voice
+
+The microphone in Conversations. It needs your own OpenAI API key in Settings, costs about US$0.05 a minute, and the demo has a free stand-in voice.
+
+Talk as you would on the phone. While you talk, the right-hand panel becomes **On screen** and shows what the conversation is about.
+
+**Saving during voice:**
+- A change that needs your OK waits there: press **Yes, save**, or say "yes".
+- Deleting always needs a press.
+
+![Voice: a change waits on screen for your OK](docs/images/12-voice-on-screen.png)
+![After "yes": saved, and the things this call changed](docs/images/13-voice-saved.png)
+
+### 9 Settings
+
+- **Language · 语言**: English or 中文. In Chinese the app and the adviser's replies are in Chinese; letters, contracts, emails and job descriptions stay in English.
+- **Voice**:
+  - the API key: kept on this computer, encrypted, and only its last 4 characters are ever shown;
+  - the microphone;
+  - **Usage**: today, this month and all time, estimated in US$ (your OpenAI bill has the real amount);
+  - a **monthly limit** that stops voice.
+- **Workspace folder**, **Speed**, and **About** (including the plan and updates).
+
+![Settings: language](docs/images/14-settings-language.png)
+![Settings: voice usage and a monthly limit](docs/images/15-settings-voice-usage.png)
+
+### 10 Connections (coming soon)
+
+Today MeritAI runs only on this computer: it drafts, and you send.
+
+**What it will connect to:**
+- email and calendar (Outlook and Microsoft 365, Gmail);
+- Teams and Slack;
+- job boards (SEEK, LinkedIn Jobs, Indeed);
+- payroll (Xero, MYOB, Employment Hero);
+- Asana;
+- online backup;
+- a subscription with automatic updates.
+
+Press **I want this** on the ones you'd use: it goes in your next feedback file.
+
+![Connections](docs/images/16-connections.png)
+
+### 11 中文
+
+Settings › Language · 语言 › 中文（简体）.
+
+**Translated:** the whole app, including the dates, and the adviser answers in Chinese.
+
+**Kept in English:**
+- names, job titles and file names;
+- documents for other people (Australian workplaces use English);
+- the legal checklists' details (official English, with links).
+
+![员工（中文界面）](docs/images/17-chinese-staff.png)
+![招聘（中文界面）](docs/images/18-chinese-hiring.png)
+
+### 12 Your data
+
+**Where things are kept:**
+- **Workspace folder:** Inbox, Outbox, Jobs, Policies, the business profile and the register.
+- **Your app data:** sign-in, memory, conversations and the voice key.
+
+Conversations are deleted after 30 days.
+
+**What the register refuses:** TFNs, bank details, dates of birth, home addresses and health information.
+
+**Alpha rule:** it runs on your personal ChatGPT sign-in, so use sample or made-up data only.
+
+**Feedback:** use **Was this helpful?** under a reply, and **Send feedback** (bottom left) for a file you send to the MeritAI team.
+
+*Screenshots and video: `node_modules/electron/dist/electron.exe scripts/docs-media.cjs <demo url>` against `npm run ui:fake -- --demo-dir shots --reseed --no-open --port 5190` (see the script's header).*
+
 ## Run
 
 ```

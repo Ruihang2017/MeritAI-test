@@ -514,7 +514,7 @@ function Detail({ r, receipt, onClose, onEdit, onDocs, onLeft, onDelete, onAsk }
               <span className="grow">
                 {d.label}
                 <span className="meta" style={{ display: "block" }}>
-                  {d.recorded ? `Recorded ${fmtDate(d.recorded)}` : `Not recorded yet · due ${d.timing}`}
+                  {d.recorded ? `Recorded ${fmtDate(d.recorded)}` : `Not recorded yet · due ${fmtDatesIn(d.timing)}`}
                 </span>
               </span>
             </li>
@@ -795,7 +795,7 @@ function DocsDialog({ api, r, onClose, onSaved }: { api: Api; r: StaffRow; onClo
             <span>
               {d.label}
               <span className="meta" style={{ display: "block" }}>
-                Due {d.timing}
+                Due {fmtDatesIn(d.timing)}
               </span>
             </span>
           </label>

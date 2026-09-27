@@ -13,7 +13,7 @@ import { SAMPLE_RATE } from "./liveSession";
 const CHUNK_MS = 100;
 const SCRIPT = [
   "What do I need to do this week?",
-  "Hannah accepted the Team leader offer, she starts Monday.",
+  "Daniel Ortiz accepted the Team leader offer, he starts Monday.",
   "Priya is resigning, her last day is Friday 9 October.",
   "When is final pay due?",
 ];
