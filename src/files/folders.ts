@@ -34,7 +34,8 @@ export const POLICIES = "Policies";
 export const DATA = ".assistant";
 
 export function defaultFilesRoot(projectRoot: string): string {
-  return join(projectRoot, "files");
+  // The desktop app's default is a folder in the user's Documents (FX_FILES_ROOT).
+  return process.env.FX_FILES_ROOT ?? join(projectRoot, "files");
 }
 
 /** Creates Inbox/Outbox/Jobs/Policies under root if needed. */

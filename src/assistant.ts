@@ -66,10 +66,12 @@ export function createAssistant(opts: {
   onProgress?: Progress;
 }): Assistant {
   const read = (p: string) => readFileSync(resolve(ROOT, p), "utf8");
-  const workspace = resolve(ROOT, "workspace");
+  // The engine's working folder (empty; the sandbox is read-only). The desktop app puts it in the user's app data.
+  const workspace = process.env.FX_ENGINE_CWD ?? resolve(ROOT, "workspace");
   mkdirSync(workspace, { recursive: true });
 
-  const memoryRoot = opts.memoryRoot ?? resolve(ROOT, "memory");
+  // The desktop app keeps memory in the user's app data (FX_MEMORY_ROOT).
+  const memoryRoot = opts.memoryRoot ?? process.env.FX_MEMORY_ROOT ?? resolve(ROOT, "memory");
   const mem = new UserMemory(memoryRoot, opts.userId);
   const codexHome = codexHomeFor(ROOT);
   const folders = () => ensureFolders(mem.settings().filesRoot ?? defaultFilesRoot(ROOT));
