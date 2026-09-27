@@ -11,6 +11,7 @@ import { Icon } from "./components/Icon";
 import { AppBar, AttentionPanel, Nav, type AskButton, type Page } from "./components/Shell";
 import { Dock, type DockNotice } from "./components/Dock";
 import { FROM_PROFILE, fromReminder, type Ask } from "./ask";
+import { FeedbackDialog } from "./components/Feedback";
 import { BrowserVoice, savedMicrophone } from "./voice";
 import type { VoiceLevels, VoiceNote, VoiceUi } from "./components/Voice";
 import { StaffPage } from "./components/Staff";
@@ -111,6 +112,7 @@ function Shell({ api }: { api: Api }) {
   /** Bumped after a reply or an answered question: open pages reload what the adviser may have changed. */
   const [refreshKey, setRefreshKey] = useState(0);
   const [hiringJob, setHiringJob] = useState<{ job: string } | null>(null);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   // ---- voice in the browser (design: Voice, VoiceStates): the microphone and speaker here, GPT-Live on the server
   const [voiceUi, setVoiceUi] = useState<VoiceUi | null>(null);
@@ -530,7 +532,7 @@ function Shell({ api }: { api: Api }) {
         />
       ) : (
       <div className="body">
-        <Nav page={page} collapsed={docked} onPage={(p) => (setStaffOpen(null), setStaffAdd(null), setPage(p))} onNew={() => void newConversation()} recent={recent} onRecent={(id) => void resume(id)} currentThread={currentThread} state={state} />
+        <Nav page={page} collapsed={docked} onFeedback={() => setFeedbackOpen(true)} onPage={(p) => (setStaffOpen(null), setStaffAdd(null), setPage(p))} onNew={() => void newConversation()} recent={recent} onRecent={(id) => void resume(id)} currentThread={currentThread} state={state} />
         {page === "conversations" && (
           <ConversationPage
             api={api}
@@ -618,6 +620,7 @@ function Shell({ api }: { api: Api }) {
           </div>
         </div>
       )}
+      {feedbackOpen && <FeedbackDialog api={api} state={state} onClose={() => setFeedbackOpen(false)} />}
       {dialog && (
         <>
           <div className="scrim fill" />

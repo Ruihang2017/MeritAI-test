@@ -11,6 +11,7 @@ import { flaggedLinks, isOfficial, sources, UNREPORTED, type Block, type Turn } 
 import { dayLabel, fmtDatesIn, fmtTime } from "../format";
 import { Icon } from "./Icon";
 import { MicButton, VoiceBanner, VoiceBar, type VoiceLevels, type VoiceNote, type VoiceUi } from "./Voice";
+import { ReplyFeedback } from "./Feedback";
 
 /** Voice in the browser, as the Conversations page shows it. */
 export interface VoiceProps {
@@ -291,6 +292,7 @@ export function TurnView({ turn, showDay, onAnswer, api, domains, onRedo }: { tu
               ))}
             </div>
           )}
+          {turn.status === "completed" && turn.blocks.some((b) => b.kind === "text") && <ReplyFeedback turn={turn} api={api} />}
           {src.length > 0 && turn.status !== "running" && (
             <div className="row-wrap">
               {src.map((s) => (

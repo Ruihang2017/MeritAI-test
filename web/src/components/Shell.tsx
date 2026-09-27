@@ -123,7 +123,10 @@ export function Nav({
   currentThread,
   state,
   collapsed = false,
+  onFeedback,
 }: {
+  /** "Send feedback" in the account menu. */
+  onFeedback: () => void;
   /** Icons only (the side panel is open and needs the room). */
   collapsed?: boolean;
   page: Page;
@@ -157,6 +160,13 @@ export function Nav({
             </span>
           </button>
         ))}
+        <button type="button" role="menuitem" className="menu-item acct-item" onClick={() => (setAcctOpen(false), onFeedback())}>
+          <Icon name="feedback" />
+          <span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            <b>Send feedback</b>
+            <span className="meta">What worked and what didn't, as a file for the MeritAI team</span>
+          </span>
+        </button>
       </div>
     </>
   );

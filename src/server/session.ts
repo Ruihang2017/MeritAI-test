@@ -6,6 +6,9 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { AssistantApp, type AppEvent, type VoiceController } from "../app/app";
 import { DEMO_TODAY, seedDemo } from "../../scripts/fixtures/demo";
+import pkg from "../../package.json" with { type: "json" };
+
+const APP_VERSION = pkg.version;
 import type { Confirm, ConfirmRequest } from "../engine/types";
 import { DOCUMENTS } from "../business/register";
 import { LEAVING_REASONS } from "../business/leaving";
@@ -37,6 +40,12 @@ export class UiSession {
   private readonly caller = new AsyncLocalStorage<((ev: ServerEvent) => void) | null>();
   private voice: { ctl: VoiceController; source: PushSource; owner: (ev: ServerEvent) => void } | null = null;
   private voiceTurn: string | null = null;
+  /** The last errors (replies, voice), for the technical details of a feedback file. */
+  private readonly recentErrors: { at: string; message: string }[] = [];
+  private noteError(message: string): void {
+    this.recentErrors.push({ at: new Date().toISOString(), message: message.slice(0, 500) });
+    if (this.recentErrors.length > 20) this.recentErrors.shift();
+  }
   private tier: "fast" | "standard" | null = null;
   private limit: { resetAt: string | null } | null = null;
 
@@ -251,6 +260,20 @@ export class UiSession {
         else this.app.setFilesRoot(str(p?.path, "path", 1000));
         return this.settings();
       }),
+    rateReply: async (p) => {
+      if (p?.rating !== "up" && p?.rating !== "down") throw new Error("rating must be up or down");
+      const reasons = Array.isArray(p.reasons) ? p.reasons.slice(0, 5).map((r) => str(r, "reason", 60)) : [];
+      await this.app.rateReply({ rating: p.rating, reasons, note: str(p.note ?? "", "note", 2000), question: str(p.question ?? "", "question", 4000).slice(0, 2000), answer: str(p.answer ?? "", "answer", 20_000).slice(0, 4000) });
+      return null;
+    },
+    feedbackSummary: async () => this.app.feedbackSummary(),
+    exportFeedback: async (p) => {
+      const info = this.app.sessionInfo();
+      const technical = p?.technical
+        ? { app: APP_VERSION, engine: this.opts.engine, model: info?.model ?? null, reasoning: info?.reasoningEffort ?? null, tier: info?.serviceTier ?? null, platform: `${process.platform} ${process.arch}`, node: process.versions.node, electron: process.versions.electron ?? null, today: todayIso(), sampleData: this.app.sampleDay() !== null, recentErrors: this.recentErrors.slice(-20) }
+        : null;
+      return { path: await this.app.exportFeedback({ note: str(p?.note ?? "", "note", 10_000), ratings: p?.ratings === true, conversation: p?.conversation === true, technical }) };
+    },
     useSampleBusiness: async () =>
       this.exclusive("Preparing the sample business", async () => {
         const root = this.app.sampleRoot();
@@ -289,7 +312,7 @@ export class UiSession {
             },
             onSaid: (text) => this.emit({ event: "voice", kind: "said", text }),
             onConfirmSkipped: (req) => this.emit({ event: "voice", kind: "skipped", req, turnId: this.voiceTurn }),
-            onError: (message) => this.emit({ event: "voice", kind: "error", message }),
+            onError: (message) => (this.noteError(`voice: ${message}`), this.emit({ event: "voice", kind: "error", message })),
             onEnded: (info) => {
               this.voice = null;
               this.voiceTurn = null;
@@ -339,10 +362,12 @@ export class UiSession {
       for await (const ev of events) {
         if (ev.type === "usage_limit") this.limit = { resetAt: ev.resetAt };
         else if (ev.type === "text_delta") this.limit = null;
+        else if (ev.type === "error") this.noteError(ev.message);
         this.emit({ event: "turn", turnId, ev });
       }
     } catch (e) {
       error = (e as Error).message;
+      this.noteError(error);
     } finally {
       this.turn = null;
       this.emit({ event: "turnDone", turnId, ...(error ? { error } : {}) });

@@ -798,6 +798,35 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   ], JSON.stringify({ profile, badProfile, dup, pii, extend, leftViaUpdate, badDate, badReason, declined }).slice(0, 700));
 }
 
+// ------------------------------------------------------------------ testers' feedback
+{
+  process.env.FX_FAKE_DELAY_MS = "2";
+  const f = ensureFolders(join(TMP, "fb-files"));
+  const session = new UiSession({ engine: "fake" });
+  const app = new AssistantApp({ userId: "unit-fb", memoryRoot: join(TMP, "fb-mem"), filesRoot: f.root, format: "markdown", engine: "fake", ui: { confirm: session.confirm } });
+  session.attach(app);
+  await app.start();
+  await app.openSession();
+  const events: ServerEvent[] = [];
+  session.subscribe((e) => events.push(e));
+  await session.handle({ id: 1, method: "send", params: { text: "When is final pay due?", turnId: "f1" } });
+  await new Promise<void>((ok) => { const t = setInterval(() => events.some((e) => e.event === "turnDone") && (clearInterval(t), ok()), 10); });
+  await session.handle({ id: 2, method: "rateReply", params: { rating: "down", reasons: ["Missed something", "made up reason"], note: "No date given", question: "When is final pay due?", answer: "Within 7 days…" } });
+  await session.handle({ id: 3, method: "rateReply", params: { rating: "up", reasons: [], note: "", question: "q", answer: "a" } });
+  const summary = (await session.handle({ id: 4, method: "feedbackSummary", params: undefined })) as { up: number; down: number };
+  const badRating = await session.handle({ id: 5, method: "rateReply", params: { rating: "meh", reasons: [], note: "", question: "", answer: "" } } as never).then(() => false, () => true);
+  const out = (await session.handle({ id: 6, method: "exportFeedback", params: { note: "Liked the checklist", ratings: true, conversation: true, technical: true } })) as { path: string };
+  const file = JSON.parse(readFileSync(out.path, "utf8"));
+  const lean = JSON.parse(readFileSync(((await session.handle({ id: 7, method: "exportFeedback", params: { note: "just a note", ratings: false, conversation: false, technical: false } })) as { path: string }).path, "utf8"));
+  await app.close();
+  record("testers' feedback", [
+    ["ratings kept; unknown reasons dropped; bad rating refused", summary.up === 1 && summary.down === 1 && badRating && file.ratings?.[0]?.reasons.join() === "Missed something"],
+    ["feedback file in the workspace's Feedback folder", out.path.startsWith(join(f.root, "Feedback")) && file.note === "Liked the checklist"],
+    ["with the conversation and technical details (no key)", file.conversation?.messages?.length >= 2 && file.technical?.app && !JSON.stringify(file).includes("sk-")],
+    ["only what was chosen", lean.note === "just a note" && !lean.ratings && !lean.conversation && !lean.technical],
+  ], JSON.stringify({ summary, keys: Object.keys(file) }).slice(0, 300));
+}
+
 // ------------------------------------------------------------------ the sample business (first run)
 {
   const own = ensureFolders(join(TMP, "sample-own"));

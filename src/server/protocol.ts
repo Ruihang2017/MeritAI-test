@@ -76,6 +76,10 @@ export interface Methods {
   setVoiceKey: { params: { key: string }; result: { ok: true; status: VoiceKeyStatus } | { ok: false; error: string } };
   removeVoiceKey: { params: void; result: VoiceKeyStatus };
   /** Voice in the browser: the page sends its microphone (PCM16 mono 24 kHz, base64, about 100 ms a message) and plays the `voiceAudio` events. Only the page that started it. */
+  /** Testers' feedback: "Was this helpful?" on a reply (kept on this computer), and "Send feedback" (a file in the workspace's Feedback folder). */
+  rateReply: { params: { rating: "up" | "down"; reasons: string[]; note: string; question: string; answer: string }; result: null };
+  feedbackSummary: { params: void; result: { up: number; down: number } };
+  exportFeedback: { params: { note: string; ratings: boolean; conversation: boolean; technical: boolean }; result: { path: string } };
   /** First run: the sample business (synthetic Wattle Lane Cleaning) in its own folder, seeded once, as the workspace. */
   useSampleBusiness: { params: void; result: Settings };
   voiceStart: { params: void; result: { started: true } };

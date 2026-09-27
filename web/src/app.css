@@ -2470,3 +2470,78 @@ button.sample {
   flex-direction: column;
   gap: 4px;
 }
+
+/* testers' feedback (design: FeedbackReply, FeedbackSend) */
+.fb-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: -2px;
+}
+.fb-row .meta {
+  margin-right: 4px;
+}
+.ib.fb {
+  width: 34px;
+  height: 34px;
+}
+.ib.fb:hover {
+  background: #eef2f7;
+}
+.ib.fb.up {
+  background: #e3f3e8;
+  color: #1e6b3e;
+}
+.ib.fb.down {
+  background: #fce8e6;
+  color: #b3261e;
+}
+.fb-form {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 1px 3px rgba(27, 31, 39, 0.08);
+}
+.fb-chip {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid #d9dee7;
+  background: #fff;
+  color: #1b1f27;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.fb-chip.on {
+  border-color: #1a57cc;
+  background: #eef3fc;
+  color: #1446a6;
+  font-weight: 700;
+}
+.fb-dialog {
+  width: 560px;
+  max-width: calc(100vw - 32px);
+}
+.fb-box {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 14px;
+  cursor: pointer;
+}
+.fb-box input {
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: #1a57cc;
+}
+.fb-box span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fb-box b {
+  font-weight: 600;
+}

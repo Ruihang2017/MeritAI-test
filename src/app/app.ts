@@ -35,6 +35,7 @@ import { Microphone, Speaker, ffmpegAvailable, listMicrophones } from "../voice/
 import { extractText } from "../files/parse";
 import { checkWithOpenAI, keyFormatProblem, VoiceKeyStore, type VoiceKeyStatus } from "../voice/keyStore";
 import { FakeLiveSession } from "../voice/fakeLive";
+import { FeedbackLog, RATING_REASONS, writeFeedbackFile } from "./feedback";
 
 /**
  * The application layer: everything a user interface needs, with no terminal code.
@@ -726,6 +727,39 @@ export class AssistantApp {
     this.a.mem.updateSettings({ filesRoot: root });
     this.applySampleClock();
     return this.folders();
+  }
+
+  // --- testers' feedback (src/app/feedback.ts)
+
+  private feedbackLog(): FeedbackLog {
+    return new FeedbackLog(join(this.a.mem.dir, "feedback.jsonl"));
+  }
+
+  /** "Was this helpful?" on a reply: kept on this computer until the owner sends a feedback file. */
+  async rateReply(r: { rating: "up" | "down"; reasons: string[]; note: string; question: string; answer: string }): Promise<void> {
+    const threadId = this.session?.threadId ?? null;
+    const title = threadId ? ((await this.history()).find((s) => s.threadId === threadId)?.title ?? null) : null;
+    this.feedbackLog().add({ at: now().toISOString(), ...r, reasons: r.reasons.filter((x) => (RATING_REASONS as readonly string[]).includes(x)), conversation: title, threadId });
+  }
+
+  feedbackSummary(): { up: number; down: number } {
+    const all = this.feedbackLog().all();
+    return { up: all.filter((r) => r.rating === "up").length, down: all.filter((r) => r.rating === "down").length };
+  }
+
+  /** "Send feedback": one file in the workspace's Feedback folder, with what the owner chose to include. */
+  async exportFeedback(opts: { note: string; ratings: boolean; conversation: boolean; technical: Record<string, unknown> | null }): Promise<string> {
+    const threadId = this.session?.threadId ?? null;
+    const title = threadId ? ((await this.history()).find((s) => s.threadId === threadId)?.title ?? null) : null;
+    const content = {
+      kind: "MeritAI feedback",
+      savedAt: new Date().toISOString(),
+      note: opts.note,
+      ...(opts.ratings ? { ratings: this.feedbackLog().all() } : {}),
+      ...(opts.conversation && threadId ? { conversation: { title, messages: await this.conversation() } } : {}),
+      ...(opts.technical ? { technical: opts.technical } : {}),
+    };
+    return writeFeedbackFile(this.folders().root, new Date(), content);
   }
 
   // --- the sample business (first run: "Try it with a sample business")
