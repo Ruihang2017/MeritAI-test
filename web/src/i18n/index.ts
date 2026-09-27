@@ -11,7 +11,7 @@ import { ZH, ZH_PATTERNS } from "./zh";
 export type Lang = "en" | "zh";
 
 /** Parts of the page that are content, not UI. */
-const SKIP = ".md, .bubble, textarea, input, select, code, pre, .mono, .no-i18n, .jd-preview, .recent-item .t, .hist b, .crumb b, .chg-name b, .mail-row span:last-child";
+const SKIP = ".md, .bubble, textarea, input, code, pre, .mono, .no-i18n, .jd-preview, .recent-item .t, .hist b, .crumb b, .chg-name b, .mail-row span:last-child";
 const ATTRS = ["placeholder", "aria-label", "title"];
 
 const DAYS: Record<string, string> = { Mon: "周一", Tue: "周二", Wed: "周三", Thu: "周四", Fri: "周五", Sat: "周六", Sun: "周日" };
@@ -41,6 +41,7 @@ export function zh(text: string): string | null {
       }
     }
   }
+  if (out !== null) out = out.replace(/\b(Full-time|Part-time|Casual|Fixed-term)\b/g, (w) => ZH[w] ?? w).replace(/ · $/, "");
   const dated = zhDates(out ?? key);
   if (out === null && dated === key) return null;
   // Keep the spacing around it (JSX splits sentences into several text nodes).

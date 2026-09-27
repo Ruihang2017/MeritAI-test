@@ -1138,6 +1138,24 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   ], JSON.stringify({ n: JOB_TEMPLATES.length, suggested: data.suggested, job }).slice(0, 500));
 }
 
+// ------------------------------------------------------------------ Chinese: the UI dictionary, patterns and dates; the setting and the adviser's instructions
+{
+  const { zh, zhDates } = await import("../web/src/i18n/index");
+  const { LANGUAGE_ZH } = await import("../src/assistant");
+  const app = new AssistantApp({ userId: "unit-zh", memoryRoot: join(TMP, "zh-mem"), filesRoot: ensureFolders(join(TMP, "zh-files")).root, ui: { confirm: async () => false } });
+  const before = app.language();
+  const set = app.setLanguage("zh");
+  const back = app.setLanguage("en");
+  record("Chinese UI and replies", [
+    ["dictionary, keeping the spacing around the text", zh("  Add employee ") === "  添加员工 " && zh("Not this time") === "暂不考虑"],
+    ["patterns with names and dates", zh("Probation ends Fri 2 Oct: Leo Tran") === "Leo Tran 试用期结束：10月2日（周五）" && zh("Add to the employee register?") === "添加到员工名单？" && zh("3 of 5 hired") === "已录用 3/5"],
+    ["employment types joined", zh("Casual · Part-time") === "临时工 · 兼职" && zh("Full-time") === "全职"],
+    ["names and data left alone", zh("Hannah Cole") === null && zh("Team leader JD.docx") === null],
+    ["dates", zhDates("Mon 5 Oct 2026") === "2026年10月5日（周一）" && zhDates("9:42 am") === "上午 9:42"],
+    ["the setting, and the adviser's instruction keeps documents in English", before === "en" && set === "zh" && back === "en" && /Reply in Simplified Chinese/.test(LANGUAGE_ZH) && /documents for other people[^.]*in English/.test(LANGUAGE_ZH)],
+  ]);
+}
+
 try {
   rmSync(TMP, { recursive: true, force: true });
 } catch {

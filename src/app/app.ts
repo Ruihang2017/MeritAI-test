@@ -1208,7 +1208,7 @@ export class AssistantApp {
     if (lang === this.language()) return lang;
     this.a.mem.updateSettings({ language: lang === "en" ? undefined : lang });
     // New conversations get it in their instructions; the open one with its next message.
-    this.languageNote = this.hasConversation();
+    this.languageNote = this.session !== null;
     return lang;
   }
   private languageNote = false;

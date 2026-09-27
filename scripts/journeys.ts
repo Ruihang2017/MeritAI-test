@@ -348,6 +348,24 @@ const JOURNEYS: Journey[] = [
       return [["recorded on 26 Sep 2026", m?.documents.some((d) => d.id === "super_choice" && d.date === "2026-09-26") ?? false]];
     },
   },
+  {
+    id: "chinese",
+    title: "In Chinese: the reply in Chinese, the letter in English, the register updated",
+    setup: async (c) => {
+      c.app.setLanguage("zh");
+    },
+    steps: ["Priya 辞职了，最后一天是 10 月 9 日。请更新员工名单，并起草一封确认辞职的信，保存为 Word。"],
+    expect: async (c) => {
+      const { extractText } = await import("../src/files/parse");
+      const docs = outbox(c).filter((f) => f.endsWith(".docx") && !/acknowledgement\.docx$/.test(f) && !/screening|candidates|probation|welcome/i.test(f));
+      const letter = docs.length ? (await extractText(join(c.root, "Outbox", docs[0]))).text : "";
+      return [
+        ["the reply is in Chinese", /[\u4e00-\u9fff]{10}/.test(text(c))],
+        ["Priya marked as left on 9 Oct", staff(c, "Priya")?.status === "left" && staff(c, "Priya")?.leftDate === "2026-10-09"],
+        ["the letter is saved, in English", letter.length > 100 && !/[\u4e00-\u9fff]/.test(letter) && /Priya/.test(letter)],
+      ];
+    },
+  },
 ];
 
 async function runJourney(j: Journey): Promise<{ id: string; title: string; checks: [string, boolean][]; sync: [string, boolean][]; turns: Turn[]; seconds: number; error: string | null }> {
