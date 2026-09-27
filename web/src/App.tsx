@@ -5,7 +5,7 @@ import type { ShellState } from "../../src/server/protocol";
 import type { ConfirmRequest } from "../../src/engine/types";
 import { fmtDatesIn } from "./format";
 import { Api, type Connection } from "./api";
-import { addChange, addConfirm, applyEvent, setConfirm, turnsFromTranscript, type Turn } from "./conversation";
+import { addChange, addConfirm, applyEvent, setConfirm, turnsFromTranscript, withExtras, type Turn } from "./conversation";
 import { LiveContext, pageOf, RECENT_MS, type Live, type OpenTarget, type Seen } from "./live";
 import { refKey } from "../../src/changes";
 import { ArrivalNote } from "./components/Changes";
@@ -240,7 +240,8 @@ function Shell({ api }: { api: Api }) {
         restored.current = true;
         if (s.hasConversation && !turnsRef.current.length) {
           const entries = await api.call("transcript").catch(() => []);
-          if (entries.length && !turnsRef.current.length) setTurns(turnsFromTranscript(entries, now()));
+          const extras = await api.call("turnExtras").catch(() => ({}));
+          if (entries.length && !turnsRef.current.length) setTurns(withExtras(turnsFromTranscript(entries, now()), extras));
         }
       }
       // A reply still running on the server (e.g. after a reload): follow it again (its events and Stop).
@@ -284,7 +285,11 @@ function Shell({ api }: { api: Api }) {
             setTurns((ts) => ts.map((t) => (t.id === m.turnId && t.status === "running" ? applyEvent(t, { type: "turn_end", status: m.error ? "failed" : "completed", ...(m.error ? { error: m.error } : {}) }) : t)));
             // A reply followed after a page reload missed its start: show the stored conversation instead.
             const followed = turnsRef.current.find((t) => t.id === m.turnId && !t.user.text && !t.user.attachments.length);
-            if (followed) api.call("transcript").then((entries) => entries.length && setTurns(turnsFromTranscript(entries, followed.at)), () => null);
+            if (followed)
+              void Promise.all([api.call("transcript"), api.call("turnExtras").catch(() => ({}))]).then(
+                ([entries, extras]) => entries.length && setTurns(withExtras(turnsFromTranscript(entries, followed.at), extras)),
+                () => null,
+              );
             setRefreshKey((k) => k + 1);
             setVoiceUi((v) => (v ? { ...v, working: false } : v));
             void refresh();
@@ -426,7 +431,8 @@ function Shell({ api }: { api: Api }) {
         const rec = recent.find((x) => x.threadId === threadId);
         setResumedTitle(rec?.title ?? "an earlier conversation");
         const entries = await api.call("transcript").catch(() => []);
-        setTurns(turnsFromTranscript(entries, rec ? new Date(rec.startedAt) : now()));
+        const extras = await api.call("turnExtras").catch(() => ({}));
+        setTurns(withExtras(turnsFromTranscript(entries, rec ? new Date(rec.startedAt) : now()), extras));
       }
       void refresh();
     } catch (e) {

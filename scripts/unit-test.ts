@@ -1156,6 +1156,44 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   ]);
 }
 
+// ------------------------------------------------------------------ a reloaded or resumed conversation shows its "What changed" and saved files again
+{
+  process.env.FX_FAKE_DELAY_MS = "2";
+  const { withExtras, turnsFromTranscript } = await import("../web/src/conversation");
+  const root = join(TMP, "extras-files");
+  const hadToday = process.env.FX_TODAY;
+  process.env.FX_TODAY = DEMO_TODAY;
+  await seedDemo({ filesRoot: root, memoryRoot: join(TMP, "extras-mem"), userId: "unit-extras", memory: false });
+  const session = new UiSession({ engine: "fake" });
+  const app = new AssistantApp({ userId: "unit-extras", memoryRoot: join(TMP, "extras-mem"), filesRoot: root, format: "markdown", engine: "fake", ui: { confirm: session.confirm } });
+  session.attach(app);
+  await app.start();
+  await app.openSession();
+  const events: ServerEvent[] = [];
+  session.subscribe((e) => {
+    events.push(e);
+    if (e.event === "confirm") void session.handle({ id: 9, method: "answerConfirm", params: { id: e.id, yes: true } });
+  });
+  const say = async (text: string, turnId: string) => {
+    await session.handle({ id: 1, method: "send", params: { text, turnId } });
+    await new Promise<void>((ok) => { const t = setInterval(() => events.some((e) => e.event === "turnDone" && e.turnId === turnId) && (clearInterval(t), ok()), 10); });
+  };
+  await say("Hannah accepted the Team leader offer, she starts Monday", "x1");
+  await say("Email Priya the resignation acknowledgement, priya.nair@example.com", "x2");
+  const extras = (await session.handle({ id: 2, method: "turnExtras", params: undefined })) as Record<string, { changes: { summary: string }[]; files: string[] }>;
+  const restored = withExtras(turnsFromTranscript(await app.conversation(), new Date()), extras as never);
+  await app.close();
+  if (hadToday === undefined) delete process.env.FX_TODAY;
+  else process.env.FX_TODAY = hadToday;
+  const hire = restored.find((t) => /Hannah accepted/.test(t.user.text));
+  const mail = restored.find((t) => /Email Priya/.test(t.user.text));
+  record("restored conversations keep their cards", [
+    ["kept by the owner's message", Object.keys(extras).length === 2],
+    ["the hire's changes come back as cards", !!hire?.changes?.some((c) => c.ref.kind === "employee") && !!hire?.changes?.some((c) => c.ref.kind === "candidate")],
+    ["the email draft comes back as a file (its card)", !!mail?.files?.some((f) => f.endsWith(".eml"))],
+  ], JSON.stringify({ keys: Object.keys(extras), hire: hire?.changes?.length, mail: mail?.files }).slice(0, 500));
+}
+
 try {
   rmSync(TMP, { recursive: true, force: true });
 } catch {

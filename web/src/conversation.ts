@@ -1,6 +1,6 @@
 import type { AppEvent } from "../../src/app/app";
 import type { ConfirmRequest } from "../../src/engine/types";
-import { refKey, type ChangeAction, type EntityChange, type EntityRef } from "../../src/changes";
+import { refKey, turnKey, type ChangeAction, type EntityChange, type EntityRef } from "../../src/changes";
 
 /** One part of an assistant reply, in the order it arrived. */
 export type Block =
@@ -30,6 +30,8 @@ export interface Turn {
   id: string;
   /** What the reply changed (employees, jobs, candidates, files, the profile). */
   changes?: TurnChange[];
+  /** Files a restored reply saved (its steps aren't stored; the cards and chips show them again). */
+  files?: string[];
   at: Date;
   user: { text: string; attachments: string[] };
   skill?: string;
@@ -143,6 +145,17 @@ export function addChange(turn: Turn, c: EntityChange): Turn {
   const i = list.findIndex((x) => x.key === key);
   const next = i >= 0 ? list.map((x, j) => (j === i ? { ...x, ref: c.ref, actions: [...x.actions, c.action], summary: c.summary } : x)) : [...list, { key, ref: c.ref, actions: [c.action], summary: c.summary }];
   return { ...turn, changes: next };
+}
+
+/** Gives restored turns (a resumed or reloaded conversation) back their "What changed" and saved files. */
+export function withExtras(turns: Turn[], extras: Record<string, { changes: EntityChange[]; files: string[] }>): Turn[] {
+  return turns.map((t) => {
+    const x = t.user.text ? extras[turnKey(t.user.text)] : undefined;
+    if (!x) return t;
+    let out: Turn = { ...t, files: x.files };
+    for (const c of x.changes) out = addChange(out, c);
+    return out;
+  });
 }
 
 /** A confirmation question joins the running turn. */

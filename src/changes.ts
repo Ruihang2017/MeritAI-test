@@ -63,6 +63,15 @@ export function refKey(r: EntityRef): string {
   }
 }
 
+/**
+ * The key of a reply in a stored conversation: the owner's message as the chat shows it (without
+ * the app's bracketed notes). Its "What changed" and saved files are kept under it, so a resumed
+ * or reloaded conversation shows them again.
+ */
+export function turnKey(userText: string): string {
+  return userText.replace(/\[(attached|imported folder as job|reply language)[^\]]*\]\s*/g, "").replace(/\s+/g, " ").trim().slice(0, 200);
+}
+
 /** A list of listeners (one per assistant). */
 export class Changes {
   private readonly listeners = new Set<ChangeSink>();

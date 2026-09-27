@@ -39,6 +39,8 @@ export class UiSession {
   /** The connection a request came from (voice audio goes only to the page that started voice). */
   private readonly caller = new AsyncLocalStorage<((ev: ServerEvent) => void) | null>();
   private voice: { ctl: VoiceController; source: PushSource; owner: (ev: ServerEvent) => void } | null = null;
+  /** The owner's message of each reply (its changes and saved files are kept under it). */
+  private readonly turnText = new Map<string, string>();
   private voiceTurn: string | null = null;
   /** The last errors (replies, voice), for the technical details of a feedback file. */
   private readonly recentErrors: { at: string; message: string }[] = [];
@@ -80,7 +82,10 @@ export class UiSession {
     app.onChange((change) => {
       const store = this.origin.getStore();
       const by = store && store.turnId === null ? "you" : "adviser";
-      this.emit({ event: "changed", change, by, turnId: by === "adviser" ? (store?.turnId ?? this.turn ?? this.voiceTurn) : null });
+      const turnId = by === "adviser" ? (store?.turnId ?? this.turn ?? this.voiceTurn) : null;
+      this.emit({ event: "changed", change, by, turnId });
+      const said = turnId ? this.turnText.get(turnId) : undefined;
+      if (said) this.app.noteTurnExtra(said, { change });
     });
     return this;
   }
@@ -137,6 +142,7 @@ export class UiSession {
       const busy = this.running();
       if (busy) throw new Error(busy);
       this.turn = turnId;
+      this.turnText.set(turnId, p.mode === "setup" ? "Set up my business profile" : text);
       // The reply's own questions (fake engine tools) belong to this turn.
       this.origin.run({ turnId }, () => void this.run(turnId, p.mode === "setup" ? this.app.setup(from) : this.app.send(text, { ...(skill ? { skill } : {}), ...(from ? { from } : {}) })));
       return { turnId };
@@ -319,12 +325,16 @@ export class UiSession {
         const ctl = await this.origin.exit(() => this.app.startVoice(
           {
             onRequest: (text, mode) => {
-              if (mode === "new" || !this.voiceTurn) this.voiceTurn = randomUUID();
+              if (mode === "new" || !this.voiceTurn) {
+                this.voiceTurn = randomUUID();
+                this.turnText.set(this.voiceTurn, text);
+              }
               this.emit({ event: "voice", kind: "request", text, mode, turnId: this.voiceTurn });
             },
             onEvent: (ev) => {
               const id = this.voiceTurn;
               if (!id) return;
+              if (ev.type === "tool_activity" && ev.files?.length) this.noteFiles(id, ev.files);
               this.emit({ event: "turn", turnId: id, ev });
               if (ev.type === "turn_end") this.emit({ event: "turnDone", turnId: id });
             },
@@ -385,6 +395,7 @@ export class UiSession {
     openFile: async (p) => this.app.openFile(str(p?.path, "path", 2000)),
     revealFile: async (p) => this.app.revealFile(str(p?.path, "path", 2000)),
     emailDraft: async (p) => this.app.emailDraft(str(p?.path, "path", 2000)),
+    turnExtras: async () => this.app.turnExtras(),
     connections: async () => ({ wanted: this.app.wantedConnections() }),
     wantConnection: async (p) => ({ wanted: this.app.wantConnection(str(p?.name, "name", 100), p?.want === true) }),
   };
@@ -396,6 +407,7 @@ export class UiSession {
         if (ev.type === "usage_limit") this.limit = { resetAt: ev.resetAt };
         else if (ev.type === "text_delta") this.limit = null;
         else if (ev.type === "error") this.noteError(ev.message);
+        else if (ev.type === "tool_activity" && ev.files?.length) this.noteFiles(turnId, ev.files);
         this.emit({ event: "turn", turnId, ev });
       }
     } catch (e) {
@@ -405,6 +417,11 @@ export class UiSession {
       this.turn = null;
       this.emit({ event: "turnDone", turnId, ...(error ? { error } : {}) });
     }
+  }
+
+  private noteFiles(turnId: string, files: string[]): void {
+    const said = this.turnText.get(turnId);
+    if (said) this.app.noteTurnExtra(said, { files });
   }
 
   /** Only an existing job's name (it becomes a folder name in the app). */

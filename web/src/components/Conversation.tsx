@@ -216,7 +216,7 @@ export function TurnView({ turn, showDay, onAnswer, api, domains, onRedo, compac
   const [stepsOpen, setStepsOpen] = useState(false);
   const src = sources(turn, domains);
   const flagged = flaggedLinks(turn);
-  const all = turn.steps.flatMap((s) => s.files ?? []);
+  const all = [...new Set([...turn.steps.flatMap((s) => s.files ?? []), ...(turn.files ?? [])])];
   // Email drafts get their own card (design: EmailDraft); other saved files are chips.
   const emails = all.filter((f) => f.toLowerCase().endsWith(".eml"));
   const files = all.filter((f) => !f.toLowerCase().endsWith(".eml"));

@@ -4,6 +4,7 @@
  * server pushes events (reply streaming, confirmation questions, progress).
  * Type-only: the web app imports these types, never server code.
  */
+import type { TurnExtras } from "../app/app";
 import type { AppEvent, AttachOutcome, ChecklistItem, FormNote, FormResult, LeavingItem, LeavingReason, JobResults, JobSummary, ScreenOutcome, StaffOverviewRow } from "../app/app";
 import type { IngestSummary } from "../screening/pipeline";
 import type { Rubric } from "../screening/catalog";
@@ -101,6 +102,8 @@ export interface Methods {
   login: { params: void; result: { ok: boolean; error?: string } };
   openFile: { params: { path: string }; result: { ok: true } | { ok: false; error: string } };
   revealFile: { params: { path: string }; result: { ok: true } | { ok: false; error: string } };
+  /** The current conversation's "What changed" and saved files, by the owner's message (turnKey in src/changes.ts). */
+  turnExtras: { params: void; result: Record<string, TurnExtras> };
   /** Connections that are coming (Connections page): which ones the owner wants, kept for the feedback file. */
   connections: { params: void; result: { wanted: string[] } };
   wantConnection: { params: { name: string; want: boolean }; result: { wanted: string[] } };

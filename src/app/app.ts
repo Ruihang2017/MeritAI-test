@@ -39,7 +39,7 @@ import { usdFor, VoiceUsage, type VoiceUsageSummary } from "../voice/usage";
 import { FeedbackLog, RATING_REASONS, writeFeedbackFile } from "./feedback";
 import { createJobWithJd, linkHire } from "../business/hiring";
 import { INDUSTRIES, industriesFor, JOB_TEMPLATES, type IndustryId, type JobTemplate } from "../business/jobTemplates";
-import type { ChangeSink } from "../changes";
+import { turnKey, type ChangeSink, type EntityChange } from "../changes";
 import { readEml } from "../files/email";
 import { LANGUAGE_ZH } from "../assistant";
 
@@ -192,6 +192,12 @@ export interface VoiceAudio {
 export interface VoiceController {
   device: string;
   stop(reason?: string): void;
+}
+
+/** What a reply changed and saved (kept for the conversation). */
+export interface TurnExtras {
+  changes: EntityChange[];
+  files: string[];
 }
 
 /** In a workspace's .assistant/: marks the sample business (synthetic data) and the day it is written for. */
@@ -363,7 +369,10 @@ export class AssistantApp {
   private async cleanupOldSessions(): Promise<number> {
     const cutoff = Date.now() - SESSION_RETENTION_DAYS * 86_400_000;
     const old = (await this.a.engine.listStoredSessions()).filter((s) => s.updatedAt.getTime() < cutoff);
-    for (const s of old) await this.a.engine.deleteStoredSession(s.threadId);
+    for (const s of old) {
+      await this.a.engine.deleteStoredSession(s.threadId);
+      rmSync(this.extrasFile(s.threadId), { force: true });
+    }
     this.a.mem.dropSessions(new Set(old.map((s) => s.threadId)));
     return old.length;
   }
@@ -1196,6 +1205,43 @@ export class AssistantApp {
     if (usd !== null && (!Number.isFinite(usd) || usd <= 0 || usd > 10_000)) throw new Error("the limit must be an amount above 0 (US$), or empty for none");
     this.a.mem.updateSettings({ voiceMonthlyLimitUsd: usd === null ? undefined : Math.round(usd * 100) / 100 });
     return this.voiceUsage();
+  }
+
+  // --- what each reply changed and saved, kept per conversation (a resumed or reloaded one shows its cards again)
+
+  private extrasFile(threadId: string): string {
+    return join(this.a.mem.dir, "turns", `${threadId.replace(/[^\w-]/g, "")}.json`);
+  }
+
+  /** Keeps a change or saved files for the reply to `userText` in the current conversation. */
+  noteTurnExtra(userText: string, extra: { change?: EntityChange; files?: string[] }): void {
+    const threadId = this.session?.threadId;
+    const key = turnKey(userText);
+    if (!threadId || !key) return;
+    const file = this.extrasFile(threadId);
+    let all: Record<string, TurnExtras> = {};
+    try {
+      all = JSON.parse(readFileSync(file, "utf8")) as Record<string, TurnExtras>;
+    } catch {
+      /* first one */
+    }
+    const cur = all[key] ?? { changes: [], files: [] };
+    if (extra.change) cur.changes.push(extra.change);
+    for (const f of extra.files ?? []) if (!cur.files.includes(f)) cur.files.push(f);
+    all[key] = cur;
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, JSON.stringify(all));
+  }
+
+  /** The current conversation's kept changes and files, by the owner's message (turnKey). */
+  turnExtras(): Record<string, TurnExtras> {
+    const threadId = this.session?.threadId;
+    if (!threadId) return {};
+    try {
+      return JSON.parse(readFileSync(this.extrasFile(threadId), "utf8")) as Record<string, TurnExtras>;
+    } catch {
+      return {};
+    }
   }
 
   // --- the owner's language (Settings): the app and the adviser's replies; documents stay in English
