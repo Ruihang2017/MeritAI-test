@@ -29,6 +29,7 @@ const PATHS = {
   expand: "M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7",
   down: "M6 9l6 6 6-6",
   goto: "M7 17L17 7M7 7h10v10",
+  up: "M7 15l5-5 5 5",
 } as const;
 
 export type IconName = keyof typeof PATHS;

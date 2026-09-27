@@ -34,7 +34,7 @@ Code:
 | Item | Value |
 |---|---|
 | Endpoint | `wss://api.openai.com/v1/live/sessions` (the model's only endpoint). No query parameters; `/v1/realtime` rejects `gpt-live-1` |
-| Auth | `Authorization: Bearer <VOICE_OPENAI_API_KEY>` |
+| Auth | `Authorization: Bearer <key>`: the key saved in Settings (`src/voice/keyStore.ts`: DPAPI-encrypted for the Windows user, only its last 4 characters ever shown, checked with OpenAI before saving), else `VOICE_OPENAI_API_KEY` in `.env`. Never an environment variable named `OPENAI_API_KEY` (codex would read it) |
 | First event | `session.start` with `session: {model, instructions, audio: {format: {type: "audio/pcm", rate: 24000}, output: {voice}}, delegation: {type: "client"}}` → `session.started` |
 | Audio | PCM16 mono 24 kHz base64. Output is a continuous real-time stream (about one 100 ms delta per 100 ms, silence included), field `delta` |
 | Delegation | `session.delegation.created` has only `delegation.id` and `offset_ms`; **no text**. The request comes from `session.input_transcript.delta` (`start_ms`/`end_ms`) |
@@ -68,7 +68,7 @@ Deviation from the plan: there is no cancel event, so "stop" or "never mind" arr
 
 ## 4 Security and privacy
 
-- Audio and transcripts, plus the answer summaries we send as commentary, go to the OpenAI organisation of `VOICE_OPENAI_API_KEY`. Use a company key before any real data.
+- Audio and transcripts, plus the answer summaries we send as commentary, go to the OpenAI organisation of the voice key. Use a company key before any real data.
 - GPT-Live has no tools of its own. Files, memory, the web and skills stay behind Codex and our guards.
 - The key is in `.env` (gitignored). It is not named `OPENAI_API_KEY`, which would switch the Codex login to API billing.
 

@@ -12,6 +12,7 @@ import type { ConfirmRequest } from "../engine/types";
 import type { Reminder } from "../business/reminders";
 import type { Preference, SessionFrom, SessionRecord, TaskNote } from "../memory/store";
 import type { BusinessProfile } from "../business/profile";
+import type { VoiceKeyStatus } from "../voice/keyStore";
 
 /** Everything the UI can call. Anything else is refused by the server. */
 export interface Methods {
@@ -69,6 +70,11 @@ export interface Methods {
   settings: { params: void; result: Settings };
   setTier: { params: { tier: "fast" | "standard" }; result: Settings };
   setWorkspace: { params: { path: string | null }; result: Settings };
+  /** The voice API key: only whether one is kept and its last 4 characters; the key itself never comes back. */
+  voiceKey: { params: void; result: VoiceKeyStatus };
+  /** Checks the key with OpenAI and keeps it encrypted on this computer. */
+  setVoiceKey: { params: { key: string }; result: { ok: true; status: VoiceKeyStatus } | { ok: false; error: string } };
+  removeVoiceKey: { params: void; result: VoiceKeyStatus };
   /** Starts the ChatGPT sign-in; the code arrives as a `login` event, the result when it finishes. */
   login: { params: void; result: { ok: boolean; error?: string } };
   openFile: { params: { path: string }; result: { ok: true } | { ok: false; error: string } };
@@ -101,6 +107,8 @@ export interface ShellState {
   /** The current conversation's thread, and the page it was started from (the side panel's "From …"). */
   threadId: string | null;
   from: SessionFrom | null;
+  /** Voice needs an OpenAI API key (Settings); without one the microphone is off. */
+  voice: { keySet: boolean };
   /** Overdue and this-week counts for the Attention button and badges. */
   attention: { overdue: number; soon: number };
   /** Set when the last reply hit the ChatGPT plan usage limit (cleared by the next reply that works). */

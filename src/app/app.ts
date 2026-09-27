@@ -33,6 +33,7 @@ import { LiveSession } from "../voice/liveSession";
 import { VoiceBridge } from "../voice/bridge";
 import { Microphone, Speaker, ffmpegAvailable, listMicrophones } from "../voice/audio";
 import { extractText } from "../files/parse";
+import { checkWithOpenAI, keyFormatProblem, VoiceKeyStore, type VoiceKeyStatus } from "../voice/keyStore";
 
 /**
  * The application layer: everything a user interface needs, with no terminal code.
@@ -987,6 +988,43 @@ export class AssistantApp {
     return { devices, current: this.a.mem.settings().micDevice ?? devices[0] };
   }
 
+  // --- the voice API key (Settings): see src/voice/keyStore.ts
+
+  private keyStore(): VoiceKeyStore {
+    return new VoiceKeyStore(join(this.a.mem.dir, "voice-key.json"));
+  }
+
+  /** VOICE_OPENAI_API_KEY from .env: the developer setup, used when no key is saved. */
+  private envVoiceKey(): string | undefined {
+    try {
+      process.loadEnvFile(join(ROOT, ".env"));
+    } catch {
+      /* no .env */
+    }
+    return process.env.VOICE_OPENAI_API_KEY || undefined;
+  }
+
+  voiceKeyStatus(): VoiceKeyStatus {
+    return this.keyStore().status(this.envVoiceKey());
+  }
+
+  /** Checks the key with OpenAI, then keeps it encrypted on this computer. Errors are for the owner to read; none quotes the key. */
+  async setVoiceKey(key: string, check: (key: string) => Promise<"ok" | "rejected" | "unreachable"> = checkWithOpenAI): Promise<{ ok: true; status: VoiceKeyStatus } | { ok: false; error: string }> {
+    const k = key.trim();
+    const problem = keyFormatProblem(k);
+    if (problem) return { ok: false, error: problem };
+    const r = await check(k);
+    if (r === "rejected") return { ok: false, error: "OpenAI didn't accept this key. Check that you copied all of it and that it hasn't been deleted." };
+    if (r === "unreachable") return { ok: false, error: "Couldn't reach OpenAI to check the key. Check the internet connection and try again." };
+    await this.keyStore().save(k, now().toISOString());
+    return { ok: true, status: this.voiceKeyStatus() };
+  }
+
+  removeVoiceKey(): VoiceKeyStatus {
+    this.keyStore().remove();
+    return this.voiceKeyStatus();
+  }
+
   setMicrophone(device: string): void {
     this.a.mem.updateSettings({ micDevice: device });
   }
@@ -998,13 +1036,8 @@ export class AssistantApp {
    */
   async startVoice(h: VoiceHandlers, audio?: VoiceAudio): Promise<VoiceController> {
     if (this.voice) throw new Error("voice is already on");
-    try {
-      process.loadEnvFile(join(ROOT, ".env"));
-    } catch {
-      /* no .env: checked below */
-    }
-    const apiKey = process.env.VOICE_OPENAI_API_KEY;
-    if (!apiKey) throw new Error("voice needs VOICE_OPENAI_API_KEY in .env (see .env.example)");
+    const apiKey = (await this.keyStore().load()) ?? this.envVoiceKey();
+    if (!apiKey) throw new Error("voice needs an OpenAI API key: add it in Settings, or VOICE_OPENAI_API_KEY in .env (see .env.example)");
     let device = "custom audio";
     if (!audio) {
       if (!ffmpegAvailable()) throw new Error("voice needs ffmpeg and ffplay on PATH");

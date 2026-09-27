@@ -29,6 +29,7 @@ import { startUiServer, staticFile } from "../src/server/server";
 import type { Method, Methods, ServerEvent, ShellState } from "../src/server/protocol";
 import { parentalChecklist, serviceEligible, PARENTAL_URLS } from "../src/business/parentalLeave";
 import { confirmText, type Confirm, type ConfirmContext, type ConfirmRequest } from "../src/engine/types";
+import { VoiceKeyStore } from "../src/voice/keyStore";
 
 type Check = [string, boolean];
 const results: { name: string; checks: Check[]; detail?: string }[] = [];
@@ -795,6 +796,33 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["delete: confirmed removes it", removed.ok && removed.removed && !app.staff(true).some((e) => e.id === samId)],
     ["only delete asked a question", asked.length === 2],
   ], JSON.stringify({ profile, badProfile, dup, pii, extend, leftViaUpdate, badDate, badReason, declined }).slice(0, 700));
+}
+
+// ------------------------------------------------------------------ the voice API key (Settings): encrypted, last 4 only
+{
+  const app = new AssistantApp({ userId: "unit-voicekey", memoryRoot: join(TMP, "voicekey-mem"), filesRoot: ensureFolders(join(TMP, "voicekey-files")).root, ui: { confirm: async () => false } });
+  const file = join(TMP, "voicekey-mem", "users", "unit-voicekey", "voice-key.json");
+  const key = "sk-unit-test-" + "x".repeat(24) + "W9zQ";
+  const badFormat = await app.setVoiceKey("notakey-1234567890abcdef", async () => "ok");
+  const rejected = await app.setVoiceKey(key, async () => "rejected");
+  const offline = await app.setVoiceKey(key, async () => "unreachable");
+  const notSaved = !existsSync(file);
+  let checked = "";
+  const saved = await app.setVoiceKey(`  ${key}
+`, async (k) => ((checked = k), "ok"));
+  const onDisk = existsSync(file) ? readFileSync(file, "utf8") : "";
+  const store = new VoiceKeyStore(file);
+  const back = await store.load();
+  const removed = app.removeVoiceKey();
+  record("voice API key", [
+    ["format checked before OpenAI", !badFormat.ok && /sk-/.test(badFormat.error)],
+    ["refused or unchecked keys are not saved", !rejected.ok && /didn't accept/.test(rejected.error) && !offline.ok && /Couldn't reach OpenAI/.test(offline.error) && notSaved],
+    ["no error quotes the key", ![badFormat, rejected, offline].some((r) => !r.ok && r.error.includes("sk-unit"))],
+    ["saved: trimmed, checked, last 4 only", saved.ok && checked === key && saved.status.source === "saved" && saved.status.last4 === "W9zQ" && !JSON.stringify(saved).includes(key)],
+    ["on disk: encrypted (DPAPI), no key text", onDisk.length > 0 && !onDisk.includes(key) && !onDisk.includes("sk-unit") && /"cipher"/.test(onDisk)],
+    ["decrypts back for voice", back === key],
+    ["removed: file gone, not saved any more", !existsSync(file) && removed.source !== "saved"],
+  ]);
 }
 
 try {

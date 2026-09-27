@@ -52,7 +52,7 @@ npm run ui:dev       # UI development: hot reload, fake engine
 
 Demo options: `-- --reseed` puts the demo workspace back to the design's sample data; `FX_FAKE_SIGNED_OUT=1` starts signed out (the first-run screens); `npm run ui:fake -- --fresh` starts from an empty workspace. Voice is not in the browser UI yet.
 
-Voice mode reads `.env` (copy `.env.example`): `VOICE_OPENAI_API_KEY`, `VOICE_MODEL` (default `gpt-live-1`), `VOICE_NAME` (default `gleam`). It needs `ffmpeg` and `ffplay` on PATH. Voice is billed per minute to that key; it is not part of the ChatGPT subscription.
+Voice mode uses the OpenAI API key saved in the browser UI's Settings (kept encrypted for the Windows user, `src/voice/keyStore.ts`), else `.env` (copy `.env.example`): `VOICE_OPENAI_API_KEY`, `VOICE_MODEL` (default `gpt-live-1`), `VOICE_NAME` (default `gleam`). It needs `ffmpeg` and `ffplay` on PATH. Voice is billed per minute to that key; it is not part of the ChatGPT subscription.
 
 ## Chat commands
 

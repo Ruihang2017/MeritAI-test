@@ -2164,3 +2164,85 @@ button:disabled {
 .dock[hidden] {
   display: none;
 }
+
+/* the account menu under the owner's name (design: ShellAccountMenu): Memory, Settings */
+.me-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+button.me {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: #1b1f27;
+}
+button.me:hover,
+button.me.on {
+  background: #eef3fc;
+}
+button.me[aria-expanded="true"] {
+  border-color: #c9d8f5;
+}
+button.me > svg {
+  flex-shrink: 0;
+  color: #4a5363;
+}
+.me-t {
+  flex-grow: 1;
+  min-width: 0;
+}
+.av.me-av {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: #dce6fa;
+  color: #1446a6;
+  font-size: 13px;
+}
+.nav-icon.me-icon[aria-expanded="true"] {
+  background: #eef3fc;
+}
+.nav.collapsed {
+  overflow: visible;
+}
+.menu.acct-menu {
+  bottom: 60px;
+  left: 0;
+  width: 240px;
+}
+.menu.acct-menu.acct-side {
+  left: 52px;
+  bottom: 0;
+}
+.menu-item.acct-item {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+.menu-item.acct-item svg {
+  flex-shrink: 0;
+  color: #4a5363;
+}
+.menu-item.acct-item.on {
+  background: #eef3fc;
+}
+
+/* Settings: the saved voice key */
+.input.key-saved {
+  flex-grow: 1;
+  min-width: 280px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #4a5363;
+  background: #f8f9fb;
+  font-size: 13.5px;
+}
+.input.key-saved svg {
+  flex-shrink: 0;
+}

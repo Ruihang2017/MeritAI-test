@@ -8,6 +8,7 @@ import { dayLabel, fmtDate, fmtDatesIn, fmtDay, fmtWhen, localDay } from "../for
 import { now } from "../clock";
 import { Icon } from "./Icon";
 import { fromFile, type Ask } from "../ask";
+import type { VoiceKeyStatus } from "../../../src/voice/keyStore";
 
 const isoDay = localDay;
 const kb = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
@@ -738,6 +739,137 @@ export function MemoryPage({ api, onProfile }: { api: Api; onProfile: () => void
 
 // ------------------------------------------------------------------ Settings
 
+/**
+ * The voice API key (design: Settings, SettingsVoiceKey). Pasted, never shown again except its
+ * last 4 characters; the server checks it with OpenAI and keeps it encrypted on this computer.
+ */
+function VoiceCard({ api, onChanged }: { api: Api; onChanged: () => void }) {
+  const [status, setStatus] = useState<VoiceKeyStatus | null>(null);
+  const [replacing, setReplacing] = useState(false);
+  const [key, setKey] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    api.call("voiceKey").then(setStatus, (e: Error) => setErr(e.message));
+  }, [api]);
+  const save = async () => {
+    setSaving(true);
+    setErr(null);
+    try {
+      const r = await api.call("setVoiceKey", { key });
+      if (r.ok) {
+        setStatus(r.status);
+        setReplacing(false);
+        setKey("");
+        onChanged();
+      } else setErr(r.error);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  const remove = async () => {
+    setErr(null);
+    try {
+      setStatus(await api.call("removeVoiceKey"));
+      onChanged();
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  };
+  const asking = status && (!status.set || replacing);
+  return (
+    <section className="card set" style={{ gridColumn: "1 / -1" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <h2 className="h2" style={{ flexGrow: 1 }}>
+          Voice
+        </h2>
+        {status &&
+          (status.set ? (
+            <span className="pill ok">
+              <span className="dot" />
+              Ready
+            </span>
+          ) : (
+            <span className="pill n">
+              <span className="dot" />
+              Off: no API key
+            </span>
+          ))}
+      </div>
+      {asking && (
+        <form
+          className="field"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+        >
+          <label htmlFor="vkey">OpenAI API key</label>
+          <span className="row-wrap" style={{ alignItems: "center" }}>
+            <input id="vkey" className="input" type="password" autoComplete="off" spellCheck={false} style={{ flexGrow: 1, minWidth: 280 }} placeholder="Paste your key (starts with sk-)" value={key} onChange={(e) => setKey(e.target.value)} disabled={saving} />
+            <button type="submit" className="btn p" disabled={!key.trim() || saving}>
+              {saving ? (
+                <>
+                  <span className="spin" /> Checking with OpenAI…
+                </>
+              ) : (
+                "Save key"
+              )}
+            </button>
+            {replacing && (
+              <button type="button" className="btn g" onClick={() => (setReplacing(false), setKey(""), setErr(null))}>
+                Cancel
+              </button>
+            )}
+          </span>
+          <span className="hint">
+            Voice uses your own OpenAI API key and is billed to your OpenAI account (about US$0.05 a minute). This is separate from your ChatGPT sign-in.{" "}
+            <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer noopener">
+              Create a key on OpenAI's site
+            </a>
+          </span>
+        </form>
+      )}
+      {status?.set && !replacing && (
+        <div className="field">
+          <span>OpenAI API key</span>
+          <span className="row-wrap" style={{ alignItems: "center" }}>
+            <span className="input key-saved">
+              <Icon name="lock" size={16} />
+              <span className="mono" style={{ color: "#1B1F27" }}>sk-…{status.last4}</span>
+              {status.source === "env" ? " · from .env (developer setup)" : ` · saved on this computer${status.checkedAt ? ` · checked with OpenAI ${fmtDay(localDay(status.checkedAt))}` : ""}`}
+            </span>
+            <button type="button" className="btn" onClick={() => (setReplacing(true), setErr(null))}>
+              Replace
+            </button>
+            {status.source === "saved" && (
+              <button type="button" className="btn g" style={{ color: "#B3261E" }} onClick={() => void remove()}>
+                Remove
+              </button>
+            )}
+          </span>
+        </div>
+      )}
+      {err && (
+        <div className="banner bad" role="alert">
+          {err}
+        </div>
+      )}
+      <div className="banner info" style={{ fontSize: 13, padding: "10px 12px" }}>
+        <Icon name="lock" size={16} />
+        <span>The key stays on this computer, encrypted for your Windows sign-in, and goes only to OpenAI while you use voice. Only its last 4 characters are ever shown: to change it, paste a new one.</span>
+      </div>
+      <ul className="meta" style={{ margin: 0, paddingLeft: 18, lineHeight: 1.6, fontSize: 13.5 }}>
+        <li>Costs about US$0.05 a minute, billed to the API key's OpenAI account.</li>
+        <li>Stops by itself after 60 seconds of silence.</li>
+        <li>Changes that need your OK aren't saved during voice; you confirm them in the chat.</li>
+      </ul>
+    </section>
+  );
+}
+
 export function SettingsPage({ api, onChanged, login }: { api: Api; onChanged: () => void; login: { url: string | null; code: string | null; message: string } | null }) {
   const load = useCallback(() => api.call("settings"), [api]);
   const { data, error, reload } = useLoad<Settings>(load);
@@ -873,6 +1005,7 @@ export function SettingsPage({ api, onChanged, login }: { api: Api; onChanged: (
                 )}
               </form>
             </section>
+            <VoiceCard api={api} onChanged={onChanged} />
             <section className="card set" style={{ gridColumn: "1 / -1" }}>
               <h2 className="h2">About</h2>
               <dl className="dl">

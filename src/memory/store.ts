@@ -103,6 +103,8 @@ export class UserMemory {
   private tasksFile: JsonlFile<TaskNote>;
   private sessionsFile: JsonlFile<SessionRecord>;
   private settingsPath: string;
+  /** This user's folder (settings, preferences, notes, the voice key). */
+  readonly dir: string;
 
   constructor(
     root: string,
@@ -110,6 +112,7 @@ export class UserMemory {
   ) {
     const dir = join(root, "users", userId);
     mkdirSync(dir, { recursive: true });
+    this.dir = dir;
     this.settingsPath = join(dir, "settings.json");
     this.prefs = new JsonlFile(join(dir, "preferences.jsonl"));
     this.tasksFile = new JsonlFile(join(dir, "tasks.jsonl"));

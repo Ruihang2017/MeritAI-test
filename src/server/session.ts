@@ -237,6 +237,9 @@ export class UiSession {
         else this.app.setFilesRoot(str(p?.path, "path", 1000));
         return this.settings();
       }),
+    voiceKey: async () => this.app.voiceKeyStatus(),
+    setVoiceKey: async (p) => this.app.setVoiceKey(str(p?.key, "key", 400)),
+    removeVoiceKey: async () => this.app.removeVoiceKey(),
     login: async () =>
       this.exclusive("Signing in", async () => {
         try {
@@ -313,6 +316,7 @@ export class UiSession {
       title: rec?.title ?? null,
       threadId: threadId ?? null,
       from: rec?.from ?? null,
+      voice: { keySet: this.app.voiceKeyStatus().set },
       attention: this.app.attentionSummary(),
       usageLimit: this.limit,
       attachments: this.app.pendingAttachments(),

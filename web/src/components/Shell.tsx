@@ -1,7 +1,7 @@
 import type { Reminder } from "../../../src/business/reminders";
 import type { ShellState } from "../../../src/server/protocol";
 import type { Connection } from "../api";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { now } from "../clock";
 import { dayLabel, fmtDate, fmtDatesIn, fmtDay, fmtTime } from "../format";
 
@@ -76,9 +76,10 @@ const MAIN: { key: Page; label: string; icon: IconName }[] = [
   { key: "profile", label: "Profile & policies", icon: "profile" },
   { key: "files", label: "Files", icon: "files" },
 ];
-const SYSTEM: { key: Page; label: string; icon: IconName }[] = [
-  { key: "memory", label: "Memory", icon: "memory" },
-  { key: "settings", label: "Settings", icon: "settings" },
+/** Under the owner's name, not in the list (owner, 2026-09-27; design: ShellAccountMenu). */
+const ACCOUNT: { key: Page; label: string; hint: string; icon: IconName }[] = [
+  { key: "memory", label: "Memory", hint: "What I remember between conversations", icon: "memory" },
+  { key: "settings", label: "Settings", hint: "Account, voice key, workspace, speed", icon: "settings" },
 ];
 
 export function Nav({
@@ -101,6 +102,32 @@ export function Nav({
   currentThread: string | null;
   state: ShellState | null;
 }) {
+  const [acctOpen, setAcctOpen] = useState(false);
+  useEffect(() => {
+    if (!acctOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setAcctOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [acctOpen]);
+  const acctOn = page === "memory" || page === "settings";
+  const name = state?.sampleData ? "Jo Kim" : "Owner";
+  const initials = state?.sampleData ? "JK" : "Me";
+  const acctMenu = acctOpen && (
+    <>
+      <div className="fill" style={{ zIndex: 29 }} onClick={() => setAcctOpen(false)} />
+      <div className={`menu acct-menu${collapsed ? " acct-side" : ""}`} role="menu" aria-label="Your account">
+        {ACCOUNT.map((it) => (
+          <button key={it.key} type="button" role="menuitem" className={`menu-item acct-item${page === it.key ? " on" : ""}`} onClick={() => (setAcctOpen(false), onPage(it.key))}>
+            <Icon name={it.icon} />
+            <span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+              <b>{it.label}</b>
+              <span className="meta">{it.hint}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </>
+  );
   const item = (it: (typeof MAIN)[number]) => {
     const on = it.key === page || (it.key === "conversations" && page === "all");
     const badge = it.key === "conversations" && state?.confirms.length ? { n: state.confirms.length, bg: "#F0D58A", fg: "#4A3600" } : it.key === "staff" && state?.attention.overdue ? { n: state.attention.overdue, bg: "#B3261E", fg: "#FFFFFF" } : null;
@@ -133,14 +160,13 @@ export function Nav({
         <button type="button" className="btn p nav-new" aria-label="New conversation" title="New conversation" onClick={onNew}>
           <Icon name="plus" size={18} stroke={2} />
         </button>
-        <div className="nav-list">
-          {MAIN.map(item)}
-          <div role="separator" className="nav-sep" />
-          {SYSTEM.map(item)}
-        </div>
+        <div className="nav-list">{MAIN.map(item)}</div>
         <div className="grow" />
-        <div className="av" title={state?.sampleData ? "Jo Kim, owner · sample data" : "Owner"} style={{ background: "#DCE6FA", color: "#1446A6", width: 32, height: 32, borderRadius: 999, fontSize: 13, alignSelf: "center" }}>
-          {state?.sampleData ? "JK" : "Me"}
+        <div className="me-wrap">
+          {acctMenu}
+          <button type="button" className={`nav-icon me-icon${acctOn || acctOpen ? " on" : ""}`} aria-haspopup="menu" aria-expanded={acctOpen} aria-label={`${name}: Memory, Settings`} title={`${name} · Memory, Settings`} onClick={() => setAcctOpen(!acctOpen)}>
+            <span className="av me-av">{initials}</span>
+          </button>
         </div>
       </nav>
     );
@@ -150,11 +176,7 @@ export function Nav({
         <Icon name="plus" size={16} stroke={2} />
         New conversation
       </button>
-      <div className="nav-list">
-        {MAIN.map(item)}
-        <div role="separator" className="nav-sep" />
-        {SYSTEM.map(item)}
-      </div>
+      <div className="nav-list">{MAIN.map(item)}</div>
       {recent.length > 0 && (
         <div className="recent">
           <div className="cap" style={{ padding: "4px 12px" }}>
@@ -172,17 +194,19 @@ export function Nav({
         </div>
       )}
       <div className="grow" />
-      <div className="me">
-        <div className="av" style={{ background: "#DCE6FA", color: "#1446A6", width: 32, height: 32, borderRadius: 999, fontSize: 13 }}>
-          {state?.sampleData ? "JK" : "Me"}
-        </div>
-        <div className="me-t">
-          {/* The demo is the design's owner, Jo Kim (synthetic sample data). */}
-          <span>{state?.sampleData ? "Jo Kim" : "Owner"}</span>
-          <span className="meta" style={{ fontSize: 12 }}>
-            {state?.account.loggedIn ? (state.engine === "fake" ? "Owner · demo engine" : "Owner · signed in with ChatGPT") : "not signed in"}
+      <div className="me-wrap">
+        {acctMenu}
+        <button type="button" className={`me${acctOn || acctOpen ? " on" : ""}`} aria-haspopup="menu" aria-expanded={acctOpen} title="Memory, Settings" onClick={() => setAcctOpen(!acctOpen)}>
+          <span className="av me-av">{initials}</span>
+          <span className="me-t">
+            {/* The demo is the design's owner, Jo Kim (synthetic sample data). */}
+            <span>{name}</span>
+            <span className="meta ellipsis" style={{ fontSize: 12, fontWeight: 400 }}>
+              {state?.account.loggedIn ? (state.engine === "fake" ? "Owner · demo engine" : "Owner · signed in with ChatGPT") : "not signed in"}
+            </span>
           </span>
-        </div>
+          <Icon name="up" size={16} stroke={2} />
+        </button>
       </div>
     </nav>
   );
