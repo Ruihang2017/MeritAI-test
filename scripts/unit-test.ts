@@ -798,6 +798,25 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   ], JSON.stringify({ profile, badProfile, dup, pii, extend, leftViaUpdate, badDate, badReason, declined }).slice(0, 700));
 }
 
+// ------------------------------------------------------------------ round 5 evaluation fixes: first employer, workers comp, TFN payer, WHM, outstanding documents
+{
+  const t = (xs: { task: string; source: { url: string } }[]) => xs.map((x) => x.task).join(" | ");
+  const first = newStarterChecklist({ employmentType: "casual", mayNeedVisaCheck: true, smallBusiness: true, firstEmployee: true, workingHolidayMaker: true });
+  const later = newStarterChecklist({ employmentType: "full-time", mayNeedVisaCheck: false, smallBusiness: true });
+  const reg = new Register(ensureFolders(join(TMP, "r5-files")).data);
+  const ana = reg.add(normaliseEmployee({ name: "Ana Lima", role: "Barista", employmentType: "casual", startDate: "2026-09-01", visaExpiry: "2026-10-22" }, true));
+  const tools = registerTools({ register: () => reg, confirm: async () => true, business: () => new BusinessStore(join(TMP, "r5-files", ".assistant")) } as never);
+  const rec = await tools.find((x) => x.name === "record_documents")!.handle({ id: ana.id, documents: ["tfn", "super_choice", "induction"], date: "2026-09-27" });
+  record("round 5 fixes (checklist and register)", [
+    ["first employee: PAYG withholding and STP, before start", /PAYG withholding/.test(t(first)) && /Single Touch Payroll/.test(t(first)) && !/PAYG withholding/.test(t(later))],
+    ["workers compensation on every checklist", /workers compensation/.test(t(first)) && /workers compensation/.test(t(later))],
+    ["TFN: payer steps (STP, Section B, 14 days)", /Section B/.test(t(later)) && /14 days/.test(t(later)) && /STP/.test(t(later))],
+    ["working holiday maker: register with the ATO", /working holiday maker/.test(t(first)) && !/working holiday maker/.test(t(later))],
+    ["new sources are official", [...first, ...later].every((x) => isOfficialUrl(x.source.url))],
+    ["recorded documents: says what is still outstanding, VEVO spelled out", /Still not recorded for Ana Lima/.test(rec.text) && /VEVO before their next shift/.test(rec.text) && /2026-10-22/.test(rec.text)],
+  ], rec.text.slice(0, 400));
+}
+
 // ------------------------------------------------------------------ the voice API key (Settings): encrypted, last 4 only
 {
   const app = new AssistantApp({ userId: "unit-voicekey", memoryRoot: join(TMP, "voicekey-mem"), filesRoot: ensureFolders(join(TMP, "voicekey-files")).root, ui: { confirm: async () => false } });

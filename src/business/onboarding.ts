@@ -12,7 +12,7 @@ import type { BusinessStore } from "./profile";
  * unverified-link guard.
  */
 
-export const CHECKED_ON = "2026-09-26";
+export const CHECKED_ON = "2026-09-27";
 
 export type EmploymentType = "full-time" | "part-time" | "casual" | "fixed-term";
 
@@ -52,6 +52,12 @@ const S = {
   apprenticeSupport: { title: "DEWR: Apprenticeship support (Apprentice Connect Australia Providers)", url: "https://www.dewr.gov.au/australian-apprenticeships/apprenticeship-support" },
   apprenticeEntitlements: { title: "Fair Work: Apprentices (training time, fees and textbooks)", url: "https://www.fairwork.gov.au/starting-employment/types-of-employees/apprentices-and-trainees/apprentices" },
   whiteCard: { title: "Safe Work Australia: Working on a construction site (White Card)", url: "https://www.safeworkaustralia.gov.au/safety-topic/industry-and-business/construction/working-construction-site" },
+  // Round 5 evaluation fixes (2026-09-27): first-employer registrations, workers compensation, TFN payer steps, working holiday makers.
+  paygRegister: { title: "business.gov.au: Register for PAYG withholding", url: "https://business.gov.au/registrations/register-for-taxes/register-for-pay-as-you-go-payg-withholding" },
+  stp: { title: "ATO: What is Single Touch Payroll", url: "https://www.ato.gov.au/businesses-and-organisations/hiring-and-paying-your-workers/single-touch-payroll/what-is-stp" },
+  workersComp: { title: "business.gov.au: Workers compensation insurance", url: "https://business.gov.au/risk-management/insurance/types-of-business-insurance" },
+  tfnPayer: { title: "ATO: TFN declaration, payer information and obligations", url: "https://www.ato.gov.au/forms-and-instructions/tfn-declaration/payer-information-and-obligations" },
+  whm: { title: "ATO: Working holiday makers", url: "https://www.ato.gov.au/individuals-and-families/coming-to-australia-or-going-overseas/coming-to-australia/working-holiday-makers" },
 };
 export { S as SOURCES };
 
@@ -91,9 +97,37 @@ export function newStarterChecklist(opts: {
   states?: string[];
   /** They will do construction work on a construction site (a White Card is needed first). */
   constructionSite?: boolean;
+  /** The business's first employee (or payroll isn't set up yet): the employer registrations come first. */
+  firstEmployee?: boolean;
+  /** On a Working Holiday (417) or Work and Holiday (462) visa. */
+  workingHolidayMaker?: boolean;
 }): ChecklistItem[] {
   const { employmentType: type } = opts;
-  const items: ChecklistItem[] = [
+  const items: ChecklistItem[] = [];
+  if (opts.firstEmployee) {
+    items.push(
+      {
+        when: "before start",
+        task: "Register for PAYG withholding with the ATO (online, or through your tax or BAS agent) before the first pay you withhold tax from.",
+        why: "You must be registered before you make the first payment you withhold tax from.",
+        source: S.paygRegister,
+      },
+      {
+        when: "before start",
+        task: "Set up payroll software that reports through Single Touch Payroll (STP Phase 2): you report each employee's pay, tax withheld and super to the ATO each time you pay them.",
+        why: "STP reporting is mandatory for employers, including those new to employing.",
+        source: S.stp,
+      },
+    );
+  }
+  items.push({
+    when: "before start",
+    task:
+      "Make sure you have workers compensation insurance that covers them before they start (from an authorised insurer; the rules are set by your state or territory regulator). If they will work in another state, for example from home, ask your insurer or that state's regulator which scheme covers them.",
+    why: "Employers must have workers compensation insurance for their employees; the laws vary between states and territories.",
+    source: S.workersComp,
+  });
+  items.push(
     {
       when: "before start",
       task: "Confirm which award covers the role and the classification level, then the minimum pay rate, penalties and allowances.",
@@ -113,7 +147,7 @@ export function newStarterChecklist(opts: {
       why: "A contract cannot give less than the award or NES; a written contract avoids disputes about what was agreed.",
       source: S.contractTool,
     },
-  ];
+  );
   if (type === "fixed-term") {
     items.push({
       when: "before start",
@@ -174,6 +208,14 @@ export function newStarterChecklist(opts: {
       source: S.vevo,
     });
   }
+  if (opts.workingHolidayMaker) {
+    items.push({
+      when: "before start",
+      task: "They are a working holiday maker (visa subclass 417 or 462): register with the ATO as an employer of working holiday makers before you pay them, and withhold tax at the working holiday maker rates.",
+      why: "If you are not registered as a working holiday maker employer, you must withhold tax at the higher foreign resident rates.",
+      source: S.whm,
+    });
+  }
   items.push({
     when: "on or before day one",
     task: "Give the Fair Work Information Statement (FWIS).",
@@ -210,9 +252,10 @@ export function newStarterChecklist(opts: {
   items.push(
     {
       when: "on or before day one",
-      task: "Ask the new employee to complete a TFN declaration.",
-      why: "You need it to work out how much tax to withhold from their pay.",
-      source: S.tfn,
+      task:
+        "Ask the new employee to complete a TFN declaration: they fill in their part, online through ATO online services (they give you the printed summary) or on the paper form. You then enter their tax details in your payroll and keep the form or summary securely in your records. If you report through STP, you don't send it to the ATO; only with a paper form and no STP-enabled software do you complete Section B (the payer's part) and post it to the ATO within 14 days.",
+      why: "You need it to work out how much tax to withhold. If they have applied for a TFN and don't give it to you within 28 days, you must withhold at the top rate.",
+      source: S.tfnPayer,
     },
     {
       when: "first weeks",
@@ -297,16 +340,18 @@ export function onboardingTools(business: () => BusinessStore): ClientTool[] {
           employment_type: { type: "string", enum: ["full-time", "part-time", "casual", "fixed-term"] },
           may_need_visa_check: {
             type: "boolean",
-            description: "true unless the user said the person is an Australian citizen or permanent resident.",
+            description: "true unless the user said the person is an Australian citizen or permanent resident. A New Zealand citizen counts as true: they usually hold a Special Category visa, checked in VEVO like any visa.",
           },
           is_apprentice_or_trainee: { type: "boolean", description: "true for an apprentice or trainee (training contract)." },
           works_on_construction_sites: { type: "boolean", description: "true if they will do construction work on a construction site (building, plumbing, electrical, landscaping construction...)." },
+          first_employee: { type: "boolean", description: "true if this is the business's first employee, or the owner hasn't set up payroll (PAYG withholding, STP) yet; false if it already pays employees." },
+          working_holiday_maker: { type: "boolean", description: "true if they are on a Working Holiday (417) or Work and Holiday (462) visa, e.g. a backpacker." },
         },
-        required: ["employment_type", "may_need_visa_check", "is_apprentice_or_trainee", "works_on_construction_sites"],
+        required: ["employment_type", "may_need_visa_check", "is_apprentice_or_trainee", "works_on_construction_sites", "first_employee", "working_holiday_maker"],
         additionalProperties: false,
       },
       handle: async (args) => {
-        const a = args as { employment_type?: string; may_need_visa_check?: boolean; is_apprentice_or_trainee?: boolean; works_on_construction_sites?: boolean };
+        const a = args as { employment_type?: string; may_need_visa_check?: boolean; is_apprentice_or_trainee?: boolean; works_on_construction_sites?: boolean; first_employee?: boolean; working_holiday_maker?: boolean };
         const type = a.employment_type as EmploymentType;
         if (!["full-time", "part-time", "casual", "fixed-term"].includes(type)) return { success: false, text: "employment_type must be full-time, part-time, casual or fixed-term." };
         const p = business().get();
@@ -316,6 +361,8 @@ export function onboardingTools(business: () => BusinessStore): ClientTool[] {
           smallBusiness: p.headcount === null ? null : p.headcount < 15,
           apprentice: a.is_apprentice_or_trainee === true,
           constructionSite: a.works_on_construction_sites === true,
+          firstEmployee: a.first_employee === true,
+          workingHolidayMaker: a.working_holiday_maker === true,
           states: p.states,
         });
         return {

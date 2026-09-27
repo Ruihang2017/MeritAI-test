@@ -582,6 +582,7 @@ export class AssistantApp {
       smallBusiness: p.headcount === null ? null : p.headcount < 15,
       apprentice: opts.apprentice ?? isApprenticeRole(employee.role),
       constructionSite: opts.constructionSite ?? false,
+      firstEmployee: this.staff(true).length === 1 && (p.headcount === null || p.headcount <= 1),
       states: p.states,
     });
     return { ok: true, employee, lines: c.lines, checklist };

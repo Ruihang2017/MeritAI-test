@@ -264,6 +264,21 @@ Core evaluation after round 3 (70 × 2, `eval/results/round3`): 106 of 140 runs 
 | **Evaluation** | `tools` expectations accept alternatives (`"a|b"`): lv-09 and lv-17 pass with the parental leave checklist or official sources, off-03 with the leaving checklist or official sources (the checklists carry checked official links). lv-17 now describes an eligible employee (the register's Jess, 300 days' service, could not be on NES leave, so the scenario contradicted itself). Targeted re-run of 12 parental leave, apprentice and control scenarios × 2: 21/24 fully passing (onb-04 2/2, was 0/2 in round 3; con-05, r1-02 held), then lv-17 fixes: 1/2 (the miss left out the dispute process in a refusal) |
 | **Shortened links** | The model often wrote the ATO leaving page without its `-your-business` ending (a dead link). The engine now corrects a tool URL cut at a hyphen in its last segment (`links_corrected`, see `docs/research.md`); other unknown links stay flagged |
 
+### Round 5 (2026-09-27, alpha focus: hiring, onboarding, offboarding)
+
+Evaluation of the 80 recruitment, screening, contract, onboarding, register, termination and offboarding scenarios × 2 (`eval/results/round5-alpha`): 94% of runs passed the hard checks, 81% the judge, 76% both; onboarding was weakest (63%).
+
+| Topic | Change |
+|---|---|
+| **First employer registrations** (business.gov.au "Register for PAYG withholding", ATO "What is Single Touch Payroll", checked 2026-09-27) | `new_starter_checklist` has `first_employee`: register for PAYG withholding before the first pay you withhold tax from; STP Phase 2 payroll software (report each time you pay). The Staff add form sets it for the register's first employee |
+| **Workers compensation** (business.gov.au "Types of business insurance", checked 2026-09-27) | On every checklist: cover in place before they start, from an authorised insurer under the state or territory scheme; for someone working in another state (e.g. from home), ask the insurer or that state's regulator which scheme covers them |
+| **TFN declaration, the payer's part** (ATO "TFN declaration: payer information and obligations", checked 2026-09-27) | The item now says: they complete it (online, giving you the printed summary, or on paper); you enter the details and keep it securely; with STP you don't send it to the ATO; only a paper form without STP-enabled software needs Section B and posting within 14 days; the top rate after 28 days without a TFN |
+| **Working holiday makers** (ATO "Working holiday makers", checked 2026-09-27) | `working_holiday_maker` (visa 417 or 462): register with the ATO as a working holiday maker employer before paying them, otherwise the higher foreign resident rates apply |
+| **Right to work after recording documents** | `record_documents` now says what is still not recorded and asks the model to tell the owner; an unchecked VEVO for someone with a visa expiry is spelled out (check before their next shift). A New Zealand citizen counts as `may_need_visa_check` (usually a Special Category visa, checked in VEVO) |
+| **Workers under 18** | `developer.md`: junior rates (a percentage of the adult rate, from the award) via the Pay and Conditions Tool, no dollar figure; state rules on employing young people checked through official sources before rostering |
+
+Targeted re-run of the 9 scenarios behind these fixes × 2 (`eval/results/round5-fix-abcd`): judge 15/18, was 3/18 (onb-01, con-09, onb-03, onb-08, onb-12, reg-02, onb-11 now 2/2; scr-10 1/2; con-06 0/2: the contract draft still gives pay figures).
+
 ## 10 Tests
 
 `npm run test:business`:

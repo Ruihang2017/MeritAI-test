@@ -152,7 +152,14 @@ export function registerTools(opts: { register: () => Register; business: () => 
           return { success: true, text: "The owner did not confirm; nothing was saved.", display: "register: not saved" };
         }
         const saved = opts.register().recordDocuments(current.id, docs, String(a.date));
-        return { success: true, text: `Recorded. ${employeeLine(saved)}`, display: `register: ${docs.length} item(s) recorded for ${saved.name}` };
+        // Round 5 evaluation (2026-09-27): the reply stopped at "recorded" and missed an unchecked visa.
+        const left = outstandingDocuments(saved);
+        const next = left.length
+          ? `\n\nStill not recorded for ${saved.name}: ${left.map((d) => DOCUMENTS[d]).join("; ")}. Tell the owner, in the reply, what is still outstanding.${
+              left.includes("vevo") && saved.visaExpiry ? ` Their right to work has not been checked in VEVO (visa or work rights expire ${saved.visaExpiry}): tell the owner to check it in VEVO before their next shift and keep the result.` : ""
+            }`
+          : `\n\nAll starting documents are now recorded for ${saved.name}.`;
+        return { success: true, text: `Recorded. ${employeeLine(saved)}${next}`, display: `register: ${docs.length} item(s) recorded for ${saved.name}` };
       },
     },
     {
