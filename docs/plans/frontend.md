@@ -1,10 +1,6 @@
 # Frontend: what is left (MeritAI)
 
-Status: M1–M4 built on 2026-09-27 on branch `ui/m1`, M5a (voice in the browser) on 2026-09-27 (as built: `docs/ui.md`). Open: M5b below.
-
-| # | Scope | Notes |
-|---|---|---|
-| M5b | Desktop shell: Electron (runs `src/server` in its main process) or Tauri (Node as a sidecar); the web app is reused as is | Owner decision after using the browser version |
+Status: M1–M5 built on 2026-09-27: the browser UI, voice in the browser and the Electron desktop app (as built: `docs/ui.md`, `docs/alpha/distribution.md`). Open: the small items below.
 
 
 ## Later: small items (owner, 2026-09-27)

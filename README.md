@@ -50,7 +50,16 @@ npm run ui:fake      # the same demo workspace with scripted replies: no model a
 npm run ui:dev       # UI development: hot reload, fake engine
 ```
 
-Demo options: `-- --reseed` puts the demo workspace back to the design's sample data; `FX_FAKE_SIGNED_OUT=1` starts signed out (the first-run screens); `npm run ui:fake -- --fresh` starts from an empty workspace. Voice is not in the browser UI yet.
+Demo options: `-- --reseed` puts the demo workspace back to the design's sample data; `FX_FAKE_SIGNED_OUT=1` starts signed out (the first-run screens); `npm run ui:fake -- --fresh` starts from an empty workspace. Voice works in the browser (microphone in Conversations; the demo engine uses a free stand-in voice).
+
+### Desktop app (Windows, the alpha)
+
+```
+npm run desktop       # build and run the Electron app from the project
+npm run desktop:dist  # the NSIS installer in release/ (see docs/alpha/distribution.md)
+```
+
+The app runs the same local server in its own window, with the codex engine inside; the user's data goes to `%APPDATA%MeritAI` and the workspace to `%USERPROFILE%MeritAI`. Testers: `docs/alpha/tester-guide.md`.
 
 Voice mode uses the OpenAI API key saved in the browser UI's Settings (kept encrypted for the Windows user, `src/voice/keyStore.ts`), else `.env` (copy `.env.example`): `VOICE_OPENAI_API_KEY`, `VOICE_MODEL` (default `gpt-live-1`), `VOICE_NAME` (default `gleam`). It needs `ffmpeg` and `ffplay` on PATH. Voice is billed per minute to that key; it is not part of the ChatGPT subscription.
 

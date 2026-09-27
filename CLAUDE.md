@@ -14,7 +14,8 @@ A CLI and browser-UI (MeritAI) HR adviser for small business owners with no HR d
 
 ```
 src/cli.ts                 terminal front end only: parses commands, renders data and events, answers confirmations
-src/server/                browser UI back end: main.ts (npm run ui), server.ts (127.0.0.1, token, Origin/Host checks, static web/dist), session.ts (method allowlist → AssistantApp), protocol.ts (types shared with web/)
+src/desktop/main.ts        the Electron desktop app (npm run desktop / desktop:dist): src/server/desktop.ts in its main process, one window; user data in %APPDATA%MeritAI, workspace in %USERPROFILE%MeritAI; see docs/alpha/distribution.md
+src/server/                browser UI back end: main.ts (npm run ui), desktop.ts (the desktop app's server), server.ts (127.0.0.1, token, Origin/Host checks, static web/dist), session.ts (method allowlist → AssistantApp), protocol.ts (types shared with web/)
 web/                       browser UI (React + Vite): components per page (Dock.tsx: the side panel; ask.ts: page requests and their topic), tokens.css from the design canvas; see docs/ui.md
 src/app/app.ts             AssistantApp: the UI-independent application layer (session flows, attachments, screening, voice, guards); every front end uses it. See docs/architecture.md
 src/app/                   confirms.ts (pending, cancellable confirmations), uploads.ts (attachments as bytes → staging), launch.ts (open / reveal workspace files); form methods for the register and profile live in app.ts
@@ -32,6 +33,7 @@ src/voice/                 liveSession.ts (GPT-Live WebSocket), bridge.ts (deleg
 src/screening/             catalog.ts (SQLite), pipeline.ts (ingest → criteria → blind evaluation → rank), report.ts (chat summary; Word/Excel on request), blind.ts, tools.ts
 src/files/                 folders.ts (paths + guards), parse.ts (PDF/DOCX/TXT/MD), docx.ts (markdown→docx), tools.ts (list_files/read_file/save_document), attach.ts (drag and drop, importIntoJob)
 src/protocol/              generated with `npm run gen:protocol` (--experimental); do not edit
+docs/alpha/                tester-guide.md (built to Word by scripts/build-tester-guide.mjs), distribution.md (building and handing out the installer)
 prompts/                   base.md (replaces Codex's coding prompt), developer.md (small-business HR adviser role and principles), memory.md, voice.md (GPT-Live persona)
 codex_home/                isolated CODEX_HOME: config.toml + skills/ are ours; everything else is runtime (gitignored)
 codex_home_test/           CODEX_HOME for test suites, evals and ab-* (gitignored; own sign-in, npm run login:test): scripts/testHome.ts copies config.toml + skills in on each run (src/engine/codexHome.ts)
