@@ -636,6 +636,18 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   const weekendDraft = await app.draftCriteria("Weekend cleaner");
   if (weekendDraft.status === "drafted") app.confirmCriteria("Weekend cleaner", weekendDraft.rubric.version);
   const weekendAfter = await app.screenResults("Weekend cleaner");
+  // Decisions: the design's start (2 shortlisted, 1 not), then the rest "Not this time".
+  const before = app.jobs().find((j) => j.job === "Team leader")!;
+  let refused = false;
+  try {
+    app.decide("Team leader", "scan_0192.pdf", "shortlist");
+  } catch {
+    refused = true;
+  }
+  const restMarked = app.decideRest("Team leader");
+  const after = app.jobs().find((j) => j.job === "Team leader")!;
+  app.decide("Team leader", "Hannah Cole resume.docx", null);
+  const cleared = (await app.screenResults("Team leader")).decisions;
   record("demo workspace (design sample data)", [
     ["profile: Wattle Lane Cleaning Pty Ltd, small business", app.profile().profile.legalName === "Wattle Lane Cleaning Pty Ltd" && app.profile().smallBusiness === true],
     ["staff: 9 active, 1 left; Marco has 3 documents not recorded", staff.filter((e) => e.status === "active").length === 9 && staff.filter((e) => e.status === "left").length === 1 && staff.find((e) => e.name === "Marco Silva")!.documentsExpected.filter((d) => !d.recorded).length === 3],
@@ -644,6 +656,8 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["files: Inbox 4, Outbox 5, Policies 3; memory 3 + 3", files.inbox.length === 4 && files.outbox.length === 5 && files.policies.length === 3 && app.memories().preferences.length === 3],
     ["Hiring: files listed with status, criteria confirmed on the design's day", tl.files.length === 15 && tl.files.filter((f) => f.status === "unreadable").length === 1 && tl.files.filter((f) => f.status === "duplicate").length === 1 && localIso(new Date(tl.rubric?.confirmedAt ?? 0)) === DEMO_TODAY],
     ["Hiring: criteria drafted earlier are kept; confirming them marks the job ready", weekendDraft.status === "drafted" && weekendAfter.rubric?.confirmed === true && app.jobs().find((j) => j.job === "Weekend cleaner")?.stage === "ready"],
+    ["decisions: 2 shortlisted and 1 not this time to start; an unscreened file is refused", tl.decisions.length === 3 && before.shortlisted === 2 && before.undecided === 10 && before.stage === "screened" && refused],
+    ["decisions: the rest → Not this time makes the job decided; clearing one reopens it", restMarked === 10 && after.stage === "decided" && after.undecided === 0 && cleared.length === 12 && app.jobs().find((j) => j.job === "Team leader")!.stage === "screened"],
     ["Outbox: the two letters starting with DRAFT are marked", same(files.outbox.filter((f) => f.draft).map((f) => f.name).sort(), ["Leo Tran probation letter.docx", "Priya Nair resignation acknowledgement.docx"])],
     ["Staff next dates as in the design", same(Object.entries(nextOf).sort(), Object.entries(DESIGN_NEXT).sort())],
     ["Attention: 1 overdue (Marco, since 6 Sep), 1 this week (Leo, 2 Oct), Sam on 23 Oct", same(app.attentionSummary(), { overdue: 1, soon: 1 }) && same(rems, ["2026-09-06 true Starting paperwork not recorded in the register for Marco Silva", "2026-10-02 false Probation ends 2026-10-02: Leo Tran", "2026-10-23 false Fixed-term contract ends 2026-10-23: Sam Park"])],

@@ -287,6 +287,9 @@ async function seedHiring(f: Folders): Promise<void> {
       flags: { suspiciousInstructions: false, differentRole: false, ...c.flags },
     });
   }
+  // The owner's decisions so far (design: HiringDecide): two shortlisted, one not this time, the rest to decide.
+  const decided: [string, "shortlist" | "not"][] = [["Hannah Cole resume.docx", "shortlist"], ["Daniel Ortiz resume.docx", "shortlist"], ["Tariq Aziz CV.docx", "not"]];
+  for (const [file, d] of decided) cat.setDecision("Team leader", byFile.get(file)!, d);
   // The reports the design shows in the Outbox (written by the app's own report code, no model).
   const result = await screenJob(NO_MODEL, cat, f, "Team leader", { limit: 0 });
   for (const name of await saveReports(NO_MODEL, f, result, "both")) touch(join(f.outbox, name), thu);

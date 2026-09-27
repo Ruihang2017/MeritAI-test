@@ -14,7 +14,7 @@ const today = todayIso;
 
 type Panel =
   | { kind: "detail"; id: number }
-  | { kind: "add" }
+  | { kind: "add"; prefill?: { name: string; role: string } }
   | { kind: "added"; name: string; lines: string[]; checklist: ChecklistItem[] }
   | { kind: "edit"; id: number }
   | { kind: "edited"; id: number; lines: string[]; notes: FormNote[] }
@@ -23,13 +23,14 @@ type Panel =
   | { kind: "leftDone"; name: string; lines: string[]; checklist: LeavingItem[] }
   | null;
 
-export function StaffPage({ api, openId, onAsk, onChanged }: { api: Api; openId?: number | null; onAsk: (text: string) => void; onChanged: () => void }) {
+export function StaffPage({ api, openId, addPrefill, onAsk, onChanged }: { api: Api; openId?: number | null; addPrefill?: { name: string; role: string } | null; onAsk: (text: string) => void; onChanged: () => void }) {
   const [rows, setRows] = useState<StaffRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [type, setType] = useState("");
   const [showLeft, setShowLeft] = useState(false);
-  const [panel, setPanel] = useState<Panel>(openId ? { kind: "detail", id: openId } : null);
+  // Opened on someone (Attention's "Open employee"), or on the add form for a hire (Hiring's "Add to Staff").
+  const [panel, setPanel] = useState<Panel>(openId ? { kind: "detail", id: openId } : addPrefill ? { kind: "add", prefill: addPrefill } : null);
   const [menu, setMenu] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -278,6 +279,7 @@ export function StaffPage({ api, openId, onAsk, onChanged }: { api: Api; openId?
       {panel?.kind === "add" && (
         <EmployeeForm
           api={api}
+          prefill={panel.prefill}
           onClose={() => setPanel(null)}
           onSaved={(res) => {
             setPanel({ kind: "added", ...res });
@@ -522,11 +524,11 @@ function Detail({ r, receipt, onClose, onEdit, onDocs, onLeft, onDelete, onAsk }
   );
 }
 
-function EmployeeForm({ api, current, onClose, onSaved }: { api: Api; current?: StaffRow; onClose: () => void; onSaved: (r: { name: string; lines: string[]; checklist: ChecklistItem[]; notes?: FormNote[] }) => void }) {
+function EmployeeForm({ api, current, prefill, onClose, onSaved }: { api: Api; current?: StaffRow; prefill?: { name: string; role: string }; onClose: () => void; onSaved: (r: { name: string; lines: string[]; checklist: ChecklistItem[]; notes?: FormNote[] }) => void }) {
   const [f, setF] = useState<EmployeeFields>(
     current
       ? { name: current.name, role: current.role, employmentType: current.employmentType as EmployeeFields["employmentType"], startDate: current.startDate, endDate: current.endDate, award: current.award, classification: current.classification, probationEnd: current.probationEnd, visaExpiry: current.visaExpiry, notes: current.notes }
-      : { name: "", role: "", employmentType: "full-time", startDate: today() },
+      : { name: prefill?.name ?? "", role: prefill?.role ?? "", employmentType: "full-time", startDate: today() },
   );
   const [citizen, setCitizen] = useState(false);
   const [apprentice, setApprentice] = useState(false);

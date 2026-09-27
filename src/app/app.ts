@@ -16,7 +16,7 @@ import { summarizeSession } from "../memory/summarize";
 import type { Preference, SessionRecord, TaskNote } from "../memory/store";
 import { attachToInbox, findDroppedPaths, importIntoJob, MAX_ATTACH_BYTES } from "../files/attach";
 import { ensureFolders, jobDir, listJobs, sanitizeStem, validateFilesRoot, walk, type Folders } from "../files/folders";
-import type { Rubric } from "../screening/catalog";
+import type { Decision, Rubric } from "../screening/catalog";
 import { listFolder, listInbox, type FolderEntry, type InboxEntry } from "../files/tools";
 import { profileLines, type BusinessProfile } from "../business/profile";
 import { listPolicies, type PolicyEntry } from "../business/policies";
@@ -128,7 +128,11 @@ export interface JobSummary {
   screened: number;
   /** The job folder. */
   path: string;
-  stage: "needs-jd" | "criteria" | "ready" | "screened";
+  /** "decided": everyone screened has a decision (Shortlist or Not this time). */
+  stage: "needs-jd" | "criteria" | "ready" | "screened" | "decided";
+  /** Screened candidates shortlisted, and screened ones without a decision yet. */
+  shortlisted: number;
+  undecided: number;
 }
 
 /** File types the Open button may start (documents and images). */
@@ -139,6 +143,8 @@ export type JobResults = Omit<ScreenResult, "rubric"> & {
   rubric: ScreenResult["rubric"] | null;
   /** Every file in the job folder but the JD, with what screening makes of it. */
   files: { file: string; status: "application" | "unreadable" | "duplicate"; reason: string | null }[];
+  /** The owner's decisions on screened candidates (by file): Shortlist or Not this time. */
+  decisions: { file: string; decision: Decision; decidedAt: string }[];
 };
 
 export type ScreenOutcome =
@@ -713,10 +719,16 @@ export class AssistantApp {
       const r = cat.latestRubric(j);
       const files = walk(jobDir(f, j)).files;
       const jd = files.find((x) => !x.rel.includes("/") && JD_NAME.test(x.rel))?.rel ?? null;
-      const screened = r?.confirmed ? cat.applications(j).filter((a) => a.status === "ok" && cat.getEvaluation(a.hash, j, r.version)).length : 0;
+      const ok = cat.applications(j).filter((a) => a.status === "ok");
+      const evaluated = r?.confirmed ? ok.filter((a) => cat.getEvaluation(a.hash, j, r.version)) : [];
+      const screened = evaluated.length;
+      const decisions = cat.decisions(j);
+      const shortlisted = evaluated.filter((a) => decisions.get(a.hash)?.decision === "shortlist").length;
+      const undecided = evaluated.filter((a) => !decisions.has(a.hash)).length;
       const applications = files.length - (jd ? 1 : 0);
-      const stage: JobSummary["stage"] = !jd && !r ? "needs-jd" : !r?.confirmed ? "criteria" : screened ? "screened" : "ready";
-      return { job: j, files: files.length, criteria: r ? `v${r.version}${r.confirmed ? " confirmed" : " not confirmed"}` : "none", jd, applications, screened, stage, path: jobDir(f, j) };
+      const allDecided = screened > 0 && undecided === 0 && evaluated.length === ok.length;
+      const stage: JobSummary["stage"] = !jd && !r ? "needs-jd" : !r?.confirmed ? "criteria" : allDecided ? "decided" : screened ? "screened" : "ready";
+      return { job: j, files: files.length, criteria: r ? `v${r.version}${r.confirmed ? " confirmed" : " not confirmed"}` : "none", jd, applications, screened, shortlisted, undecided, stage, path: jobDir(f, j) };
     });
   }
 
@@ -787,9 +799,40 @@ export class AssistantApp {
       }));
     if (!rubric || !rubric.confirmed) {
       const ingest = await ingestJob(cat, this.folders(), job, () => {});
-      return { job, rubric: rubric ?? null, ingest, evaluatedThisRun: 0, failed: [], remaining: ingest.applications, ranked: [], files: files() };
+      return { job, rubric: rubric ?? null, ingest, evaluatedThisRun: 0, failed: [], remaining: ingest.applications, ranked: [], files: files(), decisions: [] };
     }
-    return { ...(await screenJob(this.a.engine, cat, this.folders(), job, { limit: 0 })), files: files() };
+    const result = await screenJob(this.a.engine, cat, this.folders(), job, { limit: 0 });
+    const byFile = new Map(cat.applications(job).map((a) => [a.sourceRef, a.hash]));
+    const decided = cat.decisions(job);
+    const decisions = result.ranked.flatMap((c) => {
+      const d = decided.get(byFile.get(c.file) ?? "");
+      return d ? [{ file: c.file, decision: d.decision, decidedAt: d.decidedAt }] : [];
+    });
+    return { ...result, files: files(), decisions };
+  }
+
+  /**
+   * The owner's decision on a screened candidate: "shortlist", "not" (Not this time), or null
+   * to clear it. Stored with the job's screening data, by file content. Only for candidates
+   * screened against the current criteria.
+   */
+  decide(job: string, file: string, decision: Decision | null): void {
+    const cat = this.a.catalog();
+    const r = cat.latestRubric(job);
+    const app = cat.applications(job).find((a) => a.sourceRef === file && a.status === "ok");
+    if (!app || !r?.confirmed || !cat.getEvaluation(app.hash, job, r.version)) throw new Error(`"${file}" isn't a screened application of "${job}"`);
+    cat.setDecision(job, app.hash, decision);
+  }
+
+  /** Marks every screened candidate without a decision "Not this time". Returns how many. */
+  decideRest(job: string): number {
+    const cat = this.a.catalog();
+    const r = cat.latestRubric(job);
+    if (!r?.confirmed) return 0;
+    const decided = cat.decisions(job);
+    const rest = cat.applications(job).filter((a) => a.status === "ok" && cat.getEvaluation(a.hash, job, r.version) && !decided.has(a.hash));
+    for (const a of rest) cat.setDecision(job, a.hash, "not");
+    return rest.length;
   }
 
   /**

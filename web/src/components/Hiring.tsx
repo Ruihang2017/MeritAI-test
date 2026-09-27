@@ -8,8 +8,9 @@ import { Icon } from "./Icon";
 // The Hiring page as on the design canvas (Hiring*, artboards): jobs on the left, the selected
 // job's steps, criteria, applications and ranked candidates on the right.
 
-const STAGE = { "needs-jd": "Needs job description", criteria: "Criteria to confirm", ready: "Ready to screen", screened: "Screened" } as const;
-const STAGE_ORDER = { screened: 0, ready: 1, criteria: 2, "needs-jd": 3 } as const;
+const STAGE = { "needs-jd": "Needs job description", criteria: "Criteria to confirm", ready: "Ready to screen", screened: "Screened", decided: "Decided" } as const;
+const STAGE_ORDER = { decided: 0, screened: 1, ready: 2, criteria: 3, "needs-jd": 4 } as const;
+type Decision = "shortlist" | "not";
 
 type Job = JobSummary;
 type Ranked = JobResults["ranked"][number];
@@ -30,7 +31,7 @@ const joinPath = (dir: string, rel: string) => {
 /** "this PDF has no text layer (probably a scan...)" → "no text". */
 const shortReason = (r: string | null) => (r && /no text/i.test(r) ? "no text" : (r ?? "can't be read"));
 
-export function HiringPage({ api, progress, onAsk }: { api: Api; progress: string | null; onAsk: (text: string) => void }) {
+export function HiringPage({ api, progress, onAsk, onHire }: { api: Api; progress: string | null; onAsk: (text: string) => void; onHire: (name: string, role: string) => void }) {
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [sel, setSel] = useState<string | null>(null);
   const [result, setResult] = useState<JobResults | null>(null);
@@ -42,6 +43,8 @@ export function HiringPage({ api, progress, onAsk }: { api: Api; progress: strin
   const [showAll, setShowAll] = useState(false);
   const [saved, setSaved] = useState<{ name: string; path: string; size: number } | null>(null);
   const [screening, setScreening] = useState<number | null>(null);
+  /** "Change decisions" on a decided job: back to the deciding view. */
+  const [reviewing, setReviewing] = useState(false);
 
   const loadJobs = useCallback(async () => {
     try {
@@ -70,7 +73,7 @@ export function HiringPage({ api, progress, onAsk }: { api: Api; progress: strin
   }, [sel, loadResult]);
 
   const job = jobs?.find((j) => j.job === sel) ?? null;
-  const pick = (name: string) => (setSel(name), setCand(null), setNote(null), setSaved(null), setShowAll(false), setError(null));
+  const pick = (name: string) => (setSel(name), setCand(null), setNote(null), setSaved(null), setShowAll(false), setError(null), setReviewing(false));
 
   const run = async (label: string, f: () => Promise<void>) => {
     setBusy(label);
@@ -118,6 +121,31 @@ export function HiringPage({ api, progress, onAsk }: { api: Api; progress: strin
       setSaved({ name: f?.name ?? path.split(/[\\/]/).pop() ?? path, path, size: f?.size ?? 0 });
     });
 
+  // The owner's decisions (Shortlist / Not this time): saved at once, no model call.
+  const refresh = async () => {
+    if (sel) await loadResult(sel);
+    await loadJobs();
+  };
+  const decide = async (file: string, decision: Decision | null) => {
+    if (!sel) return;
+    try {
+      await api.call("decide", { job: sel, file, decision });
+      await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  const decideRest = async () => {
+    if (!sel) return;
+    try {
+      await api.call("decideRest", { job: sel });
+      setReviewing(false);
+      await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
   return (
     <main className="main hiring-page">
       <section className="jobs-col" aria-label="Jobs">
@@ -134,8 +162,8 @@ export function HiringPage({ api, progress, onAsk }: { api: Api; progress: strin
           <button key={j.job} type="button" className={`job${sel === j.job ? " on" : ""}`} onClick={() => pick(j.job)}>
             <b className="ellipsis">{j.job}</b>
             <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span className={`pill ${j.stage === "screened" ? "ok" : "warn"}`} style={{ height: 22 }}>
-                {STAGE[j.stage]}
+              <span className={`pill ${j.stage === "screened" || j.stage === "decided" ? "ok" : "warn"}`} style={{ height: 22 }}>
+                {j.stage === "decided" ? `${j.shortlisted} shortlisted` : STAGE[j.stage]}
               </span>
               <span className="meta">{j.stage === "needs-jd" ? plural(j.files, "file") : plural(j.applications, "application")}</span>
             </span>
@@ -173,6 +201,7 @@ export function HiringPage({ api, progress, onAsk }: { api: Api; progress: strin
         )}
         {job && result && (
           <JobPane
+            key={job.job}
             api={api}
             job={job}
             result={result}
@@ -192,6 +221,11 @@ export function HiringPage({ api, progress, onAsk }: { api: Api; progress: strin
             onDraft={draft}
             onReport={report}
             onAsk={onAsk}
+            reviewing={reviewing}
+            onReview={setReviewing}
+            onDecide={(file, d) => void decide(file, d)}
+            onRest={() => void decideRest()}
+            onHire={(name) => onHire(name, job.job)}
           />
         )}
       </section>
@@ -204,6 +238,8 @@ export function HiringPage({ api, progress, onAsk }: { api: Api; progress: strin
           onOpen={() => void api.call("openFile", { path: joinPath(job.path, cand.file) }).then((r) => !r.ok && setError(r.error))}
           onInvite={() => onAsk(`Draft an interview invite for ${cand.name} for the "${job.job}" role.`)}
           onPhone={() => onAsk(`Help me prepare a phone screen for ${cand.name} for the "${job.job}" role.`)}
+          decision={result.decisions.find((d) => d.file === cand.file)?.decision ?? null}
+          onDecide={(d) => void decide(cand.file, d)}
         />
       )}
       {newJob && (
@@ -245,6 +281,11 @@ function JobPane(p: {
   onDraft: () => void;
   onReport: () => void;
   onAsk: (text: string) => void;
+  reviewing: boolean;
+  onReview: (on: boolean) => void;
+  onDecide: (file: string, decision: Decision | null) => void;
+  onRest: () => void;
+  onHire: (name: string) => void;
 }) {
   const { job, result: r } = p;
   const rubric = r.rubric;
@@ -257,6 +298,24 @@ function JobPane(p: {
   const essential = rubric?.criteria.filter((c) => c.type === "essential") ?? [];
   const desirable = rubric?.criteria.filter((c) => c.type === "desirable") ?? [];
 
+  // Decisions (HiringDecide, HiringDecided artboards).
+  const dec = new Map(r.decisions.map((d) => [d.file, d.decision]));
+  const shortlisted = r.ranked.filter((c) => dec.get(c.file) === "shortlist");
+  const notNow = r.ranked.filter((c) => dec.get(c.file) === "not");
+  const undecided = screened - shortlisted.length - notNow.length;
+  const decidedView = job.stage === "decided" && !p.reviewing;
+  const lastDecided = r.decisions.map((d) => d.decidedAt).sort().pop();
+  const [tab, setTab] = useState<Decision | "all">("shortlist");
+  const [hireOpen, setHireOpen] = useState(false);
+  const names = (cs: Ranked[]) => cs.map((c) => c.name).join(", ");
+  const kitPrompt = shortlisted.length
+    ? `Build an interview kit for the "${job.job}" role for the shortlisted candidates (${names(shortlisted)}), using the confirmed screening criteria.`
+    : `Build an interview kit for the "${job.job}" role, using the confirmed screening criteria.`;
+  const emailsPrompt =
+    shortlisted.length || notNow.length
+      ? `Draft the candidate emails for the "${job.job}" role and save each one as a draft in my Outbox (I'll send them myself): ${[shortlisted.length ? `interview invitations for ${names(shortlisted)}` : "", notNow.length ? `respectful "not this time" emails for ${names(notNow)}` : ""].filter(Boolean).join("; ")}.`
+      : `Draft emails to the candidates for the "${job.job}" role: interview invitations for the shortlist, and respectful "not this time" emails for the rest.`;
+
   type Step = { label: string; state: "done" | "now" | "todo" | "warn" };
   const steps: Step[] = [
     job.jd ? { label: "Job description", state: "done" } : { label: "Needs a job description", state: "warn" },
@@ -268,12 +327,16 @@ function JobPane(p: {
         : screened
           ? { label: `${screened} screened`, state: "done" }
           : { label: "Screening", state: confirmed ? "now" : "todo" },
-    { label: "Your decision", state: screened && !unscreened && !screeningNow ? "now" : "todo" },
+    decidedView
+      ? { label: `${shortlisted.length} shortlisted`, state: "done" }
+      : screened && !unscreened && !screeningNow
+        ? { label: `Your decision · ${screened - undecided} of ${screened}`, state: "now" }
+        : { label: "Your decision", state: "todo" },
   ];
 
-  const where = job.stage === "screened" ? "" : `Jobs/${job.job} · `;
+  const where = job.stage === "screened" || job.stage === "decided" ? "" : `Jobs/${job.job} · `;
   const sub = `${where}${job.jd ? `${job.jd} · ` : ""}${job.jd ? plural(job.applications, "application") : plural(job.files, "file")}`;
-  const rows = p.showAll ? r.ranked : r.ranked.slice(0, TOP);
+  const rows = decidedView ? r.ranked.filter((c) => tab === "all" || dec.get(c.file) === tab) : p.showAll ? r.ranked : r.ranked.slice(0, TOP);
 
   return (
     <>
@@ -287,10 +350,10 @@ function JobPane(p: {
         {screeningNow && <span className="pill info">Screening</span>}
         {screened > 0 && (
           <>
-            <button type="button" className="btn" onClick={() => p.onAsk(`Build an interview kit for the "${job.job}" role, using the confirmed screening criteria.`)}>
+            <button type="button" className="btn" onClick={() => p.onAsk(kitPrompt)}>
               Interview kit
             </button>
-            <button type="button" className="btn" onClick={() => p.onAsk(`Draft emails to the candidates for the "${job.job}" role: interview invitations for the shortlist, and respectful "not this time" emails for the rest.`)}>
+            <button type="button" className="btn" onClick={() => p.onAsk(emailsPrompt)}>
               Candidate emails
             </button>
             <button type="button" className="btn p" disabled={!!p.busy} onClick={p.onReport}>
@@ -447,6 +510,7 @@ function JobPane(p: {
         {/* Criteria confirmed: summary, applications, ranking (Hiring, HiringMore, HiringReport). */}
         {rubric && confirmed && !screeningNow && (
           <>
+            {!decidedView && (
             <div className="crit-grid">
               <div className="card" style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 6, gridColumn: "span 2" }}>
                 <div style={{ display: "flex", alignItems: "baseline" }}>
@@ -486,6 +550,7 @@ function JobPane(p: {
                 )}
               </div>
             </div>
+            )}
             {screened > 0 && unscreened > 0 && (
               <div className="banner warn" style={{ alignItems: "center" }}>
                 <span className="grow">
@@ -510,14 +575,104 @@ function JobPane(p: {
                 )}
               </div>
             )}
-            {screened > 0 && (
+            {screened > 0 && decidedView && (
+              <>
+                <div className="card next-steps">
+                  <div className="next-h">
+                    <h3 className="h3">Next steps</h3>
+                    <span className="meta">
+                      {shortlisted.length} shortlisted · {notNow.length} not this time{lastDecided ? ` · decided ${fmtDay(localDay(lastDecided))}` : ""}
+                    </span>
+                    <span className="grow" />
+                    <button type="button" className="link-btn" style={{ fontSize: 13, fontWeight: 700 }} onClick={() => p.onReview(true)}>
+                      Change decisions
+                    </button>
+                  </div>
+                  <NextStep n={1} title="Interview kit" text={shortlisted.length ? `Questions and a scoring sheet for ${names(shortlisted)}, built from your criteria.` : "No one is shortlisted yet."}>
+                    <button type="button" className="btn" disabled={!shortlisted.length} onClick={() => p.onAsk(kitPrompt)}>
+                      Make the interview kit
+                    </button>
+                  </NextStep>
+                  <NextStep n={2} title="Candidate emails" text={`${plural(shortlisted.length, "interview invitation")} and ${notNow.length} “not this time” email${notNow.length === 1 ? "" : "s"}, saved as drafts in your Outbox. You check and send them.`}>
+                    <button type="button" className="btn p" onClick={() => p.onAsk(emailsPrompt)}>
+                      Draft the emails
+                    </button>
+                  </NextStep>
+                  <NextStep n={3} title="Hired someone?" text="Add them to Staff and you'll get the new starter checklist for them.">
+                    <div style={{ position: "relative" }}>
+                      <button
+                        type="button"
+                        className="btn"
+                        aria-haspopup={shortlisted.length > 1 ? "menu" : undefined}
+                        aria-expanded={shortlisted.length > 1 ? hireOpen : undefined}
+                        onClick={() => (shortlisted.length === 1 ? p.onHire(shortlisted[0].name) : setHireOpen(!hireOpen))}
+                      >
+                        Add to Staff
+                      </button>
+                      {hireOpen && (
+                        <div className="menu row-menu" role="menu" style={{ right: 0, left: "auto", top: 48 }}>
+                          {shortlisted.map((c) => (
+                            <button key={c.file} type="button" role="menuitem" className="menu-item row" onClick={() => (setHireOpen(false), p.onHire(c.name))}>
+                              {c.name}
+                            </button>
+                          ))}
+                          <div role="separator" className="menu-sep" />
+                          <button type="button" role="menuitem" className="menu-item row" onClick={() => (setHireOpen(false), p.onHire(""))}>
+                            Someone else
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </NextStep>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+                  <div className="pick-tabs" role="tablist" aria-label="Show">
+                    {(
+                      [
+                        ["shortlist", `Shortlisted ${shortlisted.length}`],
+                        ["not", `Not this time ${notNow.length}`],
+                        ["all", `All ${screened}`],
+                      ] as const
+                    ).map(([k, label]) => (
+                      <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="meta">Changing a decision here updates the next steps.</span>
+                </div>
+              </>
+            )}
+            {screened > 0 && !decidedView && (
               <>
                 <div className="banner info" style={{ padding: "10px 14px", fontSize: 13.5 }}>
                   <Icon name="shield" size={16} />
                   <span>
-                    <b>Blind screening.</b> Assessed without names, photos, ages or addresses, against your criteria only. The ranking is a starting point; the decision is yours.
+                    <b>Blind screening.</b> The ranking is a starting point. Shortlist the people you want to meet; the rest get a "not this time" email when you're ready. Only you see these decisions.
                   </span>
                 </div>
+                <div className="card decide-bar">
+                  <span className="cap">Your decision</span>
+                  <span style={{ fontSize: 14, color: "#4A5363" }}>
+                    <b style={{ color: "#1E6B3E" }}>{shortlisted.length}</b> shortlisted · <b style={{ color: "#1B1F27" }}>{notNow.length}</b> not this time · <b style={{ color: "#1446A6" }}>{undecided}</b> to decide
+                  </span>
+                  <span className="grow" />
+                  {undecided > 0 ? (
+                    <button type="button" className="btn sm" onClick={p.onRest}>
+                      Mark the rest “Not this time”
+                    </button>
+                  ) : (
+                    job.stage === "decided" && (
+                      <button type="button" className="btn p sm" onClick={() => p.onReview(false)}>
+                        See next steps
+                      </button>
+                    )
+                  )}
+                </div>
+              </>
+            )}
+            {screened > 0 && (
+              <>
                 <div className="card" style={{ overflow: "hidden", flexShrink: 0 }}>
                   <table className="tbl">
                     <thead>
@@ -528,7 +683,7 @@ function JobPane(p: {
                         <th>Essential</th>
                         <th>Desirable</th>
                         <th>Summary</th>
-                        <th style={{ width: 170 }}>Flag</th>
+                        <th style={{ width: 236 }}>Decision</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -539,6 +694,11 @@ function JobPane(p: {
                             <button type="button" className="name-btn" onClick={() => p.onPick(c)}>
                               {c.name}
                             </button>
+                            {(c.evaluation.flags.suspiciousInstructions || c.evaluation.flags.differentRole) && (
+                              <span className="flag-ic" role="img" aria-label={c.evaluation.flags.suspiciousInstructions ? "Hidden instructions in the file" : "Applied for a different role"} title={c.evaluation.flags.suspiciousInstructions ? "The file contains hidden instructions to the assessor" : "Applied for a different role"}>
+                                <Icon name="alert" size={14} />
+                              </span>
+                            )}
                           </td>
                           <td>
                             <span className={`pill ${BAND[c.band] ?? "n"}`}>{c.band}</span>
@@ -549,22 +709,17 @@ function JobPane(p: {
                           <td>
                             {c.desirableScore} of {c.desirableTotal}
                           </td>
-                          <td className="ellipsis" style={{ maxWidth: 250 }}>
+                          <td className="ellipsis" style={{ maxWidth: 180 }}>
                             {c.evaluation.summary}
                           </td>
-                          <td>
-                            {(c.evaluation.flags.suspiciousInstructions || c.evaluation.flags.differentRole) && (
-                              <span className="flag" title={c.evaluation.flags.suspiciousInstructions ? "The file contains hidden instructions to the assessor" : "Applied for a different role"}>
-                                <Icon name="alert" size={14} />
-                                {c.evaluation.flags.suspiciousInstructions ? "Hidden instructions" : "Different role"}
-                              </span>
-                            )}
+                          <td style={{ whiteSpace: "nowrap" }}>
+                            <DecisionButtons name={c.name} value={dec.get(c.file) ?? null} onChange={(d) => p.onDecide(c.file, d)} />
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  {!p.showAll && r.ranked.length > TOP && (
+                  {!decidedView && !p.showAll && r.ranked.length > TOP && (
                     <div style={{ padding: "10px 16px" }}>
                       <button type="button" className="link-btn" style={{ fontSize: 14, fontWeight: 700 }} onClick={p.onShowAll}>
                         Show all {r.ranked.length}
@@ -606,6 +761,34 @@ function JobPane(p: {
   );
 }
 
+/** Shortlist / Not this time; clicking the chosen one again clears it. */
+function DecisionButtons({ name, value, onChange, large }: { name: string; value: Decision | null; onChange: (d: Decision | null) => void; large?: boolean }) {
+  return (
+    <div role="group" aria-label={`Decision for ${name}`} className={`dec${large ? " lg" : ""}`}>
+      <button type="button" aria-pressed={value === "shortlist"} className={value === "shortlist" ? "on-s" : ""} onClick={() => onChange(value === "shortlist" ? null : "shortlist")}>
+        {value === "shortlist" && <Icon name="check" size={14} stroke={2.6} />}
+        {value === "shortlist" ? "Shortlisted" : "Shortlist"}
+      </button>
+      <button type="button" aria-pressed={value === "not"} className={value === "not" ? "on-n" : ""} onClick={() => onChange(value === "not" ? null : "not")}>
+        Not this time
+      </button>
+    </div>
+  );
+}
+
+function NextStep({ n, title, text, children }: { n: number; title: string; text: string; children: React.ReactNode }) {
+  return (
+    <div className="next-step">
+      <span className="next-n">{n}</span>
+      <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <b style={{ fontSize: 14.5 }}>{title}</b>
+        <span style={{ fontSize: 13.5, color: "#4A5363", lineHeight: 1.45 }}>{text}</span>
+      </span>
+      {children}
+    </div>
+  );
+}
+
 /** "screened 3/5" → 60. */
 function progressPct(progress: string | null): number {
   const m = /(\d+)\s*\/\s*(\d+)/.exec(progress ?? "");
@@ -626,7 +809,25 @@ function CritLine({ kind, items }: { kind: "Essential" | "Desirable"; items: str
   );
 }
 
-function Candidate({ c, result, onClose, onOpen, onInvite, onPhone }: { c: Ranked; result: JobResults; onClose: () => void; onOpen: () => void; onInvite: () => void; onPhone: () => void }) {
+function Candidate({
+  c,
+  result,
+  decision,
+  onDecide,
+  onClose,
+  onOpen,
+  onInvite,
+  onPhone,
+}: {
+  c: Ranked;
+  result: JobResults;
+  decision: Decision | null;
+  onDecide: (d: Decision | null) => void;
+  onClose: () => void;
+  onOpen: () => void;
+  onInvite: () => void;
+  onPhone: () => void;
+}) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -652,6 +853,12 @@ function Candidate({ c, result, onClose, onOpen, onInvite, onPhone }: { c: Ranke
             <span className="meta">
               Rank {c.rank} of {result.ranked.length} · essential {c.essentialScore} of {c.essentialTotal} · desirable {c.desirableScore} of {c.desirableTotal}
             </span>
+          </div>
+          <div className="row-wrap" style={{ alignItems: "center", marginTop: 6 }}>
+            <span className="cap" style={{ marginRight: 4 }}>
+              Your decision
+            </span>
+            <DecisionButtons name={c.name} value={decision} onChange={onDecide} large />
           </div>
         </div>
         <button type="button" className="ib" aria-label="Close" onClick={onClose}>

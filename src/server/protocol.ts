@@ -45,6 +45,10 @@ export interface Methods {
   /** Drafts criteria from the job's JD (a model call); the page then asks the owner to confirm them. */
   draftCriteria: { params: { job: string }; result: { status: "no-jd" } | { status: "drafted"; rubric: Rubric } };
   confirmCriteria: { params: { job: string; version: number }; result: { ok: true } };
+  /** The owner's decision on a screened candidate (null clears it). */
+  decide: { params: { job: string; file: string; decision: "shortlist" | "not" | null }; result: { ok: true } };
+  /** Every screened candidate without a decision → Not this time. */
+  decideRest: { params: { job: string }; result: { marked: number } };
   createJob: { params: { job: string; jd: UploadFile | null; applications: UploadFile[] }; result: { job: string; summary: IngestSummary; refused: { name: string; reason: string }[] } };
   screen: { params: { job: string }; result: ScreenOutcome };
   screenResults: { params: { job: string }; result: JobResults };

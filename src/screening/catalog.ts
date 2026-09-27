@@ -61,6 +61,9 @@ export interface Evaluation {
   flags: { suspiciousInstructions: boolean; differentRole: boolean };
 }
 
+/** The owner's decision on a screened application (two options, owner 2026-09-27). */
+export type Decision = "shortlist" | "not";
+
 export class Catalog {
   private db: DatabaseSync;
 
@@ -90,6 +93,8 @@ export class Catalog {
     // Added 2026-09-27: when the criteria were confirmed (the Hiring page shows it).
     const cols = this.db.prepare("PRAGMA table_info(rubrics)").all() as { name: string }[];
     if (!cols.some((c) => c.name === "confirmed_at")) this.db.exec("ALTER TABLE rubrics ADD COLUMN confirmed_at TEXT");
+    // Added 2026-09-27: the owner's decisions, by file content, so they survive re-screening with new criteria.
+    this.db.exec("CREATE TABLE IF NOT EXISTS decisions (job TEXT NOT NULL, hash TEXT NOT NULL, decision TEXT NOT NULL CHECK (decision IN ('shortlist', 'not')), decided_at TEXT NOT NULL, PRIMARY KEY (job, hash))");
   }
 
   close(): void {
@@ -173,11 +178,25 @@ export class Catalog {
     this.db.prepare("DELETE FROM applications WHERE job = ?").run(job);
     this.db.prepare("DELETE FROM rubrics WHERE job = ?").run(job);
     this.db.prepare("DELETE FROM evaluations WHERE job = ?").run(job);
+    this.db.prepare("DELETE FROM decisions WHERE job = ?").run(job);
     // Parsed text is only kept while some application still refers to it.
     for (const { hash } of hashes) {
       const used = this.db.prepare("SELECT 1 FROM applications WHERE hash = ? LIMIT 1").get(hash);
       if (!used) this.db.prepare("DELETE FROM texts WHERE hash = ?").run(hash);
     }
+  }
+
+  // ------------------------------------------------------------ decisions
+
+  /** Sets (or with null clears) the owner's decision on one application. */
+  setDecision(job: string, hash: string, decision: Decision | null): void {
+    if (decision === null) this.db.prepare("DELETE FROM decisions WHERE job = ? AND hash = ?").run(job, hash);
+    else this.db.prepare("INSERT OR REPLACE INTO decisions (job, hash, decision, decided_at) VALUES (?, ?, ?, ?)").run(job, hash, decision, now().toISOString());
+  }
+
+  decisions(job: string): Map<string, { decision: Decision; decidedAt: string }> {
+    const rows = this.db.prepare("SELECT hash, decision, decided_at FROM decisions WHERE job = ?").all(job) as { hash: string; decision: Decision; decided_at: string }[];
+    return new Map(rows.map((r) => [r.hash, { decision: r.decision, decidedAt: r.decided_at }]));
   }
 
   // ---------------------------------------------------------------- rubrics

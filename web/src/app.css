@@ -1565,6 +1565,116 @@ button:disabled {
 .bad-text {
   color: #b3261e;
 }
+/* the owner's decision (design: HiringDecide, HiringDecided) */
+.decide-bar {
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+.dec {
+  display: inline-flex;
+  gap: 6px;
+}
+.dec button {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid #d9dee7;
+  background: #fff;
+  color: #1b1f27;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.dec button + button {
+  color: #4a5363;
+}
+.dec button:hover {
+  border-color: #a8b1c0;
+}
+.dec button.on-s {
+  background: #e3f3e8;
+  border-color: #9fd3b0;
+  color: #1e6b3e;
+}
+.dec button.on-n {
+  background: #ebeef3;
+  border-color: #a8b1c0;
+  color: #1b1f27;
+}
+.dec.lg button {
+  height: 36px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+.flag-ic {
+  display: inline-flex;
+  margin-left: 6px;
+  color: #6b4e00;
+  vertical-align: -2px;
+}
+.next-steps {
+  padding: 14px 18px 6px;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+.next-h {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-bottom: 8px;
+}
+.next-step {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid #e7eaf0;
+}
+.next-n {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: #dce6fa;
+  color: #1446a6;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pick-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: #ebeef3;
+}
+.pick-tabs button {
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #4a5363;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.pick-tabs button[aria-selected="true"] {
+  background: #1a57cc;
+  color: #fff;
+  font-weight: 700;
+}
 @media (max-width: 1100px) {
   .jobs-col {
     width: 240px;

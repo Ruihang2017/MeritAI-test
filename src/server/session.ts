@@ -179,6 +179,12 @@ export class UiSession {
       const job = this.jobName(p?.job);
       return this.exclusive(`Drafting criteria for "${job}"`, () => this.app.draftCriteria(job));
     },
+    decide: async (p) => {
+      if (p?.decision !== "shortlist" && p?.decision !== "not" && p?.decision !== null) throw new Error("decision must be shortlist, not or null");
+      this.app.decide(this.jobName(p?.job), str(p?.file, "file", 1000), p.decision);
+      return { ok: true };
+    },
+    decideRest: async (p) => ({ marked: this.app.decideRest(this.jobName(p?.job)) }),
     confirmCriteria: async (p) => {
       this.app.confirmCriteria(this.jobName(p?.job), int(p?.version));
       return { ok: true };

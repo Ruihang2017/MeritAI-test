@@ -43,6 +43,8 @@ function Shell({ api }: { api: Api }) {
   /** An employee to open on the Staff page (Attention's "Open employee"). */
   const [staffOpen, setStaffOpen] = useState<number | null>(null);
   const openEmployee = (id: number) => (setStaffOpen(id), setPage("staff"));
+  /** Someone hired from Hiring: the Staff page's add form, with their name and role filled in. */
+  const [staffAdd, setStaffAdd] = useState<{ name: string; role: string } | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [reminders, setReminders] = useState<Reminder[] | null>(null);
   const [recent, setRecent] = useState<SessionRecord[]>([]);
@@ -247,7 +249,7 @@ function Shell({ api }: { api: Api }) {
         />
       ) : (
       <div className="body">
-        <Nav page={page} onPage={(p) => (setStaffOpen(null), setPage(p))} onNew={() => void newConversation()} recent={recent} onRecent={(id) => void resume(id)} currentThread={currentThread} state={state} />
+        <Nav page={page} onPage={(p) => (setStaffOpen(null), setStaffAdd(null), setPage(p))} onNew={() => void newConversation()} recent={recent} onRecent={(id) => void resume(id)} currentThread={currentThread} state={state} />
         {page === "conversations" && (
           <ConversationPage
             api={api}
@@ -265,12 +267,12 @@ function Shell({ api }: { api: Api }) {
           />
         )}
         {page === "all" && <AllConversations api={api} onResume={(id) => void resume(id)} onNew={() => void newConversation()} />}
-        {page === "staff" && <StaffPage key={staffOpen ?? "list"} api={api} openId={staffOpen} onAsk={(t) => (setDraft(t), setPage("conversations"))} onChanged={() => void refresh()} />}
+        {page === "staff" && <StaffPage key={staffOpen ?? staffAdd?.name ?? "list"} api={api} openId={staffOpen} addPrefill={staffAdd} onAsk={(t) => (setDraft(t), setPage("conversations"))} onChanged={() => void refresh()} />}
         {page === "files" && <FilesPage api={api} onAsk={(t) => (setDraft(t), setPage("conversations"))} />}
         {page === "profile" && <ProfilePage api={api} onAsk={() => void send("Set up my business profile", undefined, [], "setup")} onChanged={() => void refresh()} />}
         {page === "memory" && <MemoryPage api={api} onProfile={() => setPage("profile")} />}
         {page === "settings" && <SettingsPage api={api} login={login} onChanged={() => void refresh()} />}
-        {page === "hiring" && <HiringPage api={api} progress={lastProgress} onAsk={(t) => (setDraft(t), setPage("conversations"))} />}
+        {page === "hiring" && <HiringPage api={api} progress={lastProgress} onAsk={(t) => (setDraft(t), setPage("conversations"))} onHire={(name, role) => (setStaffOpen(null), setStaffAdd({ name, role }), setPage("staff"))} />}
         {showPanel && <AttentionPanel reminders={reminders} rulesChecked={state?.rulesChecked ?? null} onAsk={(t) => void send(t)} onOpenEmployee={openEmployee} />}
       </div>
       )}
