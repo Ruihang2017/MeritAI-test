@@ -35,7 +35,7 @@ export interface Methods {
   detach: { params: { name: string }; result: { detached: boolean } };
   // ---- staff (M2): the register forms; submitting is the confirmation, delete asks again (destructive)
   staff: { params: { includeLeft: boolean }; result: StaffRow[] };
-  addEmployee: { params: { details: EmployeeFields; mayNeedVisaCheck: boolean; apprentice: boolean; constructionSite: boolean }; result: FormResult<{ employee: Employee; checklist: ChecklistItem[] }> };
+  addEmployee: { params: { details: EmployeeFields; mayNeedVisaCheck: boolean; apprentice: boolean; constructionSite: boolean; hireFrom?: { job: string; file: string } }; result: FormResult<{ employee: Employee; checklist: ChecklistItem[] }> };
   updateEmployee: { params: { id: number; changes: Partial<EmployeeFields> }; result: FormResult<{ employee: Employee; notes: FormNote[] }> };
   recordDocuments: { params: { id: number; documents: DocumentId[]; date: string }; result: FormResult<{ employee: Employee }> };
   markLeft: { params: { id: number; leftDate: string; reason: LeavingReason }; result: FormResult<{ employee: Employee; checklist: LeavingItem[] }> };
@@ -49,7 +49,14 @@ export interface Methods {
   decide: { params: { job: string; file: string; decision: "shortlist" | "not" | null }; result: { ok: true } };
   /** Every screened candidate without a decision → Not this time. */
   decideRest: { params: { job: string }; result: { marked: number } };
-  createJob: { params: { job: string; jd: UploadFile | null; applications: UploadFile[] }; result: { job: string; summary: IngestSummary; refused: { name: string; reason: string }[] } };
+  /** How many people the job is for (1 to 99). */
+  setOpenings: { params: { job: string; openings: number }; result: { ok: true } };
+  /** A closed job keeps everything, read-only, until reopened. */
+  closeJob: { params: { job: string }; result: { ok: true } };
+  reopenJob: { params: { job: string }; result: { ok: true } };
+  /** A new open job with a copy of the JD and the criteria (no applications, decisions or hires). */
+  duplicateJob: { params: { job: string; name: string; openings: number }; result: { job: string } };
+  createJob: { params: { job: string; jd: UploadFile | null; applications: UploadFile[]; openings?: number }; result: { job: string; summary: IngestSummary; refused: { name: string; reason: string }[] } };
   screen: { params: { job: string }; result: ScreenOutcome };
   screenResults: { params: { job: string }; result: JobResults };
   report: { params: { job: string; format: "docx" | "xlsx" | "both" }; result: string[] };

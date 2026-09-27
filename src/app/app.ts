@@ -1,4 +1,4 @@
-import { readFileSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 import { createAssistant, ROOT, type Assistant } from "../assistant";
 import type { ReplyFormat } from "../basePrompt";
@@ -15,7 +15,7 @@ import { userSection } from "../memory/context";
 import { summarizeSession } from "../memory/summarize";
 import type { Preference, SessionRecord, TaskNote } from "../memory/store";
 import { attachToInbox, findDroppedPaths, importIntoJob, MAX_ATTACH_BYTES } from "../files/attach";
-import { ensureFolders, jobDir, listJobs, sanitizeStem, validateFilesRoot, walk, type Folders } from "../files/folders";
+import { checkJobId, ensureFolders, jobDir, listJobs, sanitizeStem, validateFilesRoot, walk, type Folders } from "../files/folders";
 import type { Decision, Rubric } from "../screening/catalog";
 import { listFolder, listInbox, type FolderEntry, type InboxEntry } from "../files/tools";
 import { profileLines, type BusinessProfile } from "../business/profile";
@@ -128,8 +128,12 @@ export interface JobSummary {
   screened: number;
   /** The job folder. */
   path: string;
-  /** "decided": everyone screened has a decision (Shortlist or Not this time). */
-  stage: "needs-jd" | "criteria" | "ready" | "screened" | "decided";
+  /** "decided": everyone screened has a decision (Shortlist or Not this time); "filled": as many hired as the job is for. */
+  stage: "needs-jd" | "criteria" | "ready" | "screened" | "decided" | "filled";
+  /** How many people the job is for, and how many were hired from it. */
+  openings: number;
+  hired: number;
+  closedAt: string | null;
   /** Screened candidates shortlisted, and screened ones without a decision yet. */
   shortlisted: number;
   undecided: number;
@@ -145,6 +149,11 @@ export type JobResults = Omit<ScreenResult, "rubric"> & {
   files: { file: string; status: "application" | "unreadable" | "duplicate"; reason: string | null }[];
   /** The owner's decisions on screened candidates (by file): Shortlist or Not this time. */
   decisions: { file: string; decision: Decision; decidedAt: string }[];
+  /** Candidates hired from this job (added to Staff from the Hiring page), with their employee record. */
+  hires: { file: string; employeeId: number; name: string; startDate: string; hiredAt: string }[];
+  openings: number;
+  /** When the job was closed (null: open). A closed job is read-only until reopened. */
+  closedAt: string | null;
 };
 
 export type ScreenOutcome =
@@ -551,10 +560,18 @@ export class AssistantApp {
   // confirmation, so there is no second yes/no, except for deleting.
 
   /** Adds an employee; returns the new starter checklist for them (from code, with official sources). */
-  addEmployee(details: unknown, opts: { mayNeedVisaCheck?: boolean; apprentice?: boolean; constructionSite?: boolean } = {}): FormResult<{ employee: Employee; checklist: ChecklistItem[] }> {
+  addEmployee(details: unknown, opts: { mayNeedVisaCheck?: boolean; apprentice?: boolean; constructionSite?: boolean; hireFrom?: { job: string; file: string } } = {}): FormResult<{ employee: Employee; checklist: ChecklistItem[] }> {
     const c = checkNewEmployee(this.a.register(), details);
     if (!c.ok) return { ok: false, error: c.error };
     const employee = this.a.register().add(c.input);
+    if (opts.hireFrom) {
+      // The employee is saved either way; a hire that can't be linked is only logged.
+      try {
+        this.recordHire(opts.hireFrom.job, opts.hireFrom.file, employee.id);
+      } catch (e) {
+        this.onLog?.(`[hire] not recorded: ${(e as Error).message}`);
+      }
+    }
     const p = this.a.business().get();
     const checklist = newStarterChecklist({
       employmentType: employee.employmentType as EmploymentType,
@@ -727,8 +744,10 @@ export class AssistantApp {
       const undecided = evaluated.filter((a) => !decisions.has(a.hash)).length;
       const applications = files.length - (jd ? 1 : 0);
       const allDecided = screened > 0 && undecided === 0 && evaluated.length === ok.length;
-      const stage: JobSummary["stage"] = !jd && !r ? "needs-jd" : !r?.confirmed ? "criteria" : allDecided ? "decided" : screened ? "screened" : "ready";
-      return { job: j, files: files.length, criteria: r ? `v${r.version}${r.confirmed ? " confirmed" : " not confirmed"}` : "none", jd, applications, screened, shortlisted, undecided, stage, path: jobDir(f, j) };
+      const { openings, closedAt } = cat.jobSettings(j);
+      const hired = this.liveHires(j).size;
+      const stage: JobSummary["stage"] = !jd && !r ? "needs-jd" : !r?.confirmed ? "criteria" : hired >= openings ? "filled" : allDecided ? "decided" : screened ? "screened" : "ready";
+      return { job: j, files: files.length, criteria: r ? `v${r.version}${r.confirmed ? " confirmed" : " not confirmed"}` : "none", jd, applications, screened, shortlisted, undecided, stage, path: jobDir(f, j), openings, hired, closedAt };
     });
   }
 
@@ -742,6 +761,7 @@ export class AssistantApp {
    * ask the user to confirm them, then screen new resumes. Results in chat form; no file.
    */
   async screen(job: string): Promise<ScreenOutcome> {
+    if (listJobs(this.folders()).includes(job)) this.assertOpen(job);
     const cat = this.a.catalog();
     const s = await ingestJob(cat, this.folders(), job, this.progress);
     let r = cat.latestRubric(job);
@@ -767,7 +787,15 @@ export class AssistantApp {
    * "<job> JD.<ext>" so screening finds it, applications go in "applications/".
    * Submitting the form is the owner's OK, so no import question is asked.
    */
-  async importJobFiles(job: string, jd: Upload | null, applications: Upload[]): Promise<{ job: string; summary: IngestSummary; refused: { name: string; reason: string }[] }> {
+  async importJobFiles(job: string, jd: Upload | null, applications: Upload[], opts: { openings?: number } = {}): Promise<{ job: string; summary: IngestSummary; refused: { name: string; reason: string }[] }> {
+    const exists = listJobs(this.folders()).includes(job);
+    if (exists) this.assertOpen(job);
+    const result = await this.importJobFilesInto(job, jd, applications);
+    if (!exists && listJobs(this.folders()).includes(result.job)) this.setOpenings(result.job, opts.openings ?? 1);
+    return result;
+  }
+
+  private async importJobFilesInto(job: string, jd: Upload | null, applications: Upload[]): Promise<{ job: string; summary: IngestSummary; refused: { name: string; reason: string }[] }> {
     const uploads: Upload[] = [
       ...(jd ? [{ name: jd.name, data: jd.data, relPath: `job/${sanitizeStem(job)} JD${extname(jd.name).toLowerCase()}` }] : []),
       ...applications.map((a) => ({ name: a.name, data: a.data, relPath: `job/applications/${a.name}` })),
@@ -797,9 +825,18 @@ export class AssistantApp {
         status: a.status === "unreadable" ? ("unreadable" as const) : a.status === "duplicate" ? ("duplicate" as const) : ("application" as const),
         reason: a.status === "unreadable" ? a.error : a.status === "duplicate" ? `the same file as ${a.duplicateOf}` : null,
       }));
+    const { openings, closedAt } = cat.jobSettings(job);
+    const hires = () => {
+      const fileOf = new Map(cat.applications(job).filter((a) => a.status === "ok").map((a) => [a.hash, a.sourceRef]));
+      return [...this.liveHires(job)].flatMap(([hash, h]) => {
+        const e = this.a.register().get(h.employeeId);
+        const file = fileOf.get(hash);
+        return e && file ? [{ file, employeeId: e.id, name: e.name, startDate: e.startDate, hiredAt: h.hiredAt }] : [];
+      }).sort((a, b) => a.hiredAt.localeCompare(b.hiredAt));
+    };
     if (!rubric || !rubric.confirmed) {
       const ingest = await ingestJob(cat, this.folders(), job, () => {});
-      return { job, rubric: rubric ?? null, ingest, evaluatedThisRun: 0, failed: [], remaining: ingest.applications, ranked: [], files: files(), decisions: [] };
+      return { job, rubric: rubric ?? null, ingest, evaluatedThisRun: 0, failed: [], remaining: ingest.applications, ranked: [], files: files(), decisions: [], hires: hires(), openings, closedAt };
     }
     const result = await screenJob(this.a.engine, cat, this.folders(), job, { limit: 0 });
     const byFile = new Map(cat.applications(job).map((a) => [a.sourceRef, a.hash]));
@@ -808,7 +845,75 @@ export class AssistantApp {
       const d = decided.get(byFile.get(c.file) ?? "");
       return d ? [{ file: c.file, decision: d.decision, decidedAt: d.decidedAt }] : [];
     });
-    return { ...result, files: files(), decisions };
+    return { ...result, files: files(), decisions, hires: hires(), openings, closedAt };
+  }
+
+  /** Hires whose employee is still in the register (deleting the employee undoes the hire). */
+  private liveHires(job: string): Map<string, { employeeId: number; hiredAt: string }> {
+    const cat = this.a.catalog();
+    const all = cat.hires(job);
+    for (const [hash, h] of all) {
+      if (!this.a.register().get(h.employeeId)) {
+        cat.removeHire(job, hash);
+        all.delete(hash);
+      }
+    }
+    return all;
+  }
+
+  /** A closed job is read-only: screening, criteria and decisions need it reopened first. */
+  private assertOpen(job: string): void {
+    if (this.a.catalog().jobSettings(job).closedAt) throw new Error(`"${job}" is closed. Reopen it first.`);
+  }
+
+  /** How many people the job is for (1 to 99). */
+  setOpenings(job: string, openings: number): void {
+    jobDir(this.folders(), job);
+    if (!Number.isInteger(openings) || openings < 1 || openings > 99) throw new Error("people to hire must be a whole number from 1 to 99");
+    this.a.catalog().setOpenings(job, openings);
+  }
+
+  /** Closes a job (everything is kept, read-only) or reopens it. */
+  setJobClosed(job: string, closed: boolean): void {
+    jobDir(this.folders(), job);
+    this.a.catalog().setClosed(job, closed);
+  }
+
+  /**
+   * A new open job for the same role: a copy of the job description (named "<new job> JD") and
+   * of the latest criteria (still confirmed if they were). Applications, decisions and hires
+   * are not copied.
+   */
+  duplicateJob(job: string, name: string, openings: number): { job: string } {
+    const f = this.folders();
+    const from = jobDir(f, job);
+    const to = checkJobId(name);
+    if (listJobs(f).some((j) => j.toLowerCase() === to.toLowerCase())) throw new Error(`there is already a job called "${to}"`);
+    mkdirSync(join(f.jobs, to));
+    const jd = walk(from).files.find((x) => !x.rel.includes("/") && JD_NAME.test(x.rel));
+    if (jd) copyFileSync(jd.abs, join(f.jobs, to, `${to} JD${extname(jd.rel).toLowerCase()}`));
+    const cat = this.a.catalog();
+    const r = cat.latestRubric(job);
+    if (r) {
+      const copy = cat.saveRubric(to, r.role, r.criteria, r.jdHash);
+      if (r.confirmed) cat.confirmRubric(to, copy.version);
+    }
+    this.setOpenings(to, openings);
+    return { job: to };
+  }
+
+  /**
+   * Records a hire: the screened candidate `file` of `job` became employee `employeeId`
+   * (the Staff form opened from the Hiring page). It also shortlists them.
+   */
+  recordHire(job: string, file: string, employeeId: number): void {
+    const cat = this.a.catalog();
+    const r = cat.latestRubric(job);
+    const app = cat.applications(job).find((a) => a.sourceRef === file && a.status === "ok");
+    if (!app || !r?.confirmed || !cat.getEvaluation(app.hash, job, r.version)) throw new Error(`"${file}" isn't a screened application of "${job}"`);
+    if (!this.a.register().get(employeeId)) throw new Error("no such employee");
+    cat.setDecision(job, app.hash, "shortlist");
+    cat.addHire(job, app.hash, employeeId);
   }
 
   /**
@@ -817,15 +922,18 @@ export class AssistantApp {
    * screened against the current criteria.
    */
   decide(job: string, file: string, decision: Decision | null): void {
+    this.assertOpen(job);
     const cat = this.a.catalog();
     const r = cat.latestRubric(job);
     const app = cat.applications(job).find((a) => a.sourceRef === file && a.status === "ok");
     if (!app || !r?.confirmed || !cat.getEvaluation(app.hash, job, r.version)) throw new Error(`"${file}" isn't a screened application of "${job}"`);
+    if (this.liveHires(job).has(app.hash)) throw new Error("this candidate was hired; remove them from Staff to undo the hire");
     cat.setDecision(job, app.hash, decision);
   }
 
   /** Marks every screened candidate without a decision "Not this time". Returns how many. */
   decideRest(job: string): number {
+    this.assertOpen(job);
     const cat = this.a.catalog();
     const r = cat.latestRubric(job);
     if (!r?.confirmed) return 0;
@@ -840,6 +948,7 @@ export class AssistantApp {
    * a UI shows them for the owner's OK (confirmCriteria). Keeps criteria already drafted.
    */
   async draftCriteria(job: string): Promise<{ status: "no-jd" } | { status: "drafted"; rubric: Rubric }> {
+    this.assertOpen(job);
     const cat = this.a.catalog();
     const existing = cat.latestRubric(job);
     if (existing) return { status: "drafted", rubric: existing };
@@ -852,6 +961,7 @@ export class AssistantApp {
 
   /** The owner's OK to the job's latest criteria (the screening form's "Yes"). */
   confirmCriteria(job: string, version: number): void {
+    this.assertOpen(job);
     const r = this.a.catalog().latestRubric(job);
     if (!r || r.version !== version) throw new Error("these criteria have changed; look at them again");
     this.a.catalog().confirmRubric(job, version);

@@ -146,7 +146,13 @@ export class UiSession {
     detach: async (p) => ({ detached: this.app.detach(str(p?.name, "name", 300)) }),
     staff: async (p) => this.app.staffOverview(p?.includeLeft === true),
     addEmployee: async (p) =>
-      this.app.addEmployee(obj(p?.details, "details"), { mayNeedVisaCheck: p?.mayNeedVisaCheck !== false, apprentice: p?.apprentice === true ? true : undefined, constructionSite: p?.constructionSite === true }),
+      this.app.addEmployee(obj(p?.details, "details"), {
+        mayNeedVisaCheck: p?.mayNeedVisaCheck !== false,
+        apprentice: p?.apprentice === true ? true : undefined,
+        constructionSite: p?.constructionSite === true,
+        // Opened from Hiring's "Add to Staff": the candidate becomes a hire of that job.
+        ...(p?.hireFrom ? { hireFrom: { job: this.jobName(p.hireFrom.job), file: str(p.hireFrom.file, "file", 1000) } } : {}),
+      }),
     updateEmployee: async (p) => this.app.updateEmployee(int(p?.id), obj(p?.changes, "changes")),
     recordDocuments: async (p) => {
       if (!Array.isArray(p?.documents) || p.documents.some((d) => typeof d !== "string" || !Object.hasOwn(DOCUMENTS, d))) throw new Error("documents must be known document ids");
@@ -168,7 +174,8 @@ export class UiSession {
       if (!Array.isArray(p?.applications) || p.applications.length > 200) throw new Error("applications must be a list (at most 200)");
       const jd = p.jd ? file(p.jd) : null;
       const apps = p.applications.map(file);
-      return this.exclusive("Importing applications", () => this.app.importJobFiles(job, jd, apps));
+      const openings = p.openings === undefined ? undefined : int(p.openings);
+      return this.exclusive("Importing applications", () => this.app.importJobFiles(job, jd, apps, { openings }));
     },
     screen: async (p) => {
       const job = this.jobName(p?.job);
@@ -185,6 +192,19 @@ export class UiSession {
       return { ok: true };
     },
     decideRest: async (p) => ({ marked: this.app.decideRest(this.jobName(p?.job)) }),
+    setOpenings: async (p) => {
+      this.app.setOpenings(this.jobName(p?.job), int(p?.openings));
+      return { ok: true };
+    },
+    closeJob: async (p) => {
+      this.app.setJobClosed(this.jobName(p?.job), true);
+      return { ok: true };
+    },
+    reopenJob: async (p) => {
+      this.app.setJobClosed(this.jobName(p?.job), false);
+      return { ok: true };
+    },
+    duplicateJob: async (p) => this.app.duplicateJob(this.jobName(p?.job), str(p?.name, "name", 80), int(p?.openings)),
     confirmCriteria: async (p) => {
       this.app.confirmCriteria(this.jobName(p?.job), int(p?.version));
       return { ok: true };

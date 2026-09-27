@@ -47,8 +47,8 @@ export function ensureFolders(root: string): Folders {
 /** A job id is its folder name under Jobs/: letters, digits, space, dot, dash, underscore. */
 export function checkJobId(job: string): string {
   const j = String(job ?? "").trim();
-  if (!j || j.length > 80 || !/^[\p{L}\p{N} ._-]+$/u.test(j) || j.startsWith(".") || j.includes("..")) {
-    throw new Error(`invalid job name "${j}" (use letters, digits, spaces, dots, dashes or underscores)`);
+  if (!j || j.length > 80 || !/^[\p{L}\p{N} ._()-]+$/u.test(j) || j.startsWith(".") || j.includes("..")) {
+    throw new Error(`invalid job name "${j}" (use letters, digits, spaces, brackets, dots, dashes or underscores)`);
   }
   return j;
 }

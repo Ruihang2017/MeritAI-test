@@ -2,14 +2,14 @@ import type * as React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { JobResults, JobSummary } from "../../../src/app/app";
 import type { Api } from "../api";
-import { fmtDay, localDay } from "../format";
+import { fmtDate, fmtDay, localDay } from "../format";
 import { Icon } from "./Icon";
 
 // The Hiring page as on the design canvas (Hiring*, artboards): jobs on the left, the selected
 // job's steps, criteria, applications and ranked candidates on the right.
 
-const STAGE = { "needs-jd": "Needs job description", criteria: "Criteria to confirm", ready: "Ready to screen", screened: "Screened", decided: "Decided" } as const;
-const STAGE_ORDER = { decided: 0, screened: 1, ready: 2, criteria: 3, "needs-jd": 4 } as const;
+const STAGE = { "needs-jd": "Needs job description", criteria: "Criteria to confirm", ready: "Ready to screen", screened: "Screened", decided: "Decided", filled: "Filled" } as const;
+const STAGE_ORDER = { filled: 0, decided: 1, screened: 2, ready: 3, criteria: 4, "needs-jd": 5 } as const;
 type Decision = "shortlist" | "not";
 
 type Job = JobSummary;
@@ -31,7 +31,20 @@ const joinPath = (dir: string, rel: string) => {
 /** "this PDF has no text layer (probably a scan...)" → "no text". */
 const shortReason = (r: string | null) => (r && /no text/i.test(r) ? "no text" : (r ?? "can't be read"));
 
-export function HiringPage({ api, progress, onAsk, onHire }: { api: Api; progress: string | null; onAsk: (text: string) => void; onHire: (name: string, role: string) => void }) {
+export function HiringPage({
+  api,
+  progress,
+  onAsk,
+  onHire,
+  onOpenEmployee,
+}: {
+  api: Api;
+  progress: string | null;
+  onAsk: (text: string) => void;
+  /** Add to Staff for a candidate: the Staff form, which records the hire when saved. */
+  onHire: (candidate: { name: string; file: string } | null, job: string) => void;
+  onOpenEmployee: (id: number) => void;
+}) {
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [sel, setSel] = useState<string | null>(null);
   const [result, setResult] = useState<JobResults | null>(null);
@@ -45,13 +58,14 @@ export function HiringPage({ api, progress, onAsk, onHire }: { api: Api; progres
   const [screening, setScreening] = useState<number | null>(null);
   /** "Change decisions" on a decided job: back to the deciding view. */
   const [reviewing, setReviewing] = useState(false);
+  const [duplicating, setDuplicating] = useState<string | null>(null);
 
   const loadJobs = useCallback(async () => {
     try {
       // Furthest along first, as in the design: screened, ready, criteria to confirm, no job description.
       const js = (await api.call("jobs")).sort((a, b) => STAGE_ORDER[a.stage] - STAGE_ORDER[b.stage] || a.job.localeCompare(b.job));
       setJobs(js);
-      setSel((s) => s ?? js[0]?.job ?? null);
+      setSel((s) => s ?? js.find((j) => !j.closedAt)?.job ?? js[0]?.job ?? null);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -135,6 +149,16 @@ export function HiringPage({ api, progress, onAsk, onHire }: { api: Api; progres
       setError((e as Error).message);
     }
   };
+  /** Close, reopen, people to hire: saved at once. */
+  const jobAction = async (f: () => Promise<unknown>) => {
+    try {
+      setError(null);
+      await f();
+      await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
   const decideRest = async () => {
     if (!sel) return;
     try {
@@ -158,17 +182,22 @@ export function HiringPage({ api, progress, onAsk, onHire }: { api: Api; progres
             New job
           </button>
         </div>
-        {jobs?.map((j) => (
-          <button key={j.job} type="button" className={`job${sel === j.job ? " on" : ""}`} onClick={() => pick(j.job)}>
-            <b className="ellipsis">{j.job}</b>
-            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span className={`pill ${j.stage === "screened" || j.stage === "decided" ? "ok" : "warn"}`} style={{ height: 22 }}>
-                {j.stage === "decided" ? `${j.shortlisted} shortlisted` : STAGE[j.stage]}
-              </span>
-              <span className="meta">{j.stage === "needs-jd" ? plural(j.files, "file") : plural(j.applications, "application")}</span>
-            </span>
-          </button>
-        ))}
+        {/* Open jobs, then closed ones (design: the Hiring artboards' job list). */}
+        {jobs && jobs.length > 0 && (
+          <span className="cap" style={{ padding: "0 4px" }}>
+            Open · {jobs.filter((j) => !j.closedAt).length}
+          </span>
+        )}
+        {jobs?.filter((j) => !j.closedAt).map((j) => <JobCard key={j.job} j={j} on={sel === j.job} onPick={() => pick(j.job)} />)}
+        {jobs?.some((j) => j.closedAt) && (
+          <span className="cap" style={{ padding: "6px 4px 0" }}>
+            Closed · {jobs.filter((j) => j.closedAt).length}
+          </span>
+        )}
+        {jobs
+          ?.filter((j) => j.closedAt)
+          .sort((a, b) => (b.closedAt ?? "").localeCompare(a.closedAt ?? ""))
+          .map((j) => <JobCard key={j.job} j={j} on={sel === j.job} onPick={() => pick(j.job)} />)}
         <FolderDrop
           api={api}
           disabled={!!busy}
@@ -225,7 +254,12 @@ export function HiringPage({ api, progress, onAsk, onHire }: { api: Api; progres
             onReview={setReviewing}
             onDecide={(file, d) => void decide(file, d)}
             onRest={() => void decideRest()}
-            onHire={(name) => onHire(name, job.job)}
+            onHire={(c) => onHire(c ? { name: c.name, file: c.file } : null, job.job)}
+            onOpenEmployee={onOpenEmployee}
+            onOpenings={(n) => void jobAction(() => api.call("setOpenings", { job: job.job, openings: n }))}
+            onClose={() => void jobAction(() => api.call("closeJob", { job: job.job }))}
+            onReopen={() => void jobAction(() => api.call("reopenJob", { job: job.job }))}
+            onDuplicate={() => setDuplicating(job.job)}
           />
         )}
       </section>
@@ -240,6 +274,23 @@ export function HiringPage({ api, progress, onAsk, onHire }: { api: Api; progres
           onPhone={() => onAsk(`Help me prepare a phone screen for ${cand.name} for the "${job.job}" role.`)}
           decision={result.decisions.find((d) => d.file === cand.file)?.decision ?? null}
           onDecide={(d) => void decide(cand.file, d)}
+          hire={result.hires.find((h) => h.file === cand.file) ?? null}
+          closed={!!result.closedAt}
+          onOpenEmployee={onOpenEmployee}
+        />
+      )}
+      {duplicating && (
+        <DuplicateJob
+          api={api}
+          from={duplicating}
+          existing={jobs?.map((j) => j.job) ?? []}
+          onClose={() => setDuplicating(null)}
+          onDone={async (name) => {
+            setDuplicating(null);
+            await loadJobs();
+            pick(name);
+            setNote(<>Created “{name}” with the job description and criteria of “{duplicating}”. Add the applications for this round.</>);
+          }}
         />
       )}
       {newJob && (
@@ -285,7 +336,12 @@ function JobPane(p: {
   onReview: (on: boolean) => void;
   onDecide: (file: string, decision: Decision | null) => void;
   onRest: () => void;
-  onHire: (name: string) => void;
+  onHire: (c: Ranked | null) => void;
+  onOpenEmployee: (id: number) => void;
+  onOpenings: (n: number) => void;
+  onClose: () => void;
+  onReopen: () => void;
+  onDuplicate: () => void;
 }) {
   const { job, result: r } = p;
   const rubric = r.rubric;
@@ -303,11 +359,20 @@ function JobPane(p: {
   const shortlisted = r.ranked.filter((c) => dec.get(c.file) === "shortlist");
   const notNow = r.ranked.filter((c) => dec.get(c.file) === "not");
   const undecided = screened - shortlisted.length - notNow.length;
-  const decidedView = job.stage === "decided" && !p.reviewing;
+  const decidedView = screened > 0 && undecided === 0 && unscreened <= 0 && !p.reviewing;
+  // Hires, openings, open or closed.
+  const closed = !!r.closedAt;
+  const hires = new Map(r.hires.map((h) => [h.file, h]));
+  const filled = r.hires.length >= r.openings;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [openingsDraft, setOpeningsDraft] = useState<string | null>(null);
+  const [filledDismissed, setFilledDismissed] = useState(false);
+  const firstNames = r.hires.map((h) => h.name).join(", ");
   const lastDecided = r.decisions.map((d) => d.decidedAt).sort().pop();
   const [tab, setTab] = useState<Decision | "all">("shortlist");
   const [hireOpen, setHireOpen] = useState(false);
   const names = (cs: Ranked[]) => cs.map((c) => c.name).join(", ");
+  const notHired = shortlisted.filter((c) => !hires.has(c.file));
   const kitPrompt = shortlisted.length
     ? `Build an interview kit for the "${job.job}" role for the shortlisted candidates (${names(shortlisted)}), using the confirmed screening criteria.`
     : `Build an interview kit for the "${job.job}" role, using the confirmed screening criteria.`;
@@ -327,24 +392,32 @@ function JobPane(p: {
         : screened
           ? { label: `${screened} screened`, state: "done" }
           : { label: "Screening", state: confirmed ? "now" : "todo" },
-    decidedView
+    r.hires.length
+      ? { label: `${r.hires.length} of ${r.openings} hired`, state: "done" }
+      : decidedView
       ? { label: `${shortlisted.length} shortlisted`, state: "done" }
       : screened && !unscreened && !screeningNow
         ? { label: `Your decision · ${screened - undecided} of ${screened}`, state: "now" }
         : { label: "Your decision", state: "todo" },
   ];
 
-  const where = job.stage === "screened" || job.stage === "decided" ? "" : `Jobs/${job.job} · `;
-  const sub = `${where}${job.jd ? `${job.jd} · ` : ""}${job.jd ? plural(job.applications, "application") : plural(job.files, "file")}`;
+  const where = screened > 0 ? "" : `Jobs/${job.job} · `;
+  const sub = `${where}${job.jd ? `${job.jd} · ` : ""}${job.jd ? plural(job.applications, "application") : plural(job.files, "file")}${closed ? ` · hired ${r.hires.length} of ${r.openings}` : ` · hiring ${r.openings} · ${r.hires.length} hired`}`;
+  if (closed) return <ClosedPane p={p} sub={sub} hires={hires} steps={steps.length} />;
   const rows = decidedView ? r.ranked.filter((c) => tab === "all" || dec.get(c.file) === tab) : p.showAll ? r.ranked : r.ranked.slice(0, TOP);
 
   return (
     <>
       <div className="page-h">
         <div style={{ flexGrow: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
-          <h2 className="h1 ellipsis" style={{ fontSize: 20 }}>
-            {job.job}
-          </h2>
+          <span style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+            <h2 className="h1 ellipsis" style={{ fontSize: 20 }}>
+              {job.job}
+            </h2>
+            <span className="pill ok" style={{ height: 22 }}>
+              Open
+            </span>
+          </span>
           <span className="meta ellipsis">{sub}</span>
         </div>
         {screeningNow && <span className="pill info">Screening</span>}
@@ -361,6 +434,48 @@ function JobPane(p: {
             </button>
           </>
         )}
+        <div style={{ position: "relative" }}>
+          <button type="button" className="ib bordered" aria-label="Job actions" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => (setMenuOpen(!menuOpen), setOpeningsDraft(null))}>
+            <Icon name="more" size={20} />
+          </button>
+          {menuOpen && (
+            <div className="menu job-menu" role="menu" aria-label="Job actions">
+              {openingsDraft === null ? (
+                <button type="button" role="menuitem" className="menu-item row" onClick={() => setOpeningsDraft(String(r.openings))}>
+                  <span className="grow">People to hire</span>
+                  <span className="meta">{r.openings}</span>
+                </button>
+              ) : (
+                <form
+                  className="menu-form"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const n = Number(openingsDraft);
+                    if (Number.isInteger(n) && n >= 1 && n <= 99) (p.onOpenings(n), setMenuOpen(false));
+                  }}
+                >
+                  <label className="field" style={{ fontSize: 13 }}>
+                    People to hire
+                    <input className="input" type="number" min={1} max={99} value={openingsDraft} onChange={(e) => setOpeningsDraft(e.target.value)} autoFocus />
+                  </label>
+                  <button type="submit" className="btn p sm">
+                    Save
+                  </button>
+                </form>
+              )}
+              <button type="button" role="menuitem" className="menu-item row" onClick={() => (setMenuOpen(false), p.onDuplicate())}>
+                Duplicate job…
+              </button>
+              <div role="separator" className="menu-sep" />
+              <button type="button" role="menuitem" className="menu-item row" style={{ flexDirection: "column", alignItems: "flex-start", height: "auto", padding: "8px 12px" }} onClick={() => (setMenuOpen(false), p.onClose())}>
+                Close job
+                <span className="meta" style={{ fontSize: 12 }}>
+                  Keeps everything; you can reopen it
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
       <div className="job-body">
         <ol className="steps4" aria-label="Steps">
@@ -575,6 +690,20 @@ function JobPane(p: {
                 )}
               </div>
             )}
+            {filled && !filledDismissed && (
+              <div className="banner ok-banner" style={{ alignItems: "center", flexShrink: 0 }}>
+                <Icon name="check" size={20} stroke={2.2} />
+                <span className="grow">
+                  <b>{r.openings === 1 ? "The position is filled." : r.openings === 2 ? "Both positions are filled." : `All ${r.openings} positions are filled.`}</b> Close this job? Closing keeps everything, and you can reopen it later.
+                </span>
+                <button type="button" className="btn p sm" onClick={p.onClose}>
+                  Close job
+                </button>
+                <button type="button" className="btn g sm" onClick={() => setFilledDismissed(true)}>
+                  Not yet
+                </button>
+              </div>
+            )}
             {screened > 0 && decidedView && (
               <>
                 <div className="card next-steps">
@@ -598,26 +727,42 @@ function JobPane(p: {
                       Draft the emails
                     </button>
                   </NextStep>
-                  <NextStep n={3} title="Hired someone?" text="Add them to Staff and you'll get the new starter checklist for them.">
-                    <div style={{ position: "relative" }}>
-                      <button
-                        type="button"
-                        className="btn"
-                        aria-haspopup={shortlisted.length > 1 ? "menu" : undefined}
-                        aria-expanded={shortlisted.length > 1 ? hireOpen : undefined}
-                        onClick={() => (shortlisted.length === 1 ? p.onHire(shortlisted[0].name) : setHireOpen(!hireOpen))}
-                      >
-                        Add to Staff
+                  <NextStep
+                    n={3}
+                    done={r.hires.length > 0}
+                    title={r.hires.length ? `Hired ${r.hires.length} of ${r.openings}: ${firstNames}` : "Hired someone?"}
+                    text={
+                      r.hires.length
+                        ? `Added to Staff ${fmtDay(localDay(r.hires[r.hires.length - 1].hiredAt))}${r.hires.length === 1 ? ` · starts ${fmtDate(r.hires[0].startDate)}` : ""}. Hires are recorded when you add someone to Staff from here.`
+                        : "Add them to Staff and you'll get the new starter checklist for them."
+                    }
+                  >
+                    {r.hires.length > 0 && (
+                      <button type="button" className="btn" onClick={() => p.onOpenEmployee(r.hires[0].employeeId)}>
+                        Open in Staff
                       </button>
+                    )}
+                    <div style={{ position: "relative" }}>
+                      {!filled && (
+                        <button
+                          type="button"
+                          className={r.hires.length ? "btn g" : "btn"}
+                          aria-haspopup={notHired.length === 1 ? undefined : "menu"}
+                          aria-expanded={notHired.length === 1 ? undefined : hireOpen}
+                          onClick={() => (notHired.length === 1 ? p.onHire(notHired[0]) : setHireOpen(!hireOpen))}
+                        >
+                          {r.hires.length ? "Add another hire" : "Add to Staff"}
+                        </button>
+                      )}
                       {hireOpen && (
                         <div className="menu row-menu" role="menu" style={{ right: 0, left: "auto", top: 48 }}>
-                          {shortlisted.map((c) => (
-                            <button key={c.file} type="button" role="menuitem" className="menu-item row" onClick={() => (setHireOpen(false), p.onHire(c.name))}>
+                          {notHired.map((c) => (
+                            <button key={c.file} type="button" role="menuitem" className="menu-item row" onClick={() => (setHireOpen(false), p.onHire(c))}>
                               {c.name}
                             </button>
                           ))}
-                          <div role="separator" className="menu-sep" />
-                          <button type="button" role="menuitem" className="menu-item row" onClick={() => (setHireOpen(false), p.onHire(""))}>
+                          {notHired.length > 0 && <div role="separator" className="menu-sep" />}
+                          <button type="button" role="menuitem" className="menu-item row" onClick={() => (setHireOpen(false), p.onHire(null))}>
                             Someone else
                           </button>
                         </div>
@@ -713,7 +858,11 @@ function JobPane(p: {
                             {c.evaluation.summary}
                           </td>
                           <td style={{ whiteSpace: "nowrap" }}>
-                            <DecisionButtons name={c.name} value={dec.get(c.file) ?? null} onChange={(d) => p.onDecide(c.file, d)} />
+                            {hires.has(c.file) ? (
+                              <HiredButton onClick={() => p.onOpenEmployee(hires.get(c.file)!.employeeId)} />
+                            ) : (
+                              <DecisionButtons name={c.name} value={dec.get(c.file) ?? null} onChange={(d) => p.onDecide(c.file, d)} />
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -776,16 +925,241 @@ function DecisionButtons({ name, value, onChange, large }: { name: string; value
   );
 }
 
-function NextStep({ n, title, text, children }: { n: number; title: string; text: string; children: React.ReactNode }) {
+function NextStep({ n, title, text, done, children }: { n: number; title: string; text: string; done?: boolean; children: React.ReactNode }) {
   return (
     <div className="next-step">
-      <span className="next-n">{n}</span>
+      <span className={`next-n${done ? " done" : ""}`}>{done ? <Icon name="check" size={14} stroke={2.6} /> : n}</span>
       <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
         <b style={{ fontSize: 14.5 }}>{title}</b>
         <span style={{ fontSize: 13.5, color: "#4A5363", lineHeight: 1.45 }}>{text}</span>
       </span>
-      {children}
+      <span style={{ display: "flex", gap: 8 }}>{children}</span>
     </div>
+  );
+}
+
+function HiredButton({ onClick, small }: { onClick: () => void; small?: boolean }) {
+  return (
+    <button type="button" className={`hired-pill${small ? " sm" : ""}`} onClick={onClick} title="Open in Staff">
+      <Icon name="check" size={14} stroke={2.6} />
+      Hired · in Staff
+    </button>
+  );
+}
+
+/** One job in the list: open or closed, where it is, and how many are hired of how many. */
+function JobCard({ j, on, onPick }: { j: Job; on: boolean; onPick: () => void }) {
+  const closed = !!j.closedAt;
+  const pill = j.stage === "decided" ? `${j.shortlisted} shortlisted` : STAGE[j.stage];
+  const tone = closed ? "n" : j.stage === "screened" || j.stage === "decided" || j.stage === "filled" ? "ok" : "warn";
+  return (
+    <button type="button" className={`job${on ? " on" : ""}${closed ? " closed" : ""}`} onClick={onPick}>
+      <span className="job-top">
+        <b className="ellipsis grow">{j.job}</b>
+        <span className={closed ? "job-state closed" : "job-state"}>{closed ? "Closed" : "Open"}</span>
+      </span>
+      <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span className={`pill ${tone}`} style={{ height: 22 }}>
+          {pill}
+        </span>
+        <span className="meta">{j.stage === "needs-jd" ? plural(j.files, "file") : plural(j.applications, "application")}</span>
+      </span>
+      <span className="job-hired">
+        <span className="hire-dots" aria-hidden="true">
+          {Array.from({ length: Math.min(j.openings, 12) }, (_, i) => (
+            <span key={i} className={i < j.hired ? "on" : ""} />
+          ))}
+        </span>
+        Hired {j.hired} of {j.openings}
+        {closed && j.closedAt ? ` · closed ${fmtDay(localDay(j.closedAt))}` : ""}
+      </span>
+    </button>
+  );
+}
+
+/** A closed job (design: HiringClosed): everything kept, read-only; reopen or duplicate. */
+function ClosedPane({ p, sub, hires, steps }: { p: Parameters<typeof JobPane>[0]; sub: string; hires: Map<string, JobResults["hires"][number]>; steps: number }) {
+  const r = p.result;
+  const dec = new Map(r.decisions.map((d) => [d.file, d.decision]));
+  const labels = [p.job.jd ? "Job description" : "No job description", r.rubric?.confirmed ? "Criteria confirmed" : "Criteria", `${r.ranked.length} screened`, `${r.hires.length} of ${r.openings} hired`].slice(0, steps);
+  const rows = p.showAll ? r.ranked : r.ranked.slice(0, TOP);
+  return (
+    <>
+      <div className="page-h">
+        <div style={{ flexGrow: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+            <h2 className="h1 ellipsis" style={{ fontSize: 20 }}>
+              {p.job.job}
+            </h2>
+            <span className="pill n" style={{ height: 22 }}>
+              Closed
+            </span>
+          </span>
+          <span className="meta ellipsis">{sub}</span>
+        </div>
+        <button type="button" className="btn" onClick={p.onDuplicate}>
+          Duplicate job
+        </button>
+        <button type="button" className="btn p" onClick={p.onReopen}>
+          Reopen
+        </button>
+      </div>
+      <div className="job-body">
+        <ol className="steps4 closed" aria-label="Steps">
+          {labels.map((l) => (
+            <li key={l} className="done">
+              <Icon name="check" size={16} stroke={2.4} />
+              {l}
+            </li>
+          ))}
+        </ol>
+        {p.error && (
+          <div className="banner bad" role="alert">
+            <span className="grow">{p.error}</span>
+          </div>
+        )}
+        {p.note && (
+          <div className="banner info">
+            <span>{p.note}</span>
+          </div>
+        )}
+        <div className="banner n" style={{ alignItems: "center", flexShrink: 0 }}>
+          <Icon name="lock" size={20} />
+          <span className="grow">
+            <b>Closed {fmtDay(localDay(r.closedAt!))}.</b> Hired {r.hires.length} of {r.openings}
+            {r.hires.length ? `: ${r.hires.map((h) => h.name).join(", ")}` : ""}. Everything is kept and read-only. Reopen to screen new applications or change decisions, or duplicate it to hire for the same role again.
+          </span>
+        </div>
+        {r.ranked.length > 0 && (
+          <div className="card" style={{ overflow: "hidden", flexShrink: 0 }}>
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th style={{ paddingLeft: 16, width: 36 }}>#</th>
+                  <th>Candidate</th>
+                  <th>Band</th>
+                  <th>Essential</th>
+                  <th>Desirable</th>
+                  <th>Summary</th>
+                  <th style={{ width: 170 }}>Decision</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((c) => (
+                  <tr key={c.file} className={p.cand?.file === c.file ? "sel" : ""}>
+                    <td style={{ paddingLeft: 16 }}>{c.rank}</td>
+                    <td className="b" style={{ whiteSpace: "nowrap" }}>
+                      <button type="button" className="name-btn" onClick={() => p.onPick(c)}>
+                        {c.name}
+                      </button>
+                    </td>
+                    <td>
+                      <span className={`pill ${BAND[c.band] ?? "n"}`}>{c.band}</span>
+                    </td>
+                    <td>
+                      {c.essentialScore} of {c.essentialTotal}
+                    </td>
+                    <td>
+                      {c.desirableScore} of {c.desirableTotal}
+                    </td>
+                    <td className="ellipsis" style={{ maxWidth: 200 }}>
+                      {c.evaluation.summary}
+                    </td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      {hires.has(c.file) ? (
+                        <HiredButton small onClick={() => p.onOpenEmployee(hires.get(c.file)!.employeeId)} />
+                      ) : dec.get(c.file) === "shortlist" ? (
+                        <span className="pill ok">Shortlisted</span>
+                      ) : dec.get(c.file) === "not" ? (
+                        <span className="pill n">Not this time</span>
+                      ) : (
+                        <span className="meta">No decision</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!p.showAll && r.ranked.length > TOP && (
+              <div style={{ padding: "10px 16px" }}>
+                <button type="button" className="link-btn" style={{ fontSize: 14, fontWeight: 700 }} onClick={p.onShowAll}>
+                  Show all {r.ranked.length}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+/** Duplicate a job (design: HiringDuplicate): a new open job with the JD and criteria only. */
+function DuplicateJob({ api, from, existing, onClose, onDone }: { api: Api; from: string; existing: string[]; onClose: () => void; onDone: (job: string) => void }) {
+  const suggest = () => {
+    for (let n = 2; ; n++) if (!existing.includes(`${from} (${n})`)) return `${from} (${n})`;
+  };
+  const [name, setName] = useState(suggest);
+  const [openings, setOpenings] = useState("1");
+  const [err, setErr] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const save = async () => {
+    setSaving(true);
+    setErr(null);
+    try {
+      const r = await api.call("duplicateJob", { job: from, name: name.trim(), openings: Number(openings) });
+      onDone(r.job);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <>
+      <div className="scrim fill" onClick={onClose} />
+      <div className="modal dialog" role="dialog" aria-modal="true" aria-label="Duplicate job" style={{ width: 520 }}>
+        <div>
+          <h2 className="h2" style={{ fontSize: 19 }}>
+            Duplicate “{from}”
+          </h2>
+          <span className="meta">A new open job for the same role, to hire again.</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 150px", gap: 12 }}>
+          <label className="field">
+            Name of the new job
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+            <span className="hint">Folder: Jobs/{name.trim() || "…"}</span>
+          </label>
+          <label className="field">
+            People to hire
+            <input className="input" type="number" min={1} max={99} value={openings} onChange={(e) => setOpenings(e.target.value)} />
+          </label>
+        </div>
+        <div className="dup-note">
+          <span>
+            <b style={{ color: "#1E6B3E" }}>Copied:</b> the job description and the confirmed criteria.
+          </span>
+          <span>
+            <b style={{ color: "#1B1F27" }}>Not copied:</b> applications, decisions and hires. Add the new applications to the new job.
+          </span>
+        </div>
+        {err && <div className="banner bad">{err}</div>}
+        <div className="row-wrap">
+          <button type="button" className="btn p lg" disabled={!name.trim() || !(Number(openings) >= 1) || saving} onClick={() => void save()}>
+            {saving ? "Duplicating…" : "Duplicate job"}
+          </button>
+          <button type="button" className="btn lg" onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -814,6 +1188,9 @@ function Candidate({
   result,
   decision,
   onDecide,
+  hire,
+  closed,
+  onOpenEmployee,
   onClose,
   onOpen,
   onInvite,
@@ -823,6 +1200,9 @@ function Candidate({
   result: JobResults;
   decision: Decision | null;
   onDecide: (d: Decision | null) => void;
+  hire: JobResults["hires"][number] | null;
+  closed: boolean;
+  onOpenEmployee: (id: number) => void;
   onClose: () => void;
   onOpen: () => void;
   onInvite: () => void;
@@ -858,7 +1238,13 @@ function Candidate({
             <span className="cap" style={{ marginRight: 4 }}>
               Your decision
             </span>
-            <DecisionButtons name={c.name} value={decision} onChange={onDecide} large />
+            {hire ? (
+              <HiredButton onClick={() => onOpenEmployee(hire.employeeId)} />
+            ) : closed ? (
+              <span className={`pill ${decision === "shortlist" ? "ok" : "n"}`}>{decision === "shortlist" ? "Shortlisted" : decision === "not" ? "Not this time" : "No decision"}</span>
+            ) : (
+              <DecisionButtons name={c.name} value={decision} onChange={onDecide} large />
+            )}
           </div>
         </div>
         <button type="button" className="ib" aria-label="Close" onClick={onClose}>
@@ -1046,6 +1432,7 @@ function createdNote(r: { job: string; summary: { newApplications: number; unrea
 
 function NewJob({ api, existing, onClose, onCreated, onWriteJd }: { api: Api; existing: string[]; onClose: () => void; onCreated: (job: string, note: React.ReactNode) => void; onWriteJd: (name: string) => void }) {
   const [name, setName] = useState("");
+  const [openings, setOpenings] = useState("1");
   const [jd, setJd] = useState<File | null>(null);
   const [apps, setApps] = useState<File[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -1065,7 +1452,7 @@ function NewJob({ api, existing, onClose, onCreated, onWriteJd }: { api: Api; ex
     setErr(null);
     try {
       const file = async (f: File) => ({ name: f.name, base64: await toBase64(f) });
-      const r = await api.call("createJob", { job: role, jd: jd ? await file(jd) : null, applications: await Promise.all(apps.map(file)) });
+      const r = await api.call("createJob", { job: role, jd: jd ? await file(jd) : null, applications: await Promise.all(apps.map(file)), ...(adding ? {} : { openings: Number(openings) }) });
       onCreated(r.job, createdNote(r, adding));
     } catch (e) {
       setErr((e as Error).message);
@@ -1084,16 +1471,25 @@ function NewJob({ api, existing, onClose, onCreated, onWriteJd }: { api: Api; ex
           </h2>
           <span className="meta">Creates a folder in Jobs for this role's job description and applications.</span>
         </div>
-        <label className="field">
-          Role
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Casual cleaner (Parramatta)" autoFocus list="jobs-list" />
-          <datalist id="jobs-list">
-            {existing.map((j) => (
-              <option key={j} value={j} />
-            ))}
-          </datalist>
-          <span className="hint">{adding ? "This job exists: the files are added to it." : `Folder: Jobs/${role || "…"}`}</span>
-        </label>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 150px", gap: 12 }}>
+          <label className="field">
+            Role
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Casual cleaner (Parramatta)" autoFocus list="jobs-list" />
+            <datalist id="jobs-list">
+              {existing.map((j) => (
+                <option key={j} value={j} />
+              ))}
+            </datalist>
+            <span className="hint">{adding ? "This job exists: the files are added to it." : `Folder: Jobs/${role || "…"}`}</span>
+          </label>
+          {!adding && (
+            <label className="field">
+              People to hire
+              <input className="input" type="number" min={1} max={99} value={openings} onChange={(e) => setOpenings(e.target.value)} />
+              <span className="hint">Change it any time</span>
+            </label>
+          )}
+        </div>
         <div className="field">
           <span>
             Job description <span className="meta">· Add a file · PDF, Word or text; saved with JD in its name</span>

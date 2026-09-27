@@ -287,6 +287,7 @@ async function seedHiring(f: Folders): Promise<void> {
       flags: { suspiciousInstructions: false, differentRole: false, ...c.flags },
     });
   }
+  cat.setOpenings("Team leader", 2);
   // The owner's decisions so far (design: HiringDecide): two shortlisted, one not this time, the rest to decide.
   const decided: [string, "shortlist" | "not"][] = [["Hannah Cole resume.docx", "shortlist"], ["Daniel Ortiz resume.docx", "shortlist"], ["Tariq Aziz CV.docx", "not"]];
   for (const [file, d] of decided) cat.setDecision("Team leader", byFile.get(file)!, d);
@@ -309,6 +310,7 @@ async function seedHiring(f: Folders): Promise<void> {
   touch(join(wc, "Aroha Ngata CV (1).pdf"), at(2026, 9, 25, 10, 5));
   await ingestJob(cat, f, "Weekend cleaner");
   cat.saveRubric("Weekend cleaner", "Weekend cleaner", WEEKEND_CLEANER, "demo");
+  cat.setOpenings("Weekend cleaner", 3);
 
   // Office admin: no job description yet.
   const oa = join(f.jobs, "Office admin");
@@ -316,6 +318,53 @@ async function seedHiring(f: Folders): Promise<void> {
   await writeFile(oa, "Oscar Lee resume.docx", ["Oscar Lee", "Administration assistant", "", "Reception and data entry.", "", SYNTHETIC], at(2026, 9, 25, 11));
   await writeFile(oa, "scan_0311.pdf", [], at(2026, 9, 25, 11));
   await ingestJob(cat, f, "Office admin");
+  cat.setOpenings("Office admin", 1);
+
+  // Casual cleaner: an earlier job, filled by Marco Silva (who started 6 Sep) and closed 5 Sep (design: HiringClosed).
+  const cc = join(f.jobs, "Casual cleaner");
+  const aug = at(2026, 8, 20);
+  await writeFile(cc, "Casual cleaner JD.docx", ["# Casual cleaner", "", `(${SYNTHETIC})`, "", "Weekend office cleaning at the Parramatta sites.", "", "- Commercial cleaning experience", "- Available on weekends", "- Own transport", "- Floor machine experience is a plus"], aug);
+  const ccCriteria: Criterion[] = [
+    { id: "E1", type: "essential", text: "Commercial cleaning experience" },
+    { id: "E2", type: "essential", text: "Available on weekends" },
+    { id: "E3", type: "essential", text: "Own transport" },
+    { id: "D1", type: "desirable", text: "Floor machine experience" },
+    { id: "D2", type: "desirable", text: "Can start within two weeks" },
+  ];
+  const ccPeople: [string, string, [S, S, S, S, S]][] = [
+    ["Marco Silva", "Weekend office cleaning for 2 years; own car", ["met", "met", "met", "met", "not_evidenced"]],
+    ["Amelia Brooks", "Residential cleaning; weekends not mentioned", ["met", "not_evidenced", "met", "not_evidenced", "met"]],
+    ["Ravi Menon", "Floor machine experience; no transport mentioned", ["met", "partly", "not_evidenced", "met", "met"]],
+    ["Jack Hughes", "Warehouse work; no cleaning experience", ["not_evidenced", "met", "not_evidenced", "not_evidenced", "not_evidenced"]],
+    ["Nina Petrova", "Hospitality; available weekdays only", ["partly", "not_evidenced", "not_evidenced", "not_evidenced", "not_evidenced"]],
+    ["Oliver Kent", "Retail assistant; no cleaning experience", ["not_evidenced", "not_evidenced", "not_evidenced", "not_evidenced", "not_evidenced"]],
+    ["Leila Haddad", "Childcare assistant; no cleaning experience", ["not_evidenced", "not_evidenced", "not_evidenced", "not_evidenced", "not_evidenced"]],
+    ["Callum Reid", "Student; looking for weekday work", ["not_evidenced", "not_evidenced", "not_evidenced", "not_evidenced", "not_evidenced"]],
+  ];
+  for (const [name, summary] of ccPeople) await writeFile(cc, `${name} resume.docx`, resume(name, "Application: casual cleaner", [summary + "."]), at(2026, 8, 24));
+  await ingestJob(cat, f, "Casual cleaner");
+  const ccRubric = cat.saveRubric("Casual cleaner", "Casual cleaner", ccCriteria, "demo");
+  cat.confirmRubric("Casual cleaner", ccRubric.version);
+  const ccFile = new Map(cat.applications("Casual cleaner").map((a) => [a.sourceRef, a.hash]));
+  for (const [name, summary, status] of ccPeople) {
+    const hash = ccFile.get(`${name} resume.docx`)!;
+    cat.putEvaluation(hash, "Casual cleaner", ccRubric.version, {
+      isResume: true,
+      summary,
+      criteria: ccCriteria.map((k, i) => ({ id: k.id, status: status[i], evidence: status[i] === "not_evidenced" ? "Not mentioned." : summary })),
+      strengths: [],
+      gaps: [],
+      questions: [],
+      flags: { suspiciousInstructions: false, differentRole: false },
+    });
+    cat.setDecision("Casual cleaner", hash, name === "Marco Silva" ? "shortlist" : "not");
+  }
+  const reg = new Register(f.data);
+  const marco = reg.list().find((e) => e.name === "Marco Silva")!;
+  reg.close();
+  cat.addHire("Casual cleaner", ccFile.get("Marco Silva resume.docx")!, marco.id);
+  cat.setOpenings("Casual cleaner", 1);
+  cat.setClosed("Casual cleaner", true, at(2026, 9, 5, 17).toISOString());
   cat.close();
 }
 

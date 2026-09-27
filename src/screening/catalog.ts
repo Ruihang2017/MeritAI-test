@@ -95,6 +95,11 @@ export class Catalog {
     if (!cols.some((c) => c.name === "confirmed_at")) this.db.exec("ALTER TABLE rubrics ADD COLUMN confirmed_at TEXT");
     // Added 2026-09-27: the owner's decisions, by file content, so they survive re-screening with new criteria.
     this.db.exec("CREATE TABLE IF NOT EXISTS decisions (job TEXT NOT NULL, hash TEXT NOT NULL, decision TEXT NOT NULL CHECK (decision IN ('shortlist', 'not')), decided_at TEXT NOT NULL, PRIMARY KEY (job, hash))");
+    // Added 2026-09-27: how many people a job is for, whether it is closed, and who was hired
+    // (a candidate linked to the employee added from the Hiring page).
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS job_settings (job TEXT PRIMARY KEY, openings INTEGER NOT NULL DEFAULT 1, closed_at TEXT);
+      CREATE TABLE IF NOT EXISTS hires (job TEXT NOT NULL, hash TEXT NOT NULL, employee_id INTEGER NOT NULL, hired_at TEXT NOT NULL, PRIMARY KEY (job, hash));`);
   }
 
   close(): void {
@@ -179,6 +184,8 @@ export class Catalog {
     this.db.prepare("DELETE FROM rubrics WHERE job = ?").run(job);
     this.db.prepare("DELETE FROM evaluations WHERE job = ?").run(job);
     this.db.prepare("DELETE FROM decisions WHERE job = ?").run(job);
+    this.db.prepare("DELETE FROM job_settings WHERE job = ?").run(job);
+    this.db.prepare("DELETE FROM hires WHERE job = ?").run(job);
     // Parsed text is only kept while some application still refers to it.
     for (const { hash } of hashes) {
       const used = this.db.prepare("SELECT 1 FROM applications WHERE hash = ? LIMIT 1").get(hash);
@@ -197,6 +204,37 @@ export class Catalog {
   decisions(job: string): Map<string, { decision: Decision; decidedAt: string }> {
     const rows = this.db.prepare("SELECT hash, decision, decided_at FROM decisions WHERE job = ?").all(job) as { hash: string; decision: Decision; decided_at: string }[];
     return new Map(rows.map((r) => [r.hash, { decision: r.decision, decidedAt: r.decided_at }]));
+  }
+
+  // ------------------------------------------------------ job settings and hires
+
+  /** How many people the job is for (default 1) and when it was closed (null: open). */
+  jobSettings(job: string): { openings: number; closedAt: string | null } {
+    const r = this.db.prepare("SELECT openings, closed_at FROM job_settings WHERE job = ?").get(job) as { openings: number; closed_at: string | null } | undefined;
+    return { openings: r?.openings ?? 1, closedAt: r?.closed_at ?? null };
+  }
+
+  setOpenings(job: string, openings: number): void {
+    this.db.prepare("INSERT INTO job_settings (job, openings) VALUES (?, ?) ON CONFLICT(job) DO UPDATE SET openings = excluded.openings").run(job, openings);
+  }
+
+  /** Closes the job (now, or at `when`: the demo seed) or reopens it. */
+  setClosed(job: string, closed: boolean, when?: string): void {
+    const at = closed ? (when ?? now().toISOString()) : null;
+    this.db.prepare("INSERT INTO job_settings (job, closed_at) VALUES (?, ?) ON CONFLICT(job) DO UPDATE SET closed_at = excluded.closed_at").run(job, at);
+  }
+
+  hires(job: string): Map<string, { employeeId: number; hiredAt: string }> {
+    const rows = this.db.prepare("SELECT hash, employee_id, hired_at FROM hires WHERE job = ?").all(job) as { hash: string; employee_id: number; hired_at: string }[];
+    return new Map(rows.map((r) => [r.hash, { employeeId: r.employee_id, hiredAt: r.hired_at }]));
+  }
+
+  addHire(job: string, hash: string, employeeId: number): void {
+    this.db.prepare("INSERT OR REPLACE INTO hires (job, hash, employee_id, hired_at) VALUES (?, ?, ?, ?)").run(job, hash, employeeId, now().toISOString());
+  }
+
+  removeHire(job: string, hash: string): void {
+    this.db.prepare("DELETE FROM hires WHERE job = ? AND hash = ?").run(job, hash);
   }
 
   // ---------------------------------------------------------------- rubrics

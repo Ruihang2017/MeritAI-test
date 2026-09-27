@@ -14,7 +14,7 @@ const today = todayIso;
 
 type Panel =
   | { kind: "detail"; id: number }
-  | { kind: "add"; prefill?: { name: string; role: string } }
+  | { kind: "add"; prefill?: { name: string; role: string; hireFrom?: { job: string; file: string } } }
   | { kind: "added"; name: string; lines: string[]; checklist: ChecklistItem[] }
   | { kind: "edit"; id: number }
   | { kind: "edited"; id: number; lines: string[]; notes: FormNote[] }
@@ -23,7 +23,7 @@ type Panel =
   | { kind: "leftDone"; name: string; lines: string[]; checklist: LeavingItem[] }
   | null;
 
-export function StaffPage({ api, openId, addPrefill, onAsk, onChanged }: { api: Api; openId?: number | null; addPrefill?: { name: string; role: string } | null; onAsk: (text: string) => void; onChanged: () => void }) {
+export function StaffPage({ api, openId, addPrefill, onAsk, onChanged }: { api: Api; openId?: number | null; addPrefill?: { name: string; role: string; hireFrom?: { job: string; file: string } } | null; onAsk: (text: string) => void; onChanged: () => void }) {
   const [rows, setRows] = useState<StaffRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
@@ -524,7 +524,7 @@ function Detail({ r, receipt, onClose, onEdit, onDocs, onLeft, onDelete, onAsk }
   );
 }
 
-function EmployeeForm({ api, current, prefill, onClose, onSaved }: { api: Api; current?: StaffRow; prefill?: { name: string; role: string }; onClose: () => void; onSaved: (r: { name: string; lines: string[]; checklist: ChecklistItem[]; notes?: FormNote[] }) => void }) {
+function EmployeeForm({ api, current, prefill, onClose, onSaved }: { api: Api; current?: StaffRow; prefill?: { name: string; role: string; hireFrom?: { job: string; file: string } }; onClose: () => void; onSaved: (r: { name: string; lines: string[]; checklist: ChecklistItem[]; notes?: FormNote[] }) => void }) {
   const [f, setF] = useState<EmployeeFields>(
     current
       ? { name: current.name, role: current.role, employmentType: current.employmentType as EmployeeFields["employmentType"], startDate: current.startDate, endDate: current.endDate, award: current.award, classification: current.classification, probationEnd: current.probationEnd, visaExpiry: current.visaExpiry, notes: current.notes }
@@ -555,7 +555,8 @@ function EmployeeForm({ api, current, prefill, onClose, onSaved }: { api: Api; c
         else onSaved({ name: res.employee.name, lines: res.lines, checklist: [], notes: res.notes });
       } else {
         const details = Object.fromEntries(Object.entries(f).filter(([, v]) => v !== null && v !== "")) as unknown as EmployeeFields;
-        const res = await api.call("addEmployee", { details, mayNeedVisaCheck: !citizen, apprentice, constructionSite: site });
+        // From Hiring's "Add to Staff": saving also records the candidate as hired for that job.
+        const res = await api.call("addEmployee", { details, mayNeedVisaCheck: !citizen, apprentice, constructionSite: site, ...(prefill?.hireFrom ? { hireFrom: prefill.hireFrom } : {}) });
         if (!res.ok) setErr(res.error);
         else onSaved({ name: res.employee.name, lines: res.lines, checklist: res.checklist });
       }

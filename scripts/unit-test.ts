@@ -613,7 +613,7 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   process.env.FX_TODAY = DEMO_TODAY;
   await seedDemo({ filesRoot: join(root, "Wattle Lane"), memoryRoot: join(root, "memory"), userId: "demo" });
   process.env.FX_FAKE_CONVERSATIONS = demoConversationsFile(join(root, "memory"), "demo");
-  const app = new AssistantApp({ userId: "demo", ui: { confirm: async () => false }, engine: "fake", filesRoot: join(root, "Wattle Lane"), memoryRoot: join(root, "memory") });
+  const app = new AssistantApp({ userId: "demo", ui: { confirm: async () => true }, engine: "fake", filesRoot: join(root, "Wattle Lane"), memoryRoot: join(root, "memory") });
   const staff = app.staffOverview(true);
   const tl = await app.screenResults("Team leader");
   const wc = await app.screenResults("Weekend cleaner");
@@ -648,6 +648,34 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   const after = app.jobs().find((j) => j.job === "Team leader")!;
   app.decide("Team leader", "Hannah Cole resume.docx", null);
   const cleared = (await app.screenResults("Team leader")).decisions;
+  const clearedStage = app.jobs().find((j) => j.job === "Team leader")!.stage;
+  // Openings, closed jobs, duplicates and hires.
+  const throws = (f: () => unknown) => {
+    try {
+      f();
+      return false;
+    } catch {
+      return true;
+    }
+  };
+  const cc = app.jobs().find((j) => j.job === "Casual cleaner")!;
+  const ccResult = await app.screenResults("Casual cleaner");
+  const closedGuard = throws(() => app.decide("Casual cleaner", "Amelia Brooks resume.docx", "shortlist"));
+  const badOpenings = throws(() => app.setOpenings("Team leader", 0));
+  const dup = app.duplicateJob("Casual cleaner", "Casual cleaner (2)", 2);
+  const dupJob = app.jobs().find((j) => j.job === dup.job)!;
+  const dupResult = await app.screenResults(dup.job);
+  const dupTwice = throws(() => app.duplicateJob("Casual cleaner", "casual cleaner (2)", 1));
+  const hireAdd = app.addEmployee({ name: "Hannah Cole", role: "Team leader", employmentType: "full-time", startDate: "2026-10-12" }, { hireFrom: { job: "Team leader", file: "Hannah Cole resume.docx" } });
+  const tlHired = app.jobs().find((j) => j.job === "Team leader")!;
+  const tlResult = await app.screenResults("Team leader");
+  const hiredLocked = throws(() => app.decide("Team leader", "Hannah Cole resume.docx", "not"));
+  if (hireAdd.ok) await app.removeEmployee(hireAdd.employee.id); // asks first: this app answers yes
+  const afterRemove = app.jobs().find((j) => j.job === "Team leader")!;
+  app.setJobClosed("Team leader", true);
+  const closedTl = app.jobs().find((j) => j.job === "Team leader")!;
+  app.setJobClosed("Team leader", false);
+  const reopened = app.jobs().find((j) => j.job === "Team leader")!;
   record("demo workspace (design sample data)", [
     ["profile: Wattle Lane Cleaning Pty Ltd, small business", app.profile().profile.legalName === "Wattle Lane Cleaning Pty Ltd" && app.profile().smallBusiness === true],
     ["staff: 9 active, 1 left; Marco has 3 documents not recorded", staff.filter((e) => e.status === "active").length === 9 && staff.filter((e) => e.status === "left").length === 1 && staff.find((e) => e.name === "Marco Silva")!.documentsExpected.filter((d) => !d.recorded).length === 3],
@@ -657,7 +685,11 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["Hiring: files listed with status, criteria confirmed on the design's day", tl.files.length === 15 && tl.files.filter((f) => f.status === "unreadable").length === 1 && tl.files.filter((f) => f.status === "duplicate").length === 1 && localIso(new Date(tl.rubric?.confirmedAt ?? 0)) === DEMO_TODAY],
     ["Hiring: criteria drafted earlier are kept; confirming them marks the job ready", weekendDraft.status === "drafted" && weekendAfter.rubric?.confirmed === true && app.jobs().find((j) => j.job === "Weekend cleaner")?.stage === "ready"],
     ["decisions: 2 shortlisted and 1 not this time to start; an unscreened file is refused", tl.decisions.length === 3 && before.shortlisted === 2 && before.undecided === 10 && before.stage === "screened" && refused],
-    ["decisions: the rest → Not this time makes the job decided; clearing one reopens it", restMarked === 10 && after.stage === "decided" && after.undecided === 0 && cleared.length === 12 && app.jobs().find((j) => j.job === "Team leader")!.stage === "screened"],
+    ["decisions: the rest → Not this time makes the job decided; clearing one reopens it", restMarked === 10 && after.stage === "decided" && after.undecided === 0 && cleared.length === 12 && clearedStage === "screened"],
+    ["jobs: openings, and the closed Casual cleaner filled by Marco (read-only)", tlHired.openings === 2 && cc.closedAt !== null && cc.hired === 1 && cc.stage === "filled" && ccResult.hires[0]?.name === "Marco Silva" && closedGuard && badOpenings],
+    ["duplicate: JD and confirmed criteria copied, no applications, decisions or hires; names must be new", dupJob.jd === "Casual cleaner (2) JD.docx" && dupJob.openings === 2 && dupJob.closedAt === null && dupResult.rubric?.confirmed === true && dupResult.ranked.length === 0 && dupResult.hires.length === 0 && dupTwice],
+    ["hire: Add to Staff from Hiring records it; the hire can't be undecided; deleting the employee undoes it", hireAdd.ok && tlHired.hired === 1 && tlResult.hires[0]?.name === "Hannah Cole" && hiredLocked && afterRemove.hired === 0],
+    ["close and reopen", closedTl.closedAt !== null && reopened.closedAt === null],
     ["Outbox: the two letters starting with DRAFT are marked", same(files.outbox.filter((f) => f.draft).map((f) => f.name).sort(), ["Leo Tran probation letter.docx", "Priya Nair resignation acknowledgement.docx"])],
     ["Staff next dates as in the design", same(Object.entries(nextOf).sort(), Object.entries(DESIGN_NEXT).sort())],
     ["Attention: 1 overdue (Marco, since 6 Sep), 1 this week (Leo, 2 Oct), Sam on 23 Oct", same(app.attentionSummary(), { overdue: 1, soon: 1 }) && same(rems, ["2026-09-06 true Starting paperwork not recorded in the register for Marco Silva", "2026-10-02 false Probation ends 2026-10-02: Leo Tran", "2026-10-23 false Fixed-term contract ends 2026-10-23: Sam Park"])],
