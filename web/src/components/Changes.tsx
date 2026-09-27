@@ -86,7 +86,14 @@ function EmployeeCard({ item, id, name, row, loaded }: { item: TurnChange; id: n
       </div>
       {missing.length > 0 && (
         <div className="chg-body">
-          <b>{starting ? `Before day one: ${missing.length} thing${missing.length > 1 ? "s" : ""}.` : `Starting paperwork: ${missing.length} not recorded.`}</b> {missing.map((d) => d.label).join(", ")}.
+          <b>{starting ? `Before day one: ${missing.length} thing${missing.length > 1 ? "s" : ""}.` : `Starting paperwork: ${missing.length} not recorded.`}</b>{" "}
+          {missing.map((d, i) => (
+            <span key={d.id}>
+              {i ? ", " : ""}
+              <span>{d.label}</span>
+            </span>
+          ))}
+          .
         </div>
       )}
       {row?.status === "active" && missing.length === 0 && last === "documents" && <div className="chg-body">All starting paperwork is recorded.</div>}
@@ -142,7 +149,14 @@ function JobCard({ job, api, summary: j, loaded, items }: { job: string; api: Ap
             <b>{job}</b>
             {pill && <span className={`pill ${pill[1]}`}>{pill[0]}</span>}
           </span>
-          <span className="meta">{[...lines, ...(j && j.shortlisted && !lines.some((l) => l.includes("shortlisted")) ? [`${j.shortlisted} shortlisted`] : [])].join(" · ")}</span>
+          <span className="meta">
+            {[...lines, ...(j && j.shortlisted && !lines.some((l) => l.includes("shortlisted")) ? [`${j.shortlisted} shortlisted`] : [])].map((l, i) => (
+              <span key={i}>
+                {i ? " · " : ""}
+                <span>{l}</span>
+              </span>
+            ))}
+          </span>
         </div>
         <span className="cap chg-where">Hiring</span>
       </div>

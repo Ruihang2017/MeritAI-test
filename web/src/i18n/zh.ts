@@ -851,6 +851,13 @@ export const ZH: Record<string, string> = {
   "No conversations yet": "还没有对话",
   "No conversation title matches “": "没有标题匹配“",
   Steps: "步骤",
+  "employee register": "员工名单",
+  "business profile": "企业资料",
+  memory: "记忆",
+  import: "导入",
+  "screening criteria": "筛选标准",
+  setup: "设置",
+  hiring: "招聘",
   "Demo (fake engine: scripted replies, no model)": "演示（假引擎：脚本回答，不用模型）",
   // industries and role templates (New job); the titles stay English, as job ads in Australia
   Hospitality: "餐饮酒店",

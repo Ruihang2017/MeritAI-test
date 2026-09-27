@@ -38,6 +38,7 @@ const KIND_LABEL: Record<string, string> = {
   "folder-import": "import",
   criteria: "screening criteria",
   setup: "setup",
+  hiring: "hiring",
 };
 
 export function ConversationPage(props: {
@@ -258,7 +259,7 @@ export function TurnView({ turn, showDay, onAnswer, api, domains, onRedo, compac
               <button type="button" className="row" onClick={() => setStepsOpen(!stepsOpen)} aria-expanded={stepsOpen}>
                 {turn.status === "running" ? <span className="spin" /> : <Icon name="check" size={16} />}
                 <b style={{ color: "#1B1F27" }}>
-                  {turn.steps.length} step{turn.steps.length > 1 ? "s" : ""} in this answer
+                  {`${turn.steps.length} step${turn.steps.length > 1 ? "s" : ""} in this answer`}
                 </b>
                 <span className="grow" />
                 <Icon name="chevron" size={16} className={stepsOpen ? "rot" : ""} />
@@ -483,7 +484,7 @@ export const Composer = forwardRef<ComposerHandle, { api: Api; running: boolean;
 
     // Files attached on the server (e.g. uploaded from the Files page) show too; removing one takes it off the next message.
     const [hidden, setHidden] = useState<Set<string>>(new Set());
-    const pendingKey = pending.join(" ");
+    const pendingKey = pending.join("\u0000");
     useEffect(() => setHidden(new Set()), [pendingKey]);
     const chips = [...attached, ...pending.filter((n) => !hidden.has(n) && !attached.some((a) => a.name === n)).map((name) => ({ name, note: "in Inbox", ok: true }))];
     const remove = async (a: { name: string; ok: boolean }) => {
@@ -512,7 +513,8 @@ export const Composer = forwardRef<ComposerHandle, { api: Api; running: boolean;
       const a = area.current;
       if (!a) return;
       a.style.height = "auto";
-      a.style.height = `${Math.min(200, a.scrollHeight)}px`;
+      // A hidden box (the side panel kept while closed) measures 0: leave its natural height.
+      a.style.height = a.scrollHeight ? `${Math.min(200, a.scrollHeight)}px` : "";
     }, [text]);
 
     const submit = () => {

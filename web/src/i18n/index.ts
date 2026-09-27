@@ -41,7 +41,7 @@ export function zh(text: string): string | null {
       }
     }
   }
-  if (out !== null) out = out.replace(/\b(Full-time|Part-time|Casual|Fixed-term)\b/g, (w) => ZH[w] ?? w).replace(/ · $/, "");
+  if (out !== null) out = out.replace(/\b(full-time|part-time|casual|fixed-term)\b/gi, (w) => ZH[w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()] ?? w).replace(/ · $/, "");
   const dated = zhDates(out ?? key);
   if (out === null && dated === key) return null;
   // Keep the spacing around it (JSX splits sentences into several text nodes).
