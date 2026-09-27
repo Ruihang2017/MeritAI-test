@@ -37,7 +37,8 @@ import { checkWithOpenAI, keyFormatProblem, VoiceKeyStore, type VoiceKeyStatus }
 import { FakeLiveSession } from "../voice/fakeLive";
 import { usdFor, VoiceUsage, type VoiceUsageSummary } from "../voice/usage";
 import { FeedbackLog, RATING_REASONS, writeFeedbackFile } from "./feedback";
-import { linkHire } from "../business/hiring";
+import { createJobWithJd, linkHire } from "../business/hiring";
+import { INDUSTRIES, industriesFor, JOB_TEMPLATES, type IndustryId, type JobTemplate } from "../business/jobTemplates";
 import type { ChangeSink } from "../changes";
 import { readEml } from "../files/email";
 
@@ -977,6 +978,24 @@ export class AssistantApp {
       return d ? [{ file: c.file, decision: d.decision, decidedAt: d.decidedAt }] : [];
     });
     return { ...result, files: files(), decisions, hires: hires(), openings, closedAt };
+  }
+
+  /** Starting points for a new job: the role templates, and the industries that fit the business (src/business/jobTemplates.ts). */
+  jobTemplates(): { industries: { id: IndustryId; name: string }[]; templates: JobTemplate[]; suggested: IndustryId[]; business: string | null; location: string | null } {
+    const p = this.a.business().get();
+    return {
+      industries: INDUSTRIES.map((i) => ({ id: i.id, name: i.name })),
+      templates: JOB_TEMPLATES,
+      suggested: industriesFor(p.industry),
+      business: p.tradingName ?? p.legalName,
+      location: p.states.length === 1 ? p.states[0] : null,
+    };
+  }
+
+  /** A new job from the New job form's template: its folder, people to hire, and the job description it built. */
+  async createJobFromText(job: string, openings: number, jd: string): Promise<{ job: string }> {
+    const r = await createJobWithJd(this.folders(), this.a.catalog(), job, openings, jd);
+    return { job: r.job };
   }
 
   /** Hires whose employee is still in the register (deleting the employee undoes the hire). */

@@ -216,6 +216,13 @@ export class UiSession {
       return this.exclusive(`Screening "${job}"`, () => this.app.screen(job));
     },
     screenResults: async (p) => this.app.screenResults(this.jobName(p?.job)),
+    jobTemplates: async () => this.app.jobTemplates(),
+    createJobFromText: async (p) => {
+      const job = str(p?.job, "job", 80).trim();
+      if (!job) throw new Error("give the job a name");
+      const jd = str(p?.jd, "jd", 60_000);
+      return this.exclusive("Creating the job", () => this.app.createJobFromText(job, int(p?.openings), jd));
+    },
     draftCriteria: async (p) => {
       const job = this.jobName(p?.job);
       return this.exclusive(`Drafting criteria for "${job}"`, () => this.app.draftCriteria(job));

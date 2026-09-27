@@ -6,6 +6,7 @@ import { fmtDate, fmtDay, localDay } from "../format";
 import { Icon } from "./Icon";
 import { fromJob, type Ask, type Asking } from "../ask";
 import { markLabel, marks, useLive } from "../live";
+import { NewJobDialog } from "./NewJob";
 
 // The Hiring page as on the design canvas (Hiring*, artboards): jobs on the left, the selected
 // job's steps, criteria, applications and ranked candidates on the right.
@@ -290,6 +291,13 @@ export function HiringPage({
             onClose={() => void jobAction(() => api.call("closeJob", { job: job.job }))}
             onReopen={() => void jobAction(() => api.call("reopenJob", { job: job.job }))}
             onDuplicate={() => setDuplicating(job.job)}
+            onAddApps={(files) =>
+              void run("Adding applications", async () => {
+                const payload = await Promise.all(files.map(async (f) => ({ name: f.name, base64: await toBase64(f) })));
+                const r = await api.call("createJob", { job: job.job, jd: null, applications: payload });
+                setNote(createdNote(r, true));
+              })
+            }
           />
         )}
       </section>
@@ -324,11 +332,12 @@ export function HiringPage({
         />
       )}
       {newJob && (
-        <NewJob
+        <NewJobDialog
           api={api}
           existing={jobs?.map((j) => j.job) ?? []}
           onClose={() => setNewJob(false)}
-          onWriteJd={(name) => (setNewJob(false), onAsk(name || "New role", `Write a job description for a ${name || "new role"} with me, then save it into the job.`))}
+          onWriteJd={(name) => (setNewJob(false), onAsk(name || "New role", `Write a job description for a ${name || "new role"} with me, then create the job with it.`))}
+          onTailor={(name) => onAsk(name, `Tailor the job description of "${name}" to my business: fill in the bracketed parts you can from my business profile, ask me for the rest, then save the new version into the job.`)}
           onCreated={async (name, text) => {
             setNewJob(false);
             setNote(text);
@@ -336,6 +345,21 @@ export function HiringPage({
             pick(name);
             await loadResult(name);
           }}
+          ownForm={
+            <NewJob
+              api={api}
+              existing={jobs?.map((j) => j.job) ?? []}
+              onClose={() => setNewJob(false)}
+              onWriteJd={(name) => (setNewJob(false), onAsk(name || "New role", `Write a job description for a ${name || "new role"} with me, then create the job with it.`))}
+              onCreated={async (name, text) => {
+                setNewJob(false);
+                setNote(text);
+                await loadJobs();
+                pick(name);
+                await loadResult(name);
+              }}
+            />
+          }
         />
       )}
     </main>
@@ -373,6 +397,8 @@ function JobPane(p: {
   onClose: () => void;
   onReopen: () => void;
   onDuplicate: () => void;
+  /** Resumes chosen or dropped for this job (added to its folder, then screened when the owner says). */
+  onAddApps: (files: File[]) => void;
 }) {
   const { job, result: r } = p;
   const { recent } = useLive();
@@ -454,6 +480,7 @@ function JobPane(p: {
           <span className="meta ellipsis">{sub}</span>
         </div>
         {screeningNow && <span className="pill info">Screening</span>}
+        <AddAppsButton onFiles={p.onAddApps} disabled={!!p.busy} />
         <AdvertiseMenu onWrite={() => p.onAsk(`Write a job ad for "${job.job}" from its job description, ready to post on a job board. Save it to the Outbox as a Word document.`)} />
         {screened > 0 && (
           <>
@@ -716,7 +743,7 @@ function JobPane(p: {
             {screened === 0 && (
               <div className="card empty-card" style={{ maxWidth: "none" }}>
                 <b>{unscreened > 0 ? "Ready to screen" : "No applications yet"}</b>
-                <span className="meta">{unscreened > 0 ? "The criteria are confirmed. Takes about a minute; up to 20 per run." : "Add applications with New job (same name adds to it), or drop a folder."}</span>
+                <span className="meta">{unscreened > 0 ? "The criteria are confirmed. Takes about a minute; up to 20 per run." : "Add applications with the button at the top, or drop a folder of them."}</span>
                 {unscreened > 0 && (
                   <button type="button" className="btn p" disabled={!!p.busy} onClick={() => p.onScreen(unscreened)}>
                     Screen {plural(unscreened, "application")}
@@ -979,6 +1006,20 @@ function AskButton({ prompt, asking, busyLabel, primary, disabled, onAsk, childr
     <button type="button" className={`btn${primary ? " p" : ""}`} disabled={disabled} onClick={() => onAsk(prompt)}>
       {children}
     </button>
+  );
+}
+
+/** Add resumes to this job: a file picker (PDF, Word, text); they go in the job's applications folder. */
+function AddAppsButton({ onFiles, disabled }: { onFiles: (files: File[]) => void; disabled: boolean }) {
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <input ref={input} type="file" multiple hidden accept=".pdf,.docx,.txt,.md" onChange={(e) => (e.target.files?.length && onFiles([...e.target.files]), (e.target.value = ""))} />
+      <button type="button" className="btn" disabled={disabled} onClick={() => input.current?.click()}>
+        <Icon name="plus" size={15} stroke={2} />
+        Add applications
+      </button>
+    </>
   );
 }
 
@@ -1530,6 +1571,7 @@ function createdNote(r: { job: string; summary: { newApplications: number; unrea
   );
 }
 
+/** "My own job description" (and adding files to a job): the form inside the New job dialog. */
 function NewJob({ api, existing, onClose, onCreated, onWriteJd }: { api: Api; existing: string[]; onClose: () => void; onCreated: (job: string, note: React.ReactNode) => void; onWriteJd: (name: string) => void }) {
   const [name, setName] = useState("");
   const [openings, setOpenings] = useState("1");
@@ -1539,11 +1581,6 @@ function NewJob({ api, existing, onClose, onCreated, onWriteJd }: { api: Api; ex
   const [saving, setSaving] = useState(false);
   const jdInput = useRef<HTMLInputElement>(null);
   const appsInput = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
   const role = name.trim();
   const adding = existing.includes(role);
 
@@ -1563,14 +1600,8 @@ function NewJob({ api, existing, onClose, onCreated, onWriteJd }: { api: Api; ex
 
   return (
     <>
-      <div className="scrim fill" onClick={onClose} />
-      <div className="modal dialog" role="dialog" aria-modal="true" aria-label="New job" style={{ width: 600 }}>
-        <div>
-          <h2 className="h2" style={{ fontSize: 19 }}>
-            New job
-          </h2>
-          <span className="meta">Creates a folder in Jobs for this role's job description and applications.</span>
-        </div>
+      <div className="newjob-own">
+        <span className="meta">Creates a folder in Jobs for this role's job description and applications, or adds files to a job you already have.</span>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 150px", gap: 12 }}>
           <label className="field">
             Role

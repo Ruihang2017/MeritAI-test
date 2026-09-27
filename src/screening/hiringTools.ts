@@ -4,7 +4,7 @@ import type { ClientTool, Confirm, ToolOutcome } from "../engine/types";
 import { checkJobId, jobDir, listJobs, type Folders } from "../files/folders";
 import { markdownToDocx } from "../files/docx";
 import type { Register } from "../business/register";
-import { candidates, findCandidate, hireCount, linkHire } from "../business/hiring";
+import { candidates, createJobWithJd, findCandidate, hireCount, linkHire } from "../business/hiring";
 import type { Catalog, Decision } from "./catalog";
 import { ingestJob, JD_NAME } from "./pipeline";
 import { walk } from "../files/folders";
@@ -146,15 +146,16 @@ export function hiringTools(opts: { folders: () => Folders; catalog: () => Catal
     {
       name: "set_job_description",
       description:
-        "Save a job description into an existing job that has none yet (markdown the owner approved in this conversation; saved as a Word file named '<job> JD'), so screening can use it. Call it directly: the app asks the owner to confirm.",
+        "Save a job description into an existing job (markdown the owner approved in this conversation; saved as a Word file named '<job> JD'), so screening can use it. " +
+        "If the job already has one, pass replace: true only when the owner wants the new version to replace it (e.g. they asked you to tailor it). Call it directly: the app asks the owner to confirm.",
       inputSchema: {
         type: "object",
-        properties: { job: jobProp, jd: { type: "string", description: "The job description in markdown." } },
-        required: ["job", "jd"],
+        properties: { job: jobProp, jd: { type: "string", description: "The job description in markdown." }, replace: { type: "boolean", description: "Replace the job's current job description file." } },
+        required: ["job", "jd", "replace"],
         additionalProperties: false,
       },
       handle: async (args) => {
-        const a = args as { job?: string; jd?: string };
+        const a = args as { job?: string; jd?: string; replace?: boolean };
         const job = String(a.job ?? "");
         const missing = existing(job);
         if (missing) return fail(missing);
@@ -164,14 +165,17 @@ export function hiringTools(opts: { folders: () => Folders; catalog: () => Catal
         if (jd.length > MAX_JD_CHARS) return fail("The job description is too long.");
         const dir = jobDir(opts.folders(), job);
         const current = walk(dir).files.find((x) => !x.rel.includes("/") && JD_NAME.test(x.rel));
-        if (current) return fail(`"${job}" already has a job description file (${current.rel}). Save the new version to the Outbox with save_document instead, and tell the owner to replace the file in the job's folder if they want to use it.`);
-        if (!(await confirm({ kind: "hiring", title: `Save this job description into ${job}?`, items: [`Saved as "${job} JD.docx" in the job's folder`, `${jd.split("\n")[0].replace(/^#+\s*/, "").slice(0, 80)}`] }))) {
+        if (current && !a.replace) return fail(`"${job}" already has a job description file (${current.rel}). If the owner wants the new version to replace it, call again with replace: true; otherwise save it to the Outbox with save_document.`);
+        if (current && !/\.docx$/i.test(current.rel)) return fail(`"${job}"'s job description is ${current.rel}, not a Word file. Save the new version to the Outbox with save_document and tell the owner to swap the file in the job's folder.`);
+        const name = current ? current.rel : `${job} JD.docx`;
+        if (!(await confirm({ kind: "hiring", title: current ? `Replace the job description of ${job}?` : `Save this job description into ${job}?`, items: [current ? `${name} is replaced by the new version` : `Saved as "${name}" in the job's folder`, `${jd.split("\n")[0].replace(/^#+\s*/, "").slice(0, 80)}`] }))) {
           return { success: true, text: "The owner did not confirm; nothing was saved.", display: "hiring: not saved" };
         }
-        const p = join(dir, `${job} JD.docx`);
+        const p = join(dir, name);
         writeFileSync(p, await markdownToDocx(jd, `${job} JD`));
         opts.catalog().notify({ ref: { kind: "job", job }, action: "updated", summary: `${job}: job description saved` });
-        return { success: true, text: `Saved "${job} JD.docx" into the job. Next: draft the screening criteria from it (propose_criteria) when the owner wants to screen.`, display: `hiring: JD saved for ${job}`, files: [p] };
+        const drafted = opts.catalog().latestRubric(job);
+        return { success: true, text: `Saved "${name}" into the job.${drafted ? " Screening criteria were drafted from the earlier version: offer to draft them again from this one (propose_criteria)." : " Next: draft the screening criteria from it (propose_criteria) when the owner wants to screen."}`, display: `hiring: JD saved for ${job}`, files: [p] };
       },
     },
     {
@@ -205,15 +209,8 @@ export function hiringTools(opts: { folders: () => Folders; catalog: () => Catal
         if (!(await confirm({ kind: "hiring", title: `Create the job "${job}"?`, items: [`People to hire: ${openings}`, jd ? `Job description: saved as "${job} JD.docx" (${jd.split("\n")[0].replace(/^#+\s*/, "").slice(0, 60)})` : "No job description yet"] }))) {
           return { success: true, text: "The owner did not confirm; nothing was created.", display: "hiring: not created" };
         }
-        mkdirSync(join(f.jobs, job), { recursive: true });
-        const files: string[] = [];
-        if (jd) {
-          const p = join(jobDir(f, job), `${job} JD.docx`);
-          writeFileSync(p, await markdownToDocx(jd, `${job} JD`));
-          files.push(p);
-        }
-        opts.catalog().setOpenings(job, openings);
-        opts.catalog().notify({ ref: { kind: "job", job }, action: "created", summary: `${job} created` });
+        const created = await createJobWithJd(f, opts.catalog(), job, openings, jd);
+        const files = created.jdFile ? [created.jdFile] : [];
         return {
           success: true,
           text: `Created "${job}" (${openings} to hire)${jd ? ` with its job description "${job} JD.docx"` : ""}. The owner adds applications on the Hiring page (drop them on the job) or in its folder.${jd ? " When there are applications, draft the screening criteria from the JD (propose_criteria)." : ""}`,

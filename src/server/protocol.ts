@@ -15,6 +15,7 @@ import type { BusinessProfile } from "../business/profile";
 import type { VoiceKeyStatus } from "../voice/keyStore";
 import type { EntityChange } from "../changes";
 import type { VoiceUsageSummary } from "../voice/usage";
+import type { IndustryId, JobTemplate } from "../business/jobTemplates";
 
 /** Everything the UI can call. Anything else is refused by the server. */
 export interface Methods {
@@ -50,6 +51,10 @@ export interface Methods {
   confirmCriteria: { params: { job: string; version: number }; result: { ok: true } };
   /** The owner's decision on a screened candidate (null clears it). */
   decide: { params: { job: string; file: string; decision: "shortlist" | "not" | null }; result: { ok: true } };
+  /** New job from a template (design: NewJobPick, NewJobEdit): the role templates and the industries that fit the business. */
+  jobTemplates: { params: void; result: { industries: { id: IndustryId; name: string }[]; templates: JobTemplate[]; suggested: IndustryId[]; business: string | null; location: string | null } };
+  /** Creates the job with the job description built from a template (markdown, saved as "<job> JD.docx"). */
+  createJobFromText: { params: { job: string; openings: number; jd: string }; result: { job: string } };
   /** Every screened candidate without a decision → Not this time. */
   decideRest: { params: { job: string }; result: { marked: number } };
   /** How many people the job is for (1 to 99). */

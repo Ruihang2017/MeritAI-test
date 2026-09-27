@@ -1,6 +1,10 @@
 import type { Catalog, Decision } from "../screening/catalog";
 import { nameFromFile } from "../screening/blind";
 import type { Register } from "./register";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { checkJobId, jobDir, listJobs, type Folders } from "../files/folders";
+import { markdownToDocx } from "../files/docx";
 
 /**
  * Hiring steps shared by the Hiring page and the adviser's tools, so a hire or a decision made
@@ -62,6 +66,25 @@ export function linkHire(cat: Catalog, register: Register, job: string, file: st
   if (!register.get(employeeId)) throw new Error("no such employee");
   cat.setDecision(job, app.hash, "shortlist");
   cat.addHire(job, app.hash, employeeId);
+}
+
+/**
+ * A new open job: its folder, how many to hire, and the job description (markdown) saved as
+ * "<job> JD.docx" so screening finds it. Returns the job name and the JD file, if any.
+ */
+export async function createJobWithJd(folders: Folders, cat: Catalog, name: string, openings: number, jd: string | null): Promise<{ job: string; jdFile: string | null }> {
+  const job = checkJobId(name.trim());
+  if (listJobs(folders).some((j) => j.toLowerCase() === job.toLowerCase())) throw new Error(`there is already a job called "${job}"`);
+  if (!Number.isInteger(openings) || openings < 1 || openings > 99) throw new Error("people to hire must be a whole number from 1 to 99");
+  mkdirSync(join(folders.jobs, job), { recursive: true });
+  let jdFile: string | null = null;
+  if (jd?.trim()) {
+    jdFile = join(jobDir(folders, job), `${job} JD.docx`);
+    writeFileSync(jdFile, await markdownToDocx(jd.trim(), `${job} JD`));
+  }
+  cat.setOpenings(job, openings);
+  cat.notify({ ref: { kind: "job", job }, action: "created", summary: `${job} created` });
+  return { job, jdFile };
 }
 
 /** How many were hired from the job (employees still in the register) and how many it is for. */

@@ -1114,6 +1114,30 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   ], JSON.stringify({ ok: ok.text, back, badAddr: badAddr.text, outside: outside.text }).slice(0, 700));
 }
 
+// ------------------------------------------------------------------ a new job from a template (roles by industry, a job description to edit)
+{
+  const { JOB_TEMPLATES, INDUSTRIES, industriesFor, searchTemplates, jobDescription } = await import("../src/business/jobTemplates");
+  const { isOfficialUrl: official } = await import("../src/research/officialSources");
+  const f = ensureFolders(join(TMP, "tpl-files"));
+  const app = new AssistantApp({ userId: "unit-tpl", memoryRoot: join(TMP, "tpl-mem"), filesRoot: f.root, ui: { confirm: async () => false } });
+  app.updateProfile({ tradingName: "Test Café (synthetic)", industry: "Café and bakery", states: ["VIC"] });
+  const data = app.jobTemplates();
+  const cleaner = JOB_TEMPLATES.find((x) => x.id === "cleaner")!;
+  const md = jobDescription(cleaner, { jobName: "Weekend cleaner", business: "Test Café (synthetic)", employmentType: "Casual", hours: "", location: "Richmond VIC", pay: "", start: "", duties: cleaner.duties.slice(0, 2), essential: cleaner.essential, desirable: [] });
+  const made = await app.createJobFromText("Weekend cleaner", 2, md);
+  const dup = await app.createJobFromText("weekend cleaner", 1, md).then(() => false, () => true);
+  const job = app.jobs().find((j) => j.job === "Weekend cleaner");
+  const ids = new Set(JOB_TEMPLATES.map((x) => x.id));
+  const awardCodes = JOB_TEMPLATES.flatMap((x) => (x.award ? [x.award.code] : []));
+  record("new job from a template", [
+    ["about 35+ roles, unique ids, every industry has roles", JOB_TEMPLATES.length >= 35 && ids.size === JOB_TEMPLATES.length && INDUSTRIES.every((i) => JOB_TEMPLATES.some((x) => x.industry === i.id))],
+    ["awards are hints with MA codes; no pay figures anywhere", awardCodes.every((c) => /^MA0\d{5}$/.test(c)) && !JOB_TEMPLATES.some((x) => /\$\s?\d/.test(JSON.stringify(x))) && official(`https://awards.fairwork.gov.au/${cleaner.award!.code}.html`)],
+    ["the business's industry first; search by other names", data.suggested[0] === "hospitality" && data.business === "Test Café (synthetic)" && data.location === "VIC" && searchTemplates("chef")[0]?.id === "cook" && searchTemplates("sparky")[0]?.id === "electrician"],
+    ["the job description: chosen duties, placeholders for the rest", md.includes("# Weekend cleaner") && md.includes(cleaner.duties[1]) && !md.includes(cleaner.duties[2]) && /\[One or two sentences about Test Café/.test(md) && /\[Rate under the award/.test(md)],
+    ["created with its JD file and people to hire; a second with the same name refused", made.job === "Weekend cleaner" && job?.jd === "Weekend cleaner JD.docx" && job?.openings === 2 && dup],
+  ], JSON.stringify({ n: JOB_TEMPLATES.length, suggested: data.suggested, job }).slice(0, 500));
+}
+
 try {
   rmSync(TMP, { recursive: true, force: true });
 } catch {
