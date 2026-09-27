@@ -955,6 +955,7 @@ export const ZH_PATTERNS: [RegExp, string][] = [
   [/^about (US\$[\d.]+)$/, "约 $1"],
   [/^since (.+)$/, "自 $1 起"],
   [/^Today (\d{1,2}:\d{2} [ap]m)$/, "今天 $1"],
+  [/^Yesterday (\d{1,2}:\d{2} [ap]m)$/, "昨天 $1"],
   [/^Overdue · since (.+)$/, "已逾期 · 自 $1"],
   [/^Due (.+)$/, "$1 到期"],
   [/^Usage limit until (.+)$/, "用量上限，至 $1"],

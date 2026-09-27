@@ -11,6 +11,7 @@ import { Icon } from "./Icon";
 import { fromFile, type Ask } from "../ask";
 import type { VoiceKeyStatus } from "../../../src/voice/keyStore";
 import { microphones, saveMicrophone, savedMicrophone } from "../voice";
+import { markLabel, marks, useLive } from "../live";
 
 const isoDay = localDay;
 const kb = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
@@ -66,7 +67,10 @@ export function FilesPage({ api, onAsk, refreshKey, arrival }: { api: Api; onAsk
   useEffect(() => {
     if (refreshKey) void reload();
   }, [refreshKey, reload]);
-  const [tab, setTab] = useState<Tab>("inbox");
+  // Files the adviser saved lately are marked; arriving because of one opens the Outbox.
+  const { recent } = useLive();
+  const fileMarks = marks(recent, (r) => (r.kind === "file" ? r.path : null));
+  const [tab, setTab] = useState<Tab>(() => (arrival && fileMarks.size ? "outbox" : "inbox"));
   const [msg, setMsg] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
@@ -191,11 +195,12 @@ export function FilesPage({ api, onAsk, refreshKey, arrival }: { api: Api; onAsk
                 </thead>
                 <tbody>
                   {list.map((f) => (
-                    <tr key={f.path}>
+                    <tr key={f.path} className={fileMarks.has(f.path) ? "fresh" : undefined}>
                       <td className="b" style={{ paddingLeft: 16 }}>
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
                           <FileBadge name={f.name} />
                           <span>
+                            {fileMarks.has(f.path) && <span className="pill info fresh-pill" style={{ marginLeft: 0, marginRight: 8 }}>{markLabel(fileMarks.get(f.path)!)}</span>}
                             {"title" in f && (f as FileRow & { title: string }).title !== f.name ? (f as FileRow & { title: string }).title : f.name}
                             {"draft" in f && (f as FileRow & { draft: boolean }).draft && (
                               <span className="pill n" style={{ marginLeft: 8, height: 20, fontSize: 11 }}>
@@ -250,7 +255,7 @@ export function FilesPage({ api, onAsk, refreshKey, arrival }: { api: Api; onAsk
 
 function FileBadge({ name }: { name: string }) {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  const [label, bg, fg] = ext === "docx" || ext === "doc" ? ["DOC", "#DCE6FA", "#1446A6"] : ext === "xlsx" || ext === "xls" ? ["XLS", "#E3F3E8", "#1E6B3E"] : ext === "pdf" ? ["PDF", "#FCE8E6", "#7A1C15"] : ["md", "txt"].includes(ext) ? ["TXT", "#EBEEF3", "#4A5363"] : ["IMG", "#EBEEF3", "#4A5363"];
+  const [label, bg, fg] = ext === "docx" || ext === "doc" ? ["DOC", "#DCE6FA", "#1446A6"] : ext === "xlsx" || ext === "xls" ? ["XLS", "#E3F3E8", "#1E6B3E"] : ext === "pdf" ? ["PDF", "#FCE8E6", "#7A1C15"] : ["md", "txt"].includes(ext) ? ["TXT", "#EBEEF3", "#4A5363"] : ext === "eml" ? ["MAIL", "#F1ECFB", "#5B3AA8"] : ["png", "jpg", "jpeg", "gif", "webp"].includes(ext) ? ["IMG", "#EBEEF3", "#4A5363"] : [ext.toUpperCase().slice(0, 4) || "FILE", "#EBEEF3", "#4A5363"];
   return (
     <span style={{ width: 36, height: 36, borderRadius: 8, background: bg, color: fg, fontSize: 11, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }} aria-hidden="true">
       {label}
