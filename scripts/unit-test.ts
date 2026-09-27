@@ -798,6 +798,34 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   ], JSON.stringify({ profile, badProfile, dup, pii, extend, leftViaUpdate, badDate, badReason, declined }).slice(0, 700));
 }
 
+// ------------------------------------------------------------------ the sample business (first run)
+{
+  const own = ensureFolders(join(TMP, "sample-own"));
+  const hadDefault = process.env.FX_FILES_ROOT;
+  process.env.FX_FILES_ROOT = join(TMP, "sample-default", "MeritAI");
+  const session = new UiSession({ engine: "fake" });
+  const app = new AssistantApp({ userId: "unit-sample", memoryRoot: join(TMP, "sample-mem"), filesRoot: own.root, format: "markdown", engine: "fake", ui: { confirm: session.confirm } });
+  session.attach(app);
+  await app.start();
+  const st = async () => (await session.handle({ id: 1, method: "state", params: undefined })) as ShellState;
+  const before = await st();
+  const hadToday = process.env.FX_TODAY;
+  const s = (await session.handle({ id: 2, method: "useSampleBusiness", params: undefined })) as { workspace: string };
+  const inSample = await st();
+  const staff = app.staff(true).length;
+  const prefs = app.memories().preferences.length;
+  const back = await session.handle({ id: 3, method: "setWorkspace", params: { path: own.root } }).then(() => st());
+  await app.close();
+  if (hadDefault === undefined) delete process.env.FX_FILES_ROOT;
+  else process.env.FX_FILES_ROOT = hadDefault;
+  record("sample business (first run)", [
+    ["own workspace: not sample data", !before.sampleData && !before.sampleSwitch],
+    ["sample: its own folder beside the default, seeded, marked", s.workspace.endsWith(" (sample)") && staff >= 9 && inSample.sampleData && inSample.sampleSwitch],
+    ["sample: runs on its day; the user's memory untouched", inSample.today === "2026-09-26" && prefs === 0],
+    ["back to their own folder: real date again, not sample", !back.sampleData && process.env.FX_TODAY === hadToday],
+  ], JSON.stringify({ s, today: inSample.today, staff, prefs }).slice(0, 300));
+}
+
 // ------------------------------------------------------------------ voice in the browser (fake engine + stand-in voice: free)
 {
   process.env.FX_FAKE_DELAY_MS = "2";

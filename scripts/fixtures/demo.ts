@@ -519,11 +519,12 @@ export const demoConversationsFile = (memoryRoot: string, userId: string) => joi
  * Seeds the design's sample data into an empty workspace and this user's memory. The
  * conversations are for the fake engine only (a real engine's come from real chats).
  */
-export async function seedDemo(opts: { filesRoot: string; memoryRoot: string; userId: string }): Promise<void> {
+export async function seedDemo(opts: { filesRoot: string; memoryRoot: string; userId: string; memory?: boolean }): Promise<void> {
   const f = ensureFolders(opts.filesRoot);
   new BusinessStore(f.data).update(DEMO_PROFILE);
   seedStaff(f);
   await seedFiles(f);
   await seedHiring(f);
-  seedMemory(opts.memoryRoot, opts.userId);
+  // The "sample business" of a real user (first run) leaves their own memory alone.
+  if (opts.memory !== false) seedMemory(opts.memoryRoot, opts.userId);
 }

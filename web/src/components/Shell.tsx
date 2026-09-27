@@ -18,7 +18,8 @@ export type Page = "conversations" | "all" | "staff" | "hiring" | "profile" | "f
 /** The side panel's button in the app bar (every page except Conversations). */
 export type AskButton = "none" | "closed" | "open" | "working" | "waiting";
 
-export function AppBar({ state, connection, onAttention, showAttention, ask, onAskToggle }: { state: ShellState | null; connection: Connection; onAttention: () => void; showAttention: boolean; ask: AskButton; onAskToggle: () => void }) {
+export function AppBar({ state, connection, onAttention, showAttention, ask, onAskToggle, onLeaveSample }: { state: ShellState | null; connection: Connection; onAttention: () => void; showAttention: boolean; ask: AskButton; onAskToggle: () => void; onLeaveSample: () => void }) {
+  const [sampleOpen, setSampleOpen] = useState(false);
   const status =
     connection !== "open"
       ? { word: connection === "connecting" ? "Connecting" : "Offline", dot: "#B3261E" }
@@ -36,7 +37,38 @@ export function AppBar({ state, connection, onAttention, showAttention, ask, onA
       <div className="vr" />
       <Icon name="building" size={18} />
       <div className="biz">{state?.business.name ?? "Your business"}</div>
-      {state?.sampleData && <span className="sample">Sample data</span>}
+      {state?.sampleData &&
+        (state.sampleSwitch ? (
+          <span className="sample-wrap">
+            <button type="button" className="sample" aria-expanded={sampleOpen} onClick={() => setSampleOpen(!sampleOpen)}>
+              Sample data
+            </button>
+            {sampleOpen && (
+              <>
+                <div className="fill" style={{ zIndex: 29 }} onClick={() => setSampleOpen(false)} />
+                <div className="sample-pop" role="dialog" aria-label="Sample business">
+                  <div className="cap" style={{ color: "#6B4E00" }}>
+                    Sample business
+                  </div>
+                  <div>
+                    <b>{state.business.name} is made up.</b> Its staff, jobs and applications are synthetic, and the app runs on its date, {fmtDay(state.today, { year: true })}, so the reminders read as intended.
+                  </div>
+                  <div className="meta">Your own business uses its own folder; switching doesn't change either.</div>
+                  <div className="row-wrap">
+                    <button type="button" className="btn p sm" onClick={() => (setSampleOpen(false), onLeaveSample())}>
+                      Switch to my own business
+                    </button>
+                    <button type="button" className="btn g sm" onClick={() => setSampleOpen(false)}>
+                      Keep trying it
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </span>
+        ) : (
+          <span className="sample">Sample data</span>
+        ))}
       <span className="grow" />
       {showAttention && state && (state.attention.overdue > 0 || state.attention.soon > 0) && (
         <button type="button" className="attn-btn" onClick={onAttention}>

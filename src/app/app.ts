@@ -1,5 +1,5 @@
-import { copyFileSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
-import { basename, extname, join } from "node:path";
+import { copyFileSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, extname, join } from "node:path";
 import { createAssistant, ROOT, type Assistant } from "../assistant";
 import type { ReplyFormat } from "../basePrompt";
 import { allCodexHomes } from "../engine/codexHome";
@@ -15,7 +15,7 @@ import { userSection } from "../memory/context";
 import { summarizeSession } from "../memory/summarize";
 import type { Preference, SessionFrom, SessionRecord, TaskNote } from "../memory/store";
 import { attachToInbox, findDroppedPaths, importIntoJob, MAX_ATTACH_BYTES } from "../files/attach";
-import { checkJobId, ensureFolders, jobDir, listJobs, sanitizeStem, validateFilesRoot, walk, type Folders } from "../files/folders";
+import { checkJobId, defaultFilesRoot, ensureFolders, jobDir, listJobs, sanitizeStem, validateFilesRoot, walk, type Folders } from "../files/folders";
 import type { Decision, Rubric } from "../screening/catalog";
 import { listFolder, listInbox, type FolderEntry, type InboxEntry } from "../files/tools";
 import { profileLines, type BusinessProfile } from "../business/profile";
@@ -187,6 +187,9 @@ export interface VoiceController {
   stop(reason?: string): void;
 }
 
+/** In a workspace's .assistant/: marks the sample business (synthetic data) and the day it is written for. */
+const SAMPLE_MARKER = "sample.json";
+
 export class AssistantApp {
   readonly userId: string;
   private readonly a: Assistant;
@@ -254,6 +257,7 @@ export class AssistantApp {
   // ------------------------------------------------------------------ account and session
 
   async start(): Promise<AccountStatus> {
+    this.applySampleClock();
     await this.a.engine.start();
     return this.a.engine.account();
   }
@@ -720,8 +724,50 @@ export class AssistantApp {
     const root = validateFilesRoot(path, this.a.paths);
     ensureFolders(root);
     this.a.mem.updateSettings({ filesRoot: root });
+    this.applySampleClock();
     return this.folders();
   }
+
+  // --- the sample business (first run: "Try it with a sample business")
+
+  /** Where memory is kept (the sample business is seeded beside it without touching it). */
+  memoryRoot(): string {
+    return this.a.paths.memoryRoot;
+  }
+
+  /** Its own folder, beside the default workspace: "<default> (sample)". */
+  sampleRoot(): string {
+    const d = defaultFilesRoot(this.a.paths.projectRoot);
+    return join(dirname(d), `${basename(d)} (sample)`);
+  }
+
+  /** The current workspace is the sample business (a marker written when it was seeded); its day, or null. */
+  sampleDay(): string | null {
+    try {
+      const m = JSON.parse(readFileSync(join(this.folders().data, SAMPLE_MARKER), "utf8")) as { today?: string };
+      return typeof m.today === "string" ? m.today : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Marks a seeded folder as the sample business, dated `today` (the day its data is written for). */
+  static markSample(filesRoot: string, today: string): void {
+    writeFileSync(join(ensureFolders(filesRoot).data, SAMPLE_MARKER), JSON.stringify({ synthetic: true, today }, null, 2) + "\n");
+  }
+
+  /** In the sample business the app runs on its day, so its reminders read as intended; elsewhere on the real date. */
+  private applySampleClock(): void {
+    const day = this.sampleDay();
+    if (day) {
+      if (!process.env.FX_TODAY) this.sampleClock = true;
+      if (this.sampleClock) process.env.FX_TODAY = day;
+    } else if (this.sampleClock) {
+      delete process.env.FX_TODAY;
+      this.sampleClock = false;
+    }
+  }
+  private sampleClock = false;
 
   /** True when the workspace is the default folder (the user never chose one). */
   workspaceIsDefault(): boolean {
@@ -730,6 +776,7 @@ export class AssistantApp {
 
   resetFilesRoot(): Folders {
     this.a.mem.updateSettings({ filesRoot: undefined });
+    this.applySampleClock();
     return this.folders();
   }
 

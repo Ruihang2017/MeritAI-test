@@ -2,7 +2,10 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
 import { EventEmitter } from "node:events";
-import type { AppEvent, AssistantApp, VoiceController } from "../app/app";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { AssistantApp, type AppEvent, type VoiceController } from "../app/app";
+import { DEMO_TODAY, seedDemo } from "../../scripts/fixtures/demo";
 import type { Confirm, ConfirmRequest } from "../engine/types";
 import { DOCUMENTS } from "../business/register";
 import { LEAVING_REASONS } from "../business/leaving";
@@ -248,6 +251,24 @@ export class UiSession {
         else this.app.setFilesRoot(str(p?.path, "path", 1000));
         return this.settings();
       }),
+    useSampleBusiness: async () =>
+      this.exclusive("Preparing the sample business", async () => {
+        const root = this.app.sampleRoot();
+        if (!existsSync(join(root, ".assistant", "business.json"))) {
+          // Seeded on the design's day (its dates are written for it); the user's own memory is left alone.
+          const before = process.env.FX_TODAY;
+          process.env.FX_TODAY = DEMO_TODAY;
+          try {
+            await seedDemo({ filesRoot: root, memoryRoot: this.app.memoryRoot(), userId: this.app.userId, memory: false });
+          } finally {
+            if (before === undefined) delete process.env.FX_TODAY;
+            else process.env.FX_TODAY = before;
+          }
+          AssistantApp.markSample(root, DEMO_TODAY);
+        }
+        this.app.setFilesRoot(root);
+        return this.settings();
+      }),
     voiceStart: async () => {
       const owner = this.caller.getStore();
       if (!owner) throw new Error("Voice needs the browser page.");
@@ -356,7 +377,8 @@ export class UiSession {
     return {
       account,
       engine: this.opts.engine,
-      sampleData: this.opts.sampleData ?? false,
+      sampleData: (this.opts.sampleData ?? false) || this.app.sampleDay() !== null,
+      sampleSwitch: !this.opts.sampleData && this.app.sampleDay() !== null,
       today: todayIso(),
       rulesChecked: RULES_CHECKED_ON,
       business: { name: p.profile.tradingName ?? p.profile.legalName ?? "Your business", needsSetup: this.app.needsSetup() },

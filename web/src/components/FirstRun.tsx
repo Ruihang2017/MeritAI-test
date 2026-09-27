@@ -15,6 +15,7 @@ export function FirstRun({
   onSetup,
   onForm,
   onSkip,
+  onSample,
 }: {
   api: Api;
   state: ShellState;
@@ -23,7 +24,10 @@ export function FirstRun({
   onSetup: () => void;
   onForm: () => void;
   onSkip: () => void;
+  /** "Try it with a sample business" (design: FirstChoose). */
+  onSample: () => Promise<void>;
 }) {
+  const [preparing, setPreparing] = useState(false);
   const signedIn = state.account.loggedIn;
   const [step, setStep] = useState<"workspace" | "business">("workspace");
   const [signing, setSigning] = useState(false);
@@ -162,6 +166,26 @@ export function FirstRun({
               <button type="button" className="pick" onClick={onForm}>
                 <b>Fill in the form myself</b>
                 <span className="meta">Profile & policies page.</span>
+              </button>
+              <button
+                type="button"
+                className="pick sample-pick"
+                disabled={preparing}
+                onClick={() => {
+                  setPreparing(true);
+                  setErr(null);
+                  onSample().catch((e: Error) => (setErr(e.message), setPreparing(false)));
+                }}
+              >
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <b>{preparing ? "Preparing the sample business…" : "Try it with a sample business"}</b>
+                  <span className="pill warn" style={{ height: 22 }}>
+                    For trying MeritAI
+                  </span>
+                </span>
+                <span className="meta">
+                  A made-up cleaning business (Wattle Lane Cleaning, NSW) with 9 staff, 3 open jobs and paperwork due, so you can try everything without your own data. It is kept in its own folder and dated 26 Sep 2026. Switch to your own business any time.
+                </span>
               </button>
             </div>
             <button type="button" className="btn g" style={{ alignSelf: "flex-start", paddingLeft: 0 }} onClick={onSkip}>

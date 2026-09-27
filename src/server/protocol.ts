@@ -76,6 +76,8 @@ export interface Methods {
   setVoiceKey: { params: { key: string }; result: { ok: true; status: VoiceKeyStatus } | { ok: false; error: string } };
   removeVoiceKey: { params: void; result: VoiceKeyStatus };
   /** Voice in the browser: the page sends its microphone (PCM16 mono 24 kHz, base64, about 100 ms a message) and plays the `voiceAudio` events. Only the page that started it. */
+  /** First run: the sample business (synthetic Wattle Lane Cleaning) in its own folder, seeded once, as the workspace. */
+  useSampleBusiness: { params: void; result: Settings };
   voiceStart: { params: void; result: { started: true } };
   voiceAudio: { params: { pcm: string }; result: null };
   voiceStop: { params: void; result: null };
@@ -91,6 +93,8 @@ export interface ShellState {
   engine: "codex" | "fake";
   /** The demo workspace with the design's sample data (the app bar shows "Sample data"). */
   sampleData: boolean;
+  /** The sample business chosen at first run (not the demo mode): the owner can switch to their own business. */
+  sampleSwitch: boolean;
   /** The app's today (YYYY-MM-DD): the demo runs on the design's date, so the UI's "Today" follows it. */
   today: string;
   /** When the reminder rules were last checked against the official pages (YYYY-MM-DD). */

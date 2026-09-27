@@ -479,7 +479,31 @@ function Shell({ api }: { api: Api }) {
 
   return (
     <div className={`m app${docked ? " dock-open" : ""}`}>
-      <AppBar state={state} connection={connection} showAttention={!showPanel} onAttention={() => setAttentionOpen(true)} ask={askButton} onAskToggle={() => setDockOpen(!dockOpen)} />
+      <AppBar
+        state={state}
+        connection={connection}
+        showAttention={!showPanel}
+        onAttention={() => setAttentionOpen(true)}
+        ask={askButton}
+        onAskToggle={() => setDockOpen(!dockOpen)}
+        onLeaveSample={() =>
+          void api.call("setWorkspace", { path: null }).then(
+            () => {
+              // Back to the first run's business step for their own business.
+              try {
+                sessionStorage.removeItem("meritai.firstRun");
+              } catch {
+                /* only this tab */
+              }
+              setFirstRunDone(false);
+              setTurns([]);
+              setPage("conversations");
+              void refresh();
+            },
+            (e: Error) => setError(e.message),
+          )
+        }
+      />
       {connection !== "open" && (
         <div className="banner bad conn" role="alert">
           <Icon name="alert" size={18} />
@@ -497,6 +521,12 @@ function Shell({ api }: { api: Api }) {
           onSetup={() => (finishFirstRun(), setPage("conversations"), void send("Set up my business profile", undefined, [], "setup"))}
           onForm={() => (finishFirstRun(), setPage("profile"))}
           onSkip={finishFirstRun}
+          onSample={async () => {
+            await api.call("useSampleBusiness");
+            finishFirstRun();
+            setPage("conversations");
+            await refresh();
+          }}
         />
       ) : (
       <div className="body">
