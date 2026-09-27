@@ -84,7 +84,7 @@ export async function startUiServer(opts: {
   const connection = (ws: WebSocket) => {
     const send = (m: ServerMessage) => ws.readyState === ws.OPEN && ws.send(JSON.stringify(m));
     const off = opts.session.subscribe(send);
-    ws.on("close", off);
+    ws.on("close", () => (off(), opts.session.disconnected(send)));
     ws.on("message", async (raw) => {
       let msg: ClientMessage;
       try {
@@ -94,7 +94,7 @@ export async function startUiServer(opts: {
       }
       if (typeof msg?.id !== "number") return;
       try {
-        send({ id: msg.id, result: await opts.session.handle(msg) });
+        send({ id: msg.id, result: await opts.session.handle(msg, send) });
       } catch (e) {
         send({ id: msg.id, error: (e as Error).message });
       }

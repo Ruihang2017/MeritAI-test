@@ -10,6 +10,23 @@ import type { Api } from "../api";
 import { flaggedLinks, isOfficial, sources, UNREPORTED, type Block, type Turn } from "../conversation";
 import { dayLabel, fmtDatesIn, fmtTime } from "../format";
 import { Icon } from "./Icon";
+import { MicButton, VoiceBanner, VoiceBar, type VoiceLevels, type VoiceNote, type VoiceUi } from "./Voice";
+
+/** Voice in the browser, as the Conversations page shows it. */
+export interface VoiceProps {
+  ui: VoiceUi | null;
+  levels: { current: VoiceLevels };
+  note: VoiceNote | null;
+  keySet: boolean;
+  /** The demo engine: the stand-in voice, free. */
+  demo: boolean;
+  onStart: () => void;
+  onMute: () => void;
+  onEnd: () => void;
+  onMic: (id: string) => void;
+  onSettings: () => void;
+  onCloseNote: () => void;
+}
 
 const KIND_LABEL: Record<string, string> = {
   profile: "business profile",
@@ -37,6 +54,9 @@ export function ConversationPage(props: {
   /** The page this conversation was started from (a side panel button), with a link back. */
   from: SessionFrom | null;
   onGoFrom: (f: SessionFrom) => void;
+  voice: VoiceProps;
+  /** "Review and save" on a change declined during voice: puts it in the message box. */
+  onRedo: (text: string) => void;
 }) {
   const { api, state, turns } = props;
   const running = turns.some((t) => t.status === "running");
@@ -92,6 +112,12 @@ export function ConversationPage(props: {
               Waiting on you
             </span>
           )}
+          {props.voice.ui && (
+            <span className="pill info">
+              <span className="dot" />
+              Voice on
+            </span>
+          )}
         </nav>
         {props.from && (turns.length > 0 || props.resumedTitle) && (
           <span className="meta from-link">
@@ -114,14 +140,31 @@ export function ConversationPage(props: {
         <div className="thread-in">
           {turns.length === 0 && <Welcome resumed={props.resumedTitle} onPick={(t) => props.onSend(t)} demo={state?.engine === "fake"} />}
           {turns.map((t, i) => (
-            <TurnView key={t.id} turn={t} showDay={i === 0 || dayLabel(turns[i - 1].at) !== dayLabel(t.at)} onAnswer={props.onAnswer} api={api} domains={state?.officialDomains ?? []} />
+            <TurnView key={t.id} turn={t} showDay={i === 0 || dayLabel(turns[i - 1].at) !== dayLabel(t.at)} onAnswer={props.onAnswer} api={api} domains={state?.officialDomains ?? []} onRedo={props.voice.ui ? undefined : props.onRedo} />
           ))}
           <div ref={bottom} />
         </div>
       </div>
 
       <div className="composer-wrap">
-        <Composer ref={composer} api={api} running={running} waiting={waiting} onSend={props.onSend} onStop={props.onStop} disabled={!state?.account.loggedIn} draft={props.draft} onDraftUsed={props.onDraftUsed} pending={state?.attachments ?? []} />
+        {props.voice.note && !props.voice.ui && <VoiceBanner note={props.voice.note} onAgain={props.voice.onStart} onSettings={props.voice.onSettings} onClose={props.voice.onCloseNote} />}
+        {props.voice.ui ? (
+          <VoiceBar v={props.voice.ui} levels={props.voice.levels} demo={props.voice.demo} onMute={props.voice.onMute} onEnd={props.voice.onEnd} onMic={props.voice.onMic} />
+        ) : (
+          <Composer
+            ref={composer}
+            api={api}
+            running={running}
+            waiting={waiting}
+            onSend={props.onSend}
+            onStop={props.onStop}
+            disabled={!state?.account.loggedIn}
+            draft={props.draft}
+            onDraftUsed={props.onDraftUsed}
+            pending={state?.attachments ?? []}
+            mic={<MicButton keySet={props.voice.keySet} demo={props.voice.demo} disabled={running || !state?.account.loggedIn} onStart={props.voice.onStart} onSettings={props.voice.onSettings} />}
+          />
+        )}
         <div className="foot">Replies can be wrong. Only a receipt means something was saved.</div>
       </div>
 
@@ -165,7 +208,7 @@ function Welcome({ resumed, onPick, demo }: { resumed: string | null; onPick: (t
   );
 }
 
-export function TurnView({ turn, showDay, onAnswer, api, domains }: { turn: Turn; showDay: boolean; onAnswer: (id: string, yes: boolean) => void; api: Api; domains: string[] }) {
+export function TurnView({ turn, showDay, onAnswer, api, domains, onRedo }: { turn: Turn; showDay: boolean; onAnswer: (id: string, yes: boolean) => void; api: Api; domains: string[]; onRedo?: (text: string) => void }) {
   const [stepsOpen, setStepsOpen] = useState(false);
   const src = sources(turn, domains);
   const flagged = flaggedLinks(turn);
@@ -181,7 +224,10 @@ export function TurnView({ turn, showDay, onAnswer, api, domains }: { turn: Turn
       )}
       {(turn.user.text || turn.user.attachments.length > 0) && (
       <div className="you">
-        <span className="meta">You · {fmtTime(turn.at)}</span>
+        <span className="meta" style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          {turn.voice && <Icon name="mic" size={14} />}
+          {turn.voice ? "You said" : "You"} · {turn.userOnly ? "added to the current task" : fmtTime(turn.at)}
+        </span>
         {turn.user.attachments.map((a) => (
           <span key={a} className="chip">
             <Icon name="file" size={15} />
@@ -191,6 +237,7 @@ export function TurnView({ turn, showDay, onAnswer, api, domains }: { turn: Turn
         {turn.user.text && <div className="bubble">{turn.user.text}</div>}
       </div>
       )}
+      {!turn.userOnly && (
       <div className="adviser">
         <span className="av" aria-hidden="true">
           M
@@ -220,7 +267,7 @@ export function TurnView({ turn, showDay, onAnswer, api, domains }: { turn: Turn
             </div>
           )}
           {turn.blocks.map((b, i) => (
-            <BlockView key={i} block={b} onAnswer={onAnswer} running={turn.status === "running"} last={i === turn.blocks.length - 1} linkState={(u) => (flagged.has(u) ? "unverified" : isOfficial(u, domains) ? "ok" : "other")} />
+            <BlockView key={i} block={b} onAnswer={onAnswer} onRedo={onRedo} running={turn.status === "running"} last={i === turn.blocks.length - 1} linkState={(u) => (flagged.has(u) ? "unverified" : isOfficial(u, domains) ? "ok" : "other")} />
           ))}
           {turn.status === "running" && turn.blocks.length === 0 && (
             <div className="thinking">
@@ -256,12 +303,30 @@ export function TurnView({ turn, showDay, onAnswer, api, domains }: { turn: Turn
           )}
         </div>
       </div>
+      )}
     </>
   );
 }
 
-function BlockView({ block: b, onAnswer, running, last, linkState }: { block: Block; onAnswer: (id: string, yes: boolean) => void; running: boolean; last: boolean; linkState: (url: string) => LinkState }) {
+function BlockView({ block: b, onAnswer, onRedo, running, last, linkState }: { block: Block; onAnswer: (id: string, yes: boolean) => void; onRedo?: (text: string) => void; running: boolean; last: boolean; linkState: (url: string) => LinkState }) {
   switch (b.kind) {
+    case "skipped":
+      return (
+        <section className="confirm skipped" aria-label="Not saved during voice">
+          <div className="grow" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div className="cap" style={{ color: "#6B4E00" }}>
+              Not saved during voice · needs your OK
+            </div>
+            <div className="q" style={{ fontSize: 15 }}>
+              {fmtDatesIn(b.req.title)}
+            </div>
+            {b.req.items?.length ? <div className="meta">{b.req.items.map((x) => fmtDatesIn(x)).join(" · ")}</div> : null}
+          </div>
+          <button type="button" className="btn" disabled={!onRedo} title={onRedo ? undefined : "After voice ends"} onClick={() => onRedo?.(`Please make this change now: ${b.req.title}${b.req.items?.length ? ` (${b.req.items.join("; ")})` : ""}`)}>
+            Review and save
+          </button>
+        </section>
+      );
     case "text":
       return (
         <div className="md">
@@ -383,8 +448,8 @@ export interface ComposerHandle {
 }
 
 
-export const Composer = forwardRef<ComposerHandle, { api: Api; running: boolean; waiting: boolean; disabled: boolean; onSend: (text: string, skill?: string, attachments?: string[]) => void; onStop: () => void; draft: string | null; onDraftUsed: () => void; pending: string[]; id?: string; placeholder?: string }>(
-  function Composer({ api, running, waiting, disabled, onSend, onStop, draft, onDraftUsed, pending, id = "msg", placeholder }, ref) {
+export const Composer = forwardRef<ComposerHandle, { api: Api; running: boolean; waiting: boolean; disabled: boolean; onSend: (text: string, skill?: string, attachments?: string[]) => void; onStop: () => void; draft: string | null; onDraftUsed: () => void; pending: string[]; id?: string; placeholder?: string; mic?: React.ReactNode }>(
+  function Composer({ api, running, waiting, disabled, onSend, onStop, draft, onDraftUsed, pending, id = "msg", placeholder, mic }, ref) {
     const [text, setText] = useState("");
     const [attached, setAttached] = useState<{ name: string; note: string; ok: boolean }[]>([]);
     const [uploading, setUploading] = useState(false);
@@ -555,6 +620,7 @@ export const Composer = forwardRef<ComposerHandle, { api: Api; running: boolean;
             )}
           </div>
           <span className="grow" />
+          {mic}
           {running ? (
             <button type="button" className="btn sm" onClick={onStop} title="Stop (Esc)">
               <Icon name="stop" size={14} stroke={2.4} />

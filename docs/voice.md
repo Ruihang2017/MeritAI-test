@@ -72,7 +72,11 @@ Deviation from the plan: there is no cancel event, so "stop" or "never mind" arr
 - GPT-Live has no tools of its own. Files, memory, the web and skills stay behind Codex and our guards.
 - The key is in `.env` (gitignored). It is not named `OPENAI_API_KEY`, which would switch the Codex login to API billing.
 
-## 5 Tests
+## 5 In the browser
+
+The browser UI passes its own `audio` to `startVoice`: the page's microphone (PCM16 mono 24 kHz, 100 ms chunks through the WebSocket, `voiceAudio`) and its speaker (the output audio sent back only to that page). Mute sends silence. See `docs/ui.md` (Voice). With the demo engine, `src/voice/fakeLive.ts` stands in for GPT-Live (no key, no cost): it streams silence, "hears" a scripted request after about a second of speech and a pause, and speaks a demo line as a soft tone.
+
+## 6 Tests
 
 `npm run test:voice` needs the key, ffmpeg and the Windows voices Zira + Huihui. A synthetic mic streams Windows-TTS questions and then silence, in real time. Checks:
 

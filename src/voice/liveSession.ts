@@ -42,6 +42,15 @@ export interface LiveEvents {
   closed: [reason: string];
 }
 
+/** What the app and the bridge use of a live session (the real one, or the demo stand-in in fakeLive.ts). */
+export type LiveLike = EventEmitter<LiveEvents> & {
+  start(): Promise<void>;
+  appendAudio(pcm: Buffer): void;
+  commentary(delegationId: string | null, content: string): void;
+  thinking(delegationId: string, content: string): void;
+  close(): void;
+};
+
 export class LiveSession extends EventEmitter<LiveEvents> {
   private ws: WebSocket | null = null;
   private seq = 0;

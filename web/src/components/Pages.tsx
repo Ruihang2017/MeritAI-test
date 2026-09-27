@@ -9,6 +9,7 @@ import { now } from "../clock";
 import { Icon } from "./Icon";
 import { fromFile, type Ask } from "../ask";
 import type { VoiceKeyStatus } from "../../../src/voice/keyStore";
+import { microphones, saveMicrophone, savedMicrophone } from "../voice";
 
 const isoDay = localDay;
 const kb = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
@@ -749,8 +750,11 @@ function VoiceCard({ api, onChanged }: { api: Api; onChanged: () => void }) {
   const [key, setKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [mics, setMics] = useState<{ id: string; label: string }[]>([]);
+  const [mic, setMic] = useState(savedMicrophone);
   useEffect(() => {
     api.call("voiceKey").then(setStatus, (e: Error) => setErr(e.message));
+    microphones().then(setMics, () => null);
   }, [api]);
   const save = async () => {
     setSaving(true);
@@ -838,12 +842,14 @@ function VoiceCard({ api, onChanged }: { api: Api; onChanged: () => void }) {
           <span className="row-wrap" style={{ alignItems: "center" }}>
             <span className="input key-saved">
               <Icon name="lock" size={16} />
-              <span className="mono" style={{ color: "#1B1F27" }}>sk-…{status.last4}</span>
-              {status.source === "env" ? " · from .env (developer setup)" : ` · saved on this computer${status.checkedAt ? ` · checked with OpenAI ${fmtDay(localDay(status.checkedAt))}` : ""}`}
+              {status.last4 && <span className="mono" style={{ color: "#1B1F27" }}>sk-…{status.last4}</span>}
+              {status.source === "demo" ? " · demo engine: a stand-in voice, no key and no cost" : status.source === "env" ? " · from .env (developer setup)" : ` · saved on this computer${status.checkedAt ? ` · checked with OpenAI ${fmtDay(localDay(status.checkedAt))}` : ""}`}
             </span>
-            <button type="button" className="btn" onClick={() => (setReplacing(true), setErr(null))}>
-              Replace
-            </button>
+            {status.source !== "demo" && (
+              <button type="button" className="btn" onClick={() => (setReplacing(true), setErr(null))}>
+                Replace
+              </button>
+            )}
             {status.source === "saved" && (
               <button type="button" className="btn g" style={{ color: "#B3261E" }} onClick={() => void remove()}>
                 Remove
@@ -856,6 +862,23 @@ function VoiceCard({ api, onChanged }: { api: Api; onChanged: () => void }) {
         <div className="banner bad" role="alert">
           {err}
         </div>
+      )}
+      {status?.set && (
+        <label className="field" style={{ maxWidth: 420 }}>
+          Microphone
+          <select className="input" value={mic || mics[0]?.id || ""} onChange={(e) => (setMic(e.target.value), saveMicrophone(e.target.value))} disabled={!mics.length}>
+            {mics.length ? (
+              mics.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))
+            ) : (
+              <option value="">No microphone found</option>
+            )}
+          </select>
+          <span className="hint">Kept in this browser. The names appear once you have allowed MeritAI to use the microphone.</span>
+        </label>
       )}
       <div className="banner info" style={{ fontSize: 13, padding: "10px 12px" }}>
         <Icon name="lock" size={16} />

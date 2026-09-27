@@ -1,5 +1,5 @@
 import type { Engine, EngineEvent } from "../engine/types";
-import type { LiveSession, TranscriptDelta } from "./liveSession";
+import type { LiveLike, TranscriptDelta } from "./liveSession";
 
 /**
  * Connects GPT-Live's client delegations to the Codex HR assistant.
@@ -35,7 +35,7 @@ export class VoiceBridge {
   private queued: string[] = [];
 
   constructor(
-    private readonly live: LiveSession,
+    private readonly live: LiveLike,
     private readonly engine: Engine,
     private readonly cb: BridgeCallbacks,
   ) {

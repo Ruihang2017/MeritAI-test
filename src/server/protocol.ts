@@ -75,6 +75,10 @@ export interface Methods {
   /** Checks the key with OpenAI and keeps it encrypted on this computer. */
   setVoiceKey: { params: { key: string }; result: { ok: true; status: VoiceKeyStatus } | { ok: false; error: string } };
   removeVoiceKey: { params: void; result: VoiceKeyStatus };
+  /** Voice in the browser: the page sends its microphone (PCM16 mono 24 kHz, base64, about 100 ms a message) and plays the `voiceAudio` events. Only the page that started it. */
+  voiceStart: { params: void; result: { started: true } };
+  voiceAudio: { params: { pcm: string }; result: null };
+  voiceStop: { params: void; result: null };
   /** Starts the ChatGPT sign-in; the code arrives as a `login` event, the result when it finishes. */
   login: { params: void; result: { ok: boolean; error?: string } };
   openFile: { params: { path: string }; result: { ok: true } | { ok: false; error: string } };
@@ -108,7 +112,7 @@ export interface ShellState {
   threadId: string | null;
   from: SessionFrom | null;
   /** Voice needs an OpenAI API key (Settings); without one the microphone is off. */
-  voice: { keySet: boolean };
+  voice: { keySet: boolean; on: boolean };
   /** Overdue and this-week counts for the Attention button and badges. */
   attention: { overdue: number; soon: number };
   /** Set when the last reply hit the ChatGPT plan usage limit (cleared by the next reply that works). */
@@ -182,6 +186,17 @@ export type ServerEvent =
   | { event: "confirmWithdrawn"; id: string }
   | { event: "progress"; message: string }
   /** Sign-in: open `url` and enter `code` (parsed from the engine prompt; `message` is the full text). */
-  | { event: "login"; url: string | null; code: string | null; message: string };
+  | { event: "login"; url: string | null; code: string | null; message: string }
+  | VoiceEvent
+  /** Voice audio to play, only to the page that started voice (PCM16 mono 24 kHz, base64). */
+  | { event: "voiceAudio"; pcm: string };
+
+/** Voice in the browser (the startVoice handlers). A spoken request's reply arrives as `turn` events with its turnId. */
+export type VoiceEvent =
+  | { event: "voice"; kind: "request"; text: string; mode: "new" | "steer"; turnId: string }
+  | { event: "voice"; kind: "said"; text: string }
+  | { event: "voice"; kind: "skipped"; req: ConfirmRequest; turnId: string | null }
+  | { event: "voice"; kind: "error"; message: string }
+  | { event: "voice"; kind: "ended"; reason: string; byUser: boolean; billedSeconds: number };
 
 export type ServerMessage = { id: number; result: unknown } | { id: number; error: string } | ServerEvent;

@@ -43,6 +43,9 @@ export function Dock(p: {
   draft: string | null;
   floating: boolean;
   hidden: boolean;
+  /** Voice is on (its bar is on Conversations): no typing here meanwhile. */
+  voiceOn: boolean;
+  onEndVoice: () => void;
   onDraftUsed: () => void;
   onSend: (text: string, skill?: string, attachments?: string[]) => void;
   onStop: () => void;
@@ -229,6 +232,20 @@ export function Dock(p: {
       </div>
 
       <div className="dock-composer">
+        {p.voiceOn ? (
+          <div className="banner info" style={{ alignItems: "center" }}>
+            <Icon name="mic" size={16} />
+            <span className="grow">
+              <b>Voice is on.</b> Its controls are on Conversations.
+            </span>
+            <button type="button" className="btn sm" onClick={p.onFull}>
+              Open
+            </button>
+            <button type="button" className="btn sm" onClick={p.onEndVoice}>
+              End voice
+            </button>
+          </div>
+        ) : (
         <Composer
           ref={composer}
           id="dock-msg"
@@ -243,6 +260,7 @@ export function Dock(p: {
           pending={p.state?.attachments ?? []}
           placeholder={empty ? "Ask MeritAI anything" : "Ask a follow-up"}
         />
+        )}
         <div className="foot">Replies can be wrong. Only a receipt means something was saved.</div>
       </div>
 

@@ -29,11 +29,12 @@ import { documentTiming, nextKeyDate, remindersFor, todayLocal, type Reminder } 
 import { looksLikePayCalculation, PAY_GUARD_WARNING } from "../business/payGuard";
 import { formatCriteria, ingestJob, jdFromFolder, JD_NAME, proposeCriteria, purgeMissingJobs, screenJob, type IngestSummary, type Progress, type ScreenResult } from "../screening/pipeline";
 import { chatSummary, saveReports } from "../screening/report";
-import { LiveSession } from "../voice/liveSession";
+import { LiveSession, type LiveLike } from "../voice/liveSession";
 import { VoiceBridge } from "../voice/bridge";
 import { Microphone, Speaker, ffmpegAvailable, listMicrophones } from "../voice/audio";
 import { extractText } from "../files/parse";
 import { checkWithOpenAI, keyFormatProblem, VoiceKeyStore, type VoiceKeyStatus } from "../voice/keyStore";
+import { FakeLiveSession } from "../voice/fakeLive";
 
 /**
  * The application layer: everything a user interface needs, with no terminal code.
@@ -194,6 +195,7 @@ export class AssistantApp {
   private recorded = false;
   private pending: { notes: string[]; images: string[] } = { notes: [], images: [] };
   private voice: VoiceController | null = null;
+  private readonly engineKind: "codex" | "fake";
   private voiceHandlers: VoiceHandlers | null = null;
   private readonly confirms = new PendingConfirms();
 
@@ -226,6 +228,7 @@ export class AssistantApp {
       return this.confirms.ask(opts.ui.confirm, req);
     };
     this.confirm = confirm;
+    this.engineKind = opts.engine ?? "codex";
     this.a = createAssistant({
       userId: opts.userId,
       confirm,
@@ -1006,6 +1009,8 @@ export class AssistantApp {
   }
 
   voiceKeyStatus(): VoiceKeyStatus {
+    // The demo engine's voice is a stand-in that needs no key.
+    if (this.engineKind === "fake") return { set: true, last4: null, checkedAt: null, source: "demo" };
     return this.keyStore().status(this.envVoiceKey());
   }
 
@@ -1037,8 +1042,10 @@ export class AssistantApp {
    */
   async startVoice(h: VoiceHandlers, audio?: VoiceAudio): Promise<VoiceController> {
     if (this.voice) throw new Error("voice is already on");
-    const apiKey = (await this.keyStore().load()) ?? this.envVoiceKey();
-    if (!apiKey) throw new Error("voice needs an OpenAI API key: add it in Settings, or VOICE_OPENAI_API_KEY in .env (see .env.example)");
+    // The demo engine uses a stand-in voice (src/voice/fakeLive.ts): no key, no cost.
+    const fake = this.engineKind === "fake";
+    const apiKey = fake ? "" : ((await this.keyStore().load()) ?? this.envVoiceKey() ?? "");
+    if (!fake && !apiKey) throw new Error("voice needs an OpenAI API key: add it in Settings, or VOICE_OPENAI_API_KEY in .env (see .env.example)");
     let device = "custom audio";
     if (!audio) {
       if (!ffmpegAvailable()) throw new Error("voice needs ffmpeg and ffplay on PATH");
@@ -1049,12 +1056,14 @@ export class AssistantApp {
     }
     const { source, sink } = audio;
     const engine = this.a.engine;
-    const live = new LiveSession({
-      apiKey,
-      model: process.env.VOICE_MODEL || "gpt-live-1",
-      voice: process.env.VOICE_NAME || "gleam",
-      instructions: readFileSync(join(ROOT, "prompts/voice.md"), "utf8"),
-    });
+    const live: LiveLike = fake
+      ? new FakeLiveSession()
+      : new LiveSession({
+          apiKey,
+          model: process.env.VOICE_MODEL || "gpt-live-1",
+          voice: process.env.VOICE_NAME || "gleam",
+          instructions: readFileSync(join(ROOT, "prompts/voice.md"), "utf8"),
+        });
 
     let said = "";
     let seconds = 0;

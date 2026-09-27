@@ -11,6 +11,8 @@ import { Icon } from "./components/Icon";
 import { AppBar, AttentionPanel, Nav, type AskButton, type Page } from "./components/Shell";
 import { Dock, type DockNotice } from "./components/Dock";
 import { FROM_PROFILE, fromReminder, type Ask } from "./ask";
+import { BrowserVoice, savedMicrophone } from "./voice";
+import type { VoiceLevels, VoiceNote, VoiceUi } from "./components/Voice";
 import { StaffPage } from "./components/Staff";
 import { FilesPage, MemoryPage, ProfilePage, SettingsPage } from "./components/Pages";
 import { HiringPage } from "./components/Hiring";
@@ -109,6 +111,88 @@ function Shell({ api }: { api: Api }) {
   /** Bumped after a reply or an answered question: open pages reload what the adviser may have changed. */
   const [refreshKey, setRefreshKey] = useState(0);
   const [hiringJob, setHiringJob] = useState<{ job: string } | null>(null);
+
+  // ---- voice in the browser (design: Voice, VoiceStates): the microphone and speaker here, GPT-Live on the server
+  const [voiceUi, setVoiceUi] = useState<VoiceUi | null>(null);
+  const [voiceNote, setVoiceNote] = useState<VoiceNote | null>(null);
+  const bv = useRef<BrowserVoice | null>(null);
+  const voiceLive = useRef(false);
+  const levels = useRef<VoiceLevels>({ mic: 0, out: 0, outAt: 0 });
+  const newBrowserVoice = () =>
+    new BrowserVoice(
+      (pcm, lvl) => {
+        levels.current.mic = lvl;
+        if (voiceLive.current) void api.call("voiceAudio", { pcm }).catch(() => null);
+      },
+      (lvl) => {
+        levels.current.out = lvl;
+        if (lvl > 0.04) levels.current.outAt = Date.now();
+      },
+    );
+  const stopBrowserVoice = () => {
+    bv.current?.stop();
+    bv.current = null;
+    voiceLive.current = false;
+  };
+  const startVoice = async () => {
+    if (bv.current) return;
+    const micId = savedMicrophone();
+    setVoiceNote(null);
+    setPage("conversations");
+    setVoiceUi({ started: false, muted: false, working: false, line: "Getting the microphone and voice ready", startedAt: Date.now(), micId });
+    const b = newBrowserVoice();
+    bv.current = b;
+    try {
+      await b.start(micId || undefined);
+    } catch (e) {
+      stopBrowserVoice();
+      setVoiceUi(null);
+      setVoiceNote({ kind: "mic", message: (e as Error).message });
+      return;
+    }
+    try {
+      await api.call("voiceStart");
+      voiceLive.current = true;
+      setVoiceUi((v) => (v ? { ...v, started: true, line: "Listening…", startedAt: Date.now() } : v));
+      void refresh();
+    } catch (e) {
+      stopBrowserVoice();
+      setVoiceUi(null);
+      setVoiceNote({ kind: "service", message: (e as Error).message.replace(/^could not start voice: /, "") });
+    }
+  };
+  const switchMic = async (id: string) => {
+    const old = bv.current;
+    if (!old) return;
+    const b = newBrowserVoice();
+    b.muted = old.muted;
+    try {
+      await b.start(id);
+      old.stop();
+      bv.current = b;
+      setVoiceUi((v) => (v ? { ...v, micId: id } : v));
+    } catch (e) {
+      b.stop();
+      setError(`That microphone didn't start: ${(e as Error).message.replace(/^mic: /, "")}`);
+    }
+  };
+  const voiceProps = {
+    ui: voiceUi,
+    levels,
+    note: voiceNote,
+    keySet: state?.voice.keySet ?? false,
+    demo: state?.engine === "fake",
+    onStart: () => void startVoice(),
+    onMute: () => {
+      if (!bv.current) return;
+      bv.current.muted = !bv.current.muted;
+      setVoiceUi((v) => (v ? { ...v, muted: !v.muted } : v));
+    },
+    onEnd: () => void api.call("voiceStop").catch(() => null),
+    onMic: (id: string) => void switchMic(id),
+    onSettings: () => setPage("settings"),
+    onCloseNote: () => setVoiceNote(null),
+  };
   const dockable = page !== "conversations" && page !== "all";
   const showDock = dockable && dockOpen;
   const dockVisible = useRef(showDock);
@@ -175,6 +259,7 @@ function Shell({ api }: { api: Api }) {
             const followed = turnsRef.current.find((t) => t.id === m.turnId && !t.user.text && !t.user.attachments.length);
             if (followed) api.call("transcript").then((entries) => entries.length && setTurns(turnsFromTranscript(entries, followed.at)), () => null);
             setRefreshKey((k) => k + 1);
+            setVoiceUi((v) => (v ? { ...v, working: false } : v));
             void refresh();
             break;
           }
@@ -208,6 +293,36 @@ function Shell({ api }: { api: Api }) {
             break;
           case "login":
             setLogin({ url: m.url, code: m.code, message: m.message });
+            break;
+          case "voiceAudio":
+            bv.current?.play(m.pcm);
+            break;
+          case "voice":
+            switch (m.kind) {
+              case "request":
+                setTurns((ts) =>
+                  m.mode === "new" || !ts.some((t) => t.id === m.turnId)
+                    ? [...ts, { id: m.turnId, at: now(), user: { text: m.text, attachments: [] }, steps: [], blocks: [], status: "running", voice: true }]
+                    : [...ts, { id: crypto.randomUUID(), at: now(), user: { text: m.text, attachments: [] }, steps: [], blocks: [], status: "completed", voice: true, userOnly: true }],
+                );
+                setVoiceUi((v) => (v ? { ...v, working: true, line: `“${m.text.trim()}”` } : v));
+                break;
+              case "said":
+                setVoiceUi((v) => (v ? { ...v, line: `“${m.text}”` } : v));
+                break;
+              case "skipped":
+                if (m.turnId) setTurns((ts) => ts.map((t) => (t.id === m.turnId ? { ...t, blocks: [...t.blocks, { kind: "skipped", req: m.req }] } : t)));
+                break;
+              case "error":
+                setVoiceUi((v) => (v ? { ...v, line: m.message } : v));
+                break;
+              case "ended":
+                stopBrowserVoice();
+                setVoiceUi(null);
+                setVoiceNote({ kind: "ended", seconds: m.billedSeconds, byUser: m.byUser, reason: m.reason });
+                void refresh();
+                break;
+            }
             break;
         }
       }),
@@ -402,6 +517,8 @@ function Shell({ api }: { api: Api }) {
             onDraftUsed={() => setDraft(null)}
             from={convFrom}
             onGoFrom={goFrom}
+            voice={voiceProps}
+            onRedo={(t) => setDraft(t)}
           />
         )}
         {page === "all" && <AllConversations api={api} onResume={(id) => void resume(id)} onNew={() => void newConversation()} />}
@@ -439,6 +556,8 @@ function Shell({ api }: { api: Api }) {
             onFull={() => setPage("conversations")}
             onClose={() => setDockOpen(false)}
             onGoFrom={goFrom}
+            voiceOn={voiceUi !== null}
+            onEndVoice={voiceProps.onEnd}
           />
         )}
         {showPanel && <AttentionPanel reminders={reminders} rulesChecked={state?.rulesChecked ?? null} onAsk={(r) => void send(`Help me with this: ${r.title}`)} onOpenEmployee={openEmployee} />}

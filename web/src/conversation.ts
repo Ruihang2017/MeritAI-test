@@ -8,7 +8,9 @@ export type Block =
   | { kind: "warning"; message: string }
   | { kind: "unverified"; urls: string[] }
   | { kind: "error"; message: string }
-  | { kind: "limit"; resetAt: string | null };
+  | { kind: "limit"; resetAt: string | null }
+  /** A change the adviser needed an OK for during voice: declined then, to be done in the chat. */
+  | { kind: "skipped"; req: ConfirmRequest };
 
 export interface Step {
   summary: string;
@@ -23,6 +25,10 @@ export interface Turn {
   steps: Step[];
   blocks: Block[];
   status: "running" | "completed" | "interrupted" | "failed";
+  /** Spoken (voice in the browser). */
+  voice?: boolean;
+  /** Only the owner's words, added by voice to the reply already running. */
+  userOnly?: boolean;
 }
 
 /** The tool activity that confirms a save, per kind of question (the tools' own display lines). */

@@ -1,7 +1,8 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
-import type { AppEvent, AssistantApp } from "../app/app";
+import { EventEmitter } from "node:events";
+import type { AppEvent, AssistantApp, VoiceController } from "../app/app";
 import type { Confirm, ConfirmRequest } from "../engine/types";
 import { DOCUMENTS } from "../business/register";
 import { LEAVING_REASONS } from "../business/leaving";
@@ -29,6 +30,10 @@ export class UiSession {
   private readonly origin = new AsyncLocalStorage<{ turnId: string | null }>();
   private turn: string | null = null;
   private op: string | null = null;
+  /** The connection a request came from (voice audio goes only to the page that started voice). */
+  private readonly caller = new AsyncLocalStorage<((ev: ServerEvent) => void) | null>();
+  private voice: { ctl: VoiceController; source: PushSource; owner: (ev: ServerEvent) => void } | null = null;
+  private voiceTurn: string | null = null;
   private tier: "fast" | "standard" | null = null;
   private limit: { resetAt: string | null } | null = null;
 
@@ -69,15 +74,21 @@ export class UiSession {
   }
 
   /** Runs one request. Unknown methods and bad params are refused. */
-  async handle(msg: ClientMessage): Promise<unknown> {
+  async handle(msg: ClientMessage, from?: (ev: ServerEvent) => void): Promise<unknown> {
     const fn = this.handlers[msg.method as Method] as ((p: unknown) => Promise<unknown>) | undefined;
     if (!fn || !Object.hasOwn(this.handlers, msg.method)) throw new Error(`unknown method: ${String(msg.method)}`);
     // Questions asked while handling a request (delete, screening criteria, imports) are not part of a reply.
-    return this.origin.run({ turnId: null }, () => fn(msg.params));
+    return this.caller.run(from ?? null, () => this.origin.run({ turnId: null }, () => fn(msg.params)));
+  }
+
+  /** A page closed: voice it started stops (its microphone and speaker are gone). */
+  disconnected(from: (ev: ServerEvent) => void): void {
+    if (this.voice?.owner === from) this.voice.ctl.stop("the page was closed");
   }
 
   /** What is running now, if anything (a reply or another operation). */
   private running(): string | null {
+    if (this.voice) return "Voice is on: end it first.";
     if (this.turn || this.app.isBusy()) return "A reply is still running.";
     if (this.op) return `${this.op} is still running.`;
     return null;
@@ -237,6 +248,49 @@ export class UiSession {
         else this.app.setFilesRoot(str(p?.path, "path", 1000));
         return this.settings();
       }),
+    voiceStart: async () => {
+      const owner = this.caller.getStore();
+      if (!owner) throw new Error("Voice needs the browser page.");
+      return this.exclusive("Starting voice", async () => {
+        const source = new PushSource();
+        const sink = { start() {}, stop() {}, play: (pcm: Buffer) => owner({ event: "voiceAudio", pcm: pcm.toString("base64") }) };
+        const ctl = await this.app.startVoice(
+          {
+            onRequest: (text, mode) => {
+              if (mode === "new" || !this.voiceTurn) this.voiceTurn = randomUUID();
+              this.emit({ event: "voice", kind: "request", text, mode, turnId: this.voiceTurn });
+            },
+            onEvent: (ev) => {
+              const id = this.voiceTurn;
+              if (!id) return;
+              this.emit({ event: "turn", turnId: id, ev });
+              if (ev.type === "turn_end") this.emit({ event: "turnDone", turnId: id });
+            },
+            onSaid: (text) => this.emit({ event: "voice", kind: "said", text }),
+            onConfirmSkipped: (req) => this.emit({ event: "voice", kind: "skipped", req, turnId: this.voiceTurn }),
+            onError: (message) => this.emit({ event: "voice", kind: "error", message }),
+            onEnded: (info) => {
+              this.voice = null;
+              this.voiceTurn = null;
+              this.emit({ event: "voice", kind: "ended", ...info });
+            },
+          },
+          { source, sink },
+        );
+        this.voice = { ctl, source, owner };
+        return { started: true as const };
+      });
+    },
+    voiceAudio: async (p) => {
+      const v = this.voice;
+      if (!v || this.caller.getStore() !== v.owner) return null;
+      v.source.push(Buffer.from(str(p?.pcm, "pcm", 40_000), "base64"));
+      return null;
+    },
+    voiceStop: async () => {
+      this.voice?.ctl.stop();
+      return null;
+    },
     voiceKey: async () => this.app.voiceKeyStatus(),
     setVoiceKey: async (p) => this.app.setVoiceKey(str(p?.key, "key", 400)),
     removeVoiceKey: async () => this.app.removeVoiceKey(),
@@ -316,7 +370,7 @@ export class UiSession {
       title: rec?.title ?? null,
       threadId: threadId ?? null,
       from: rec?.from ?? null,
-      voice: { keySet: this.app.voiceKeyStatus().set },
+      voice: { keySet: this.app.voiceKeyStatus().set, on: this.voice !== null },
       attention: this.app.attentionSummary(),
       usageLimit: this.limit,
       attachments: this.app.pendingAttachments(),
@@ -350,6 +404,20 @@ function sessionFrom(v: unknown): SessionFrom {
     out.employeeId = o.employeeId as number;
   }
   return out;
+}
+
+/** The browser's microphone, pushed in by voiceAudio messages. */
+class PushSource extends EventEmitter {
+  private on_ = false;
+  start(): void {
+    this.on_ = true;
+  }
+  stop(): void {
+    this.on_ = false;
+  }
+  push(pcm: Buffer): void {
+    if (this.on_) this.emit("chunk", pcm);
+  }
 }
 
 function str(v: unknown, name: string, max: number): string {

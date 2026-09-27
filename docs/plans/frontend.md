@@ -1,10 +1,9 @@
 # Frontend: what is left (MeritAI)
 
-Status: M1–M4 built on 2026-09-27 on branch `ui/m1` (as built: `docs/ui.md`). Open: M5 below, and the owner's review of the browser UI.
+Status: M1–M4 built on 2026-09-27 on branch `ui/m1`, M5a (voice in the browser) on 2026-09-27 (as built: `docs/ui.md`). Open: M5b below.
 
 | # | Scope | Notes |
 |---|---|---|
-| M5a | Voice in the browser: the microphone and speaker as the `audio` source and sink of `startVoice` (PCM16 24 kHz through the WebSocket), the voice states of the design (listening, working, ended, not saved during voice) | Paid API (GPT-Live): one test run only with the owner's OK. Voice mute needs app support (the voice API has only stop) |
 | M5b | Desktop shell: Electron (runs `src/server` in its main process) or Tauri (Node as a sidecar); the web app is reused as is | Owner decision after using the browser version |
 
 
@@ -13,6 +12,5 @@ Status: M1–M4 built on 2026-09-27 on branch `ui/m1` (as built: `docs/ui.md`). 
 | Item | Why it waits |
 |---|---|
 | Cancel during sign-in | The engine's device-code login cannot be cancelled yet (`account/login/cancel` exists in the protocol but is not wired); today the page waits until sign-in finishes or fails |
-| Voice mute | The voice API has only stop; mute needs app support (with M5a) |
 | The side panel knows what is open | MeritAI would know the employee, job, candidate or file open on the page, shown as a removable chip ("Looking at: Marco Silva · Staff"; design: Later board). Kept for later by the owner (2026-09-27): each page would need to report what is open, and a safe way to send it with the message. Today it knows only what a button sends |
 | Dark mode | Not in the design; needs dark tokens designed first |

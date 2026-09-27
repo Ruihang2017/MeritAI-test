@@ -30,6 +30,8 @@ const PATHS = {
   down: "M6 9l6 6 6-6",
   goto: "M7 17L17 7M7 7h10v10",
   up: "M7 15l5-5 5 5",
+  mic: "M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3zM5 10v1a7 7 0 0 0 14 0v-1M12 18v4",
+  micOff: "M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3zM5 10v1a7 7 0 0 0 14 0v-1M12 18v4M3 3l18 18",
 } as const;
 
 export type IconName = keyof typeof PATHS;

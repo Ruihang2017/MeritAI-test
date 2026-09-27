@@ -798,6 +798,51 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   ], JSON.stringify({ profile, badProfile, dup, pii, extend, leftViaUpdate, badDate, badReason, declined }).slice(0, 700));
 }
 
+// ------------------------------------------------------------------ voice in the browser (fake engine + stand-in voice: free)
+{
+  process.env.FX_FAKE_DELAY_MS = "2";
+  const f = ensureFolders(join(TMP, "voice-files"));
+  const session = new UiSession({ engine: "fake" });
+  const app = new AssistantApp({ userId: "unit-voice", memoryRoot: join(TMP, "voice-mem"), filesRoot: f.root, format: "markdown", engine: "fake", ui: { confirm: session.confirm } });
+  session.attach(app);
+  await app.start();
+  await app.openSession();
+  const mine: ServerEvent[] = [];
+  const other: ServerEvent[] = [];
+  const me = (e: ServerEvent) => mine.push(e);
+  session.subscribe(me);
+  session.subscribe((e) => other.push(e));
+  const started = await session.handle({ id: 1, method: "voiceStart", params: undefined }, me);
+  const busyWhileOn = await session.handle({ id: 2, method: "send", params: { text: "hi", turnId: "vx" } }, me).then(() => false, () => true);
+  const onState = ((await session.handle({ id: 3, method: "state", params: undefined }, me)) as ShellState).voice.on;
+  // About a second of speech, then a pause: the stand-in voice "hears" its first scripted request.
+  const loud = Buffer.alloc(4800);
+  for (let i = 0; i < 2400; i++) loud.writeInt16LE(i % 2 ? 6000 : -6000, i * 2);
+  const quiet = Buffer.alloc(4800);
+  for (let i = 0; i < 10; i++) await session.handle({ id: 10 + i, method: "voiceAudio", params: { pcm: loud.toString("base64") } }, me);
+  for (let i = 0; i < 10; i++) await session.handle({ id: 30 + i, method: "voiceAudio", params: { pcm: quiet.toString("base64") } }, me);
+  const until = (p: () => boolean, ms = 8000) => new Promise<boolean>((ok) => { const t0 = Date.now(); const t = setInterval(() => (p() ? (clearInterval(t), ok(true)) : Date.now() - t0 > ms && (clearInterval(t), ok(false))), 20); });
+  const heard = await until(() => mine.some((e) => e.event === "turnDone"));
+  const request = mine.find((e) => e.event === "voice" && e.kind === "request") as Extract<ServerEvent, { event: "voice"; kind: "request" }> | undefined;
+  const replyEvents = mine.filter((e) => e.event === "turn" && e.turnId === request?.turnId).length;
+  await session.handle({ id: 50, method: "voiceStop", params: undefined }, me);
+  const ended = await until(() => mine.some((e) => e.event === "voice" && e.kind === "ended"));
+  const offState = ((await session.handle({ id: 51, method: "state", params: undefined }, me)) as ShellState).voice.on;
+  // A page that closes stops the voice it started.
+  await session.handle({ id: 52, method: "voiceStart", params: undefined }, me);
+  session.disconnected(me);
+  const endedOnClose = await until(() => mine.filter((e) => e.event === "voice" && e.kind === "ended").length === 2);
+  await app.close();
+  record("voice in the browser (stand-in voice)", [
+    ["starts for the calling page; other work refused while on", (started as { started: boolean }).started && busyWhileOn && onState],
+    ["speech then a pause → a spoken request and its reply as turn events", heard && request?.mode === "new" && /this week/.test(request.text) && replyEvents > 2],
+    ["voice audio only to the page that started it", mine.some((e) => e.event === "voiceAudio") && !other.some((e) => e.event === "voiceAudio")],
+    ["stop → ended, state off", ended && !offState],
+    ["closing the page stops it", endedOnClose],
+    ["demo engine: voice needs no key", app.voiceKeyStatus().set && app.voiceKeyStatus().source === "demo"],
+  ], JSON.stringify(mine.filter((e) => e.event === "voice")).slice(0, 500));
+}
+
 // ------------------------------------------------------------------ round 5 evaluation fixes: first employer, workers comp, TFN payer, WHM, outstanding documents
 {
   const t = (xs: { task: string; source: { url: string } }[]) => xs.map((x) => x.task).join(" | ");

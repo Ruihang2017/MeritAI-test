@@ -14,8 +14,8 @@ export interface VoiceKeyStatus {
   last4: string | null;
   /** When OpenAI last accepted it (saved keys). */
   checkedAt: string | null;
-  /** "env": VOICE_OPENAI_API_KEY in .env (a developer setup), used when no key is saved. */
-  source: "saved" | "env" | null;
+  /** "env": VOICE_OPENAI_API_KEY in .env (a developer setup), used when no key is saved; "demo": the demo engine's stand-in voice, no key. */
+  source: "saved" | "env" | "demo" | null;
 }
 
 interface Stored {
