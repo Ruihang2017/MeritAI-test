@@ -1,10 +1,12 @@
 import type * as React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { JobResults } from "../../../src/app/app";
+import type { JobResults, JobSummary } from "../../../src/app/app";
 import type { Api } from "../api";
 import { Icon } from "./Icon";
 
-type Job = { job: string; files: number; criteria: string };
+const STAGE = { "needs-jd": "Needs job description", criteria: "Criteria to confirm", ready: "Ready to screen", screened: "Screened" } as const;
+
+type Job = JobSummary;
 type Ranked = JobResults["ranked"][number];
 
 const BAND: Record<string, string> = { Strong: "ok", Partial: "warn", Weak: "n", "Not a resume": "n" };
@@ -23,7 +25,9 @@ export function HiringPage({ api, progress, onAsk }: { api: Api; progress: strin
 
   const loadJobs = useCallback(async () => {
     try {
-      const js = await api.call("jobs");
+      // Furthest along first, as in the design: screened, ready, criteria to confirm, no job description.
+      const order = { screened: 0, ready: 1, criteria: 2, "needs-jd": 3 };
+      const js = (await api.call("jobs")).sort((a, b) => order[a.stage] - order[b.stage] || a.job.localeCompare(b.job));
       setJobs(js);
       setSel((s) => s ?? js[0]?.job ?? null);
     } catch (e) {
@@ -120,9 +124,11 @@ export function HiringPage({ api, progress, onAsk }: { api: Api; progress: strin
           {jobs?.map((j) => (
             <button key={j.job} type="button" className={`job${sel === j.job ? " on" : ""}`} onClick={() => (setSel(j.job), setCand(null), setNote(null))}>
               <b className="ellipsis">{j.job}</b>
-              <span className="meta">{j.files} file{j.files === 1 ? "" : "s"}</span>
-              <span className={`pill ${j.criteria.includes("not confirmed") || j.criteria === "none" ? "warn" : "ok"}`} style={{ height: 22 }}>
-                {j.criteria === "none" ? "Needs criteria" : j.criteria.includes("not confirmed") ? "Criteria to confirm" : "Criteria confirmed"}
+              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span className={`pill ${j.stage === "screened" ? "ok" : "warn"}`} style={{ height: 22 }}>
+                  {STAGE[j.stage]}
+                </span>
+                <span className="meta">{j.stage === "needs-jd" ? `${j.files} file${j.files === 1 ? "" : "s"}` : `${j.applications} application${j.applications === 1 ? "" : "s"}`}</span>
               </span>
             </button>
           ))}

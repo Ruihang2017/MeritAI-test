@@ -3,6 +3,7 @@ import { basename, extname, join } from "node:path";
 import { createAssistant, ROOT, type Assistant } from "../assistant";
 import type { ReplyFormat } from "../basePrompt";
 import { allCodexHomes } from "../engine/codexHome";
+import { now } from "../clock";
 import { PendingConfirms } from "./confirms";
 import { launchCommand, openablePath, spawnLauncher, type Launcher, type OpenResult } from "./launch";
 import { stageUploads, type Upload } from "./uploads";
@@ -23,13 +24,14 @@ import { checkDocuments, checkEmployeeChanges, checkNewEmployee, fixedTermEndCha
 import { checkProfilePatch } from "../business/tools";
 import { newStarterChecklist, type ChecklistItem, type EmploymentType } from "../business/onboarding";
 import { isApprenticeRole, leavingChecklist, LEAVING_REASONS, smallBusinessOf, type LeavingItem, type LeavingReason } from "../business/leaving";
-import { documentTiming, remindersFor, todayLocal, type Reminder } from "../business/reminders";
+import { documentTiming, nextKeyDate, remindersFor, todayLocal, type Reminder } from "../business/reminders";
 import { looksLikePayCalculation, PAY_GUARD_WARNING } from "../business/payGuard";
-import { formatCriteria, ingestJob, jdFromFolder, proposeCriteria, purgeMissingJobs, screenJob, type IngestSummary, type Progress, type ScreenResult } from "../screening/pipeline";
+import { formatCriteria, ingestJob, jdFromFolder, JD_NAME, proposeCriteria, purgeMissingJobs, screenJob, type IngestSummary, type Progress, type ScreenResult } from "../screening/pipeline";
 import { chatSummary, saveReports } from "../screening/report";
 import { LiveSession } from "../voice/liveSession";
 import { VoiceBridge } from "../voice/bridge";
 import { Microphone, Speaker, ffmpegAvailable, listMicrophones } from "../voice/audio";
+import { extractText } from "../files/parse";
 
 /**
  * The application layer: everything a user interface needs, with no terminal code.
@@ -92,7 +94,7 @@ export const SOON_DAYS = 7;
 
 /** An employee with what a Staff page shows next to them. */
 export type StaffOverviewRow = Employee & {
-  /** The earliest reminder for this person (or their last day once they left). */
+  /** The person's next key date (overdue paperwork, start, last day, probation or contract end, visa expiry), or when they left. */
   next: { text: string; due: string; tone: "red" | "amber" | "n" } | null;
   /** Starting documents expected for them, recorded or not (with when each is due). */
   documentsExpected: { id: DocumentId; label: string; timing: string; recorded: string | null }[];
@@ -110,6 +112,21 @@ const addDaysIso = (iso: string, days: number) => {
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 };
+
+/** A job on the Hiring page: where it is (no JD yet, criteria to confirm, ready, screened) and its counts. */
+export interface JobSummary {
+  job: string;
+  /** All files in the job folder (JD included). */
+  files: number;
+  /** "v2 confirmed", "v1 not confirmed" or "none". */
+  criteria: string;
+  /** The job description file, if there is one. */
+  jd: string | null;
+  applications: number;
+  /** Applications screened against the confirmed criteria. */
+  screened: number;
+  stage: "needs-jd" | "criteria" | "ready" | "screened";
+}
 
 /** File types the Open button may start (documents and images). */
 const OPENABLE = [".pdf", ".docx", ".doc", ".xlsx", ".xls", ".csv", ".md", ".txt", ".rtf", ".png", ".jpg", ".jpeg", ".gif", ".webp"];
@@ -357,7 +374,7 @@ export class AssistantApp {
 
   private recordSession(title: string): void {
     if (this.recorded || !this.session) return;
-    this.a.mem.recordSession({ threadId: this.session.threadId, title: title.slice(0, 60), startedAt: new Date().toISOString() });
+    this.a.mem.recordSession({ threadId: this.session.threadId, title: title.slice(0, 60), startedAt: now().toISOString() });
     this.recorded = true;
   }
 
@@ -506,18 +523,9 @@ export class AssistantApp {
 
   /** The register for a Staff page: each person's next reminder and their starting documents with timing. */
   staffOverview(includeLeft = false): StaffOverviewRow[] {
-    const rs = this.reminders();
-    const soon = addDaysIso(todayLocal(), SOON_DAYS);
+    const today = todayLocal();
     return this.staff(includeLeft).map((e) => {
-      const mine = rs.filter((r) => r.employeeId === e.id).sort((a, b) => a.due.localeCompare(b.due))[0];
-      const next: StaffOverviewRow["next"] =
-        e.status === "left"
-          ? e.leftDate
-            ? { text: `Left ${e.leftDate}`, due: e.leftDate, tone: "n" }
-            : null
-          : mine
-            ? { text: withoutName(mine.title, e.name), due: mine.due, tone: mine.overdue ? "red" : mine.due <= soon ? "amber" : "n" }
-            : null;
+      const next = nextKeyDate(e, today, SOON_DAYS);
       const done = new Map(e.documents.map((d) => [d.id, d.date]));
       const timing = documentTiming(e.startDate);
       return { ...e, next, documentsExpected: expectedDocuments(e).map((id) => ({ id, label: DOCUMENTS[id], timing: timing[id], recorded: done.get(id) ?? null })) };
@@ -615,18 +623,34 @@ export class AssistantApp {
     return { folders: f, inbox: listInbox(f) };
   }
 
-  /** Everything a Files page lists: Inbox, Outbox, Policies (with titles) and jobs. */
-  workspaceFiles(): {
+  /** Everything a Files page lists: Inbox, Outbox (drafts marked), Policies (with titles) and jobs. */
+  async workspaceFiles(): Promise<{
     root: string;
     inbox: FolderEntry[];
-    outbox: FolderEntry[];
+    outbox: (FolderEntry & { draft: boolean })[];
     policies: (FolderEntry & { title: string; description: string })[];
     jobs: { job: string; files: number; criteria: string; path: string }[];
-  } {
+  }> {
     const f = this.folders();
     const meta = new Map(listPolicies(f).map((p) => [p.id, p]));
     const policies = listFolder(f.policies).map((e) => ({ ...e, title: meta.get(e.name)?.title ?? e.name, description: meta.get(e.name)?.description ?? "" }));
-    return { root: f.root, inbox: listFolder(f.inbox), outbox: listFolder(f.outbox), policies, jobs: this.jobs().map((j) => ({ ...j, path: jobDir(f, j.job) })) };
+    const outbox = await Promise.all(listFolder(f.outbox).map(async (e) => ({ ...e, draft: await this.isDraft(e.path, e.modified, e.readable) })));
+    return { root: f.root, inbox: listFolder(f.inbox), outbox, policies, jobs: this.jobs().map((j) => ({ ...j, path: jobDir(f, j.job) })) };
+  }
+
+  private readonly drafts = new Map<string, boolean>();
+
+  /** Whether a saved document starts with the DRAFT line (decision letters do); cached per file version. */
+  private async isDraft(path: string, modified: string, readable: boolean): Promise<boolean> {
+    if (!readable) return false;
+    const key = `${path}|${modified}`;
+    let draft = this.drafts.get(key);
+    if (draft === undefined) {
+      const text = await extractText(path).then((r) => r.text, () => "");
+      draft = /^\s*(\*\*)?DRAFT\b/.test(text);
+      this.drafts.set(key, draft);
+    }
+    return draft;
   }
 
   /** Opens a workspace file (or folder) with the system's default app, e.g. a saved report. */
@@ -673,13 +697,19 @@ export class AssistantApp {
     return this.folders();
   }
 
-  jobs(): { job: string; files: number; criteria: string }[] {
+  jobs(): JobSummary[] {
     const f = this.folders();
+    const cat = this.a.catalog();
     const jobs = listJobs(f);
-    purgeMissingJobs(this.a.catalog(), jobs);
+    purgeMissingJobs(cat, jobs);
     return jobs.map((j) => {
-      const r = this.a.catalog().latestRubric(j);
-      return { job: j, files: walk(jobDir(f, j)).files.length, criteria: r ? `v${r.version}${r.confirmed ? " confirmed" : " not confirmed"}` : "none" };
+      const r = cat.latestRubric(j);
+      const files = walk(jobDir(f, j)).files;
+      const jd = files.find((x) => !x.rel.includes("/") && JD_NAME.test(x.rel))?.rel ?? null;
+      const screened = r?.confirmed ? cat.applications(j).filter((a) => a.status === "ok" && cat.getEvaluation(a.hash, j, r.version)).length : 0;
+      const applications = files.length - (jd ? 1 : 0);
+      const stage: JobSummary["stage"] = !jd && !r ? "needs-jd" : !r?.confirmed ? "criteria" : screened ? "screened" : "ready";
+      return { job: j, files: files.length, criteria: r ? `v${r.version}${r.confirmed ? " confirmed" : " not confirmed"}` : "none", jd, applications, screened, stage };
     });
   }
 

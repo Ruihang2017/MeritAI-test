@@ -4,7 +4,7 @@
  * server pushes events (reply streaming, confirmation questions, progress).
  * Type-only: the web app imports these types, never server code.
  */
-import type { AppEvent, AttachOutcome, ChecklistItem, FormNote, FormResult, LeavingItem, LeavingReason, JobResults, ScreenOutcome, StaffOverviewRow } from "../app/app";
+import type { AppEvent, AttachOutcome, ChecklistItem, FormNote, FormResult, LeavingItem, LeavingReason, JobResults, JobSummary, ScreenOutcome, StaffOverviewRow } from "../app/app";
 import type { IngestSummary } from "../screening/pipeline";
 import type { DocumentId, Employee } from "../business/register";
 import type { ConfirmRequest } from "../engine/types";
@@ -40,7 +40,7 @@ export interface Methods {
   markLeft: { params: { id: number; leftDate: string; reason: LeavingReason }; result: FormResult<{ employee: Employee; checklist: LeavingItem[] }> };
   removeEmployee: { params: { id: number }; result: FormResult<{ removed: boolean }> };
   // ---- hiring (M3): screening runs in the app; criteria are confirmed through a `confirm` dialog; progress arrives as events
-  jobs: { params: void; result: { job: string; files: number; criteria: string }[] };
+  jobs: { params: void; result: JobSummary[] };
   createJob: { params: { job: string; jd: UploadFile | null; applications: UploadFile[] }; result: { job: string; summary: IngestSummary; refused: { name: string; reason: string }[] } };
   screen: { params: { job: string }; result: ScreenOutcome };
   screenResults: { params: { job: string }; result: JobResults };
@@ -64,6 +64,12 @@ export type Method = keyof Methods;
 export interface ShellState {
   account: { loggedIn: boolean; description: string };
   engine: "codex" | "fake";
+  /** The demo workspace with the design's sample data (the app bar shows "Sample data"). */
+  sampleData: boolean;
+  /** The app's today (YYYY-MM-DD): the demo runs on the design's date, so the UI's "Today" follows it. */
+  today: string;
+  /** When the reminder rules were last checked against the official pages (YYYY-MM-DD). */
+  rulesChecked: string;
   business: { name: string; needsSetup: boolean };
   /** The workspace folder name (full path in `workspacePath`). */
   workspace: string;
@@ -106,7 +112,7 @@ export interface FileRow {
 export interface WorkspaceFiles {
   root: string;
   inbox: FileRow[];
-  outbox: FileRow[];
+  outbox: (FileRow & { draft: boolean })[];
   policies: (FileRow & { title: string; description: string })[];
   jobs: { job: string; files: number; criteria: string; path: string }[];
 }

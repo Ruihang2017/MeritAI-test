@@ -19,6 +19,7 @@ web/                       browser UI (React + Vite): components per page, token
 src/app/app.ts             AssistantApp: the UI-independent application layer (session flows, attachments, screening, voice, guards); every front end uses it. See docs/architecture.md
 src/app/                   confirms.ts (pending, cancellable confirmations), uploads.ts (attachments as bytes → staging), launch.ts (open / reveal workspace files); form methods for the register and profile live in app.ts
 src/assistant.ts           createAssistant(): the one place the engine, prompts, business profile, policies, memory and tools are wired (the CLI and all tests use it)
+src/clock.ts               the app's today: the system clock, or the design's date in the demo workspace (FX_TODAY); web/src/clock.ts follows it
 src/basePrompt.ts          prompts/base.md for a reply format: plain (as the file is) or markdown (for a UI)
 src/engine/rpc.ts          JSON-RPC over the app-server's stdio
 src/engine/appServer.ts    Engine implementation: threads, streaming, interrupt, client tools, ephemeral runs, resume

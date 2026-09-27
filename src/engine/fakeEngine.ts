@@ -40,7 +40,17 @@ export class FakeEngine implements Engine {
       /** Milliseconds between streamed chunks (0 in tests). */
       delayMs?: number;
     },
-  ) {}
+  ) {
+    // The demo workspace's earlier conversations (scripts/fixtures/demo.ts), as if stored.
+    const file = process.env.FX_FAKE_CONVERSATIONS;
+    if (file && existsSync(file)) {
+      const seeded = JSON.parse(readFileSync(file, "utf8")) as { threadId: string; startedAt: string; messages: TranscriptEntry[] }[];
+      for (const c of seeded) {
+        this.stored.set(c.threadId, new Date(c.startedAt));
+        this.threads.set(c.threadId, c.messages);
+      }
+    }
+  }
 
   async start(): Promise<void> {}
   /** FX_FAKE_SIGNED_OUT=1 starts signed out, to try the first-run sign-in screens. */

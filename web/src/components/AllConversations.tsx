@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { SessionRecord } from "../../../src/memory/store";
 import type { Api } from "../api";
-import { dayLabel } from "../format";
+import { dayLabel, fmtDate } from "../format";
+
+const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 import { Icon } from "./Icon";
+import { now as clockNow } from "../clock";
 
 /** All stored conversations (design board "Conversations"): search, grouped by day, click to continue. */
 export function AllConversations({ api, onResume, onNew }: { api: Api; onResume: (threadId: string) => void; onNew: () => void }) {
@@ -13,7 +16,7 @@ export function AllConversations({ api, onResume, onNew }: { api: Api; onResume:
     api.call("history").then(setItems, (e: Error) => setError(e.message));
   }, [api]);
   const groups = useMemo(() => {
-    const now = new Date();
+    const now = clockNow();
     const week = now.getTime() - 7 * 86_400_000;
     const out: { title: string; items: SessionRecord[] }[] = [
       { title: "Today", items: [] },
@@ -66,7 +69,7 @@ export function AllConversations({ api, onResume, onNew }: { api: Api; onResume:
                 <button key={r.threadId} type="button" className="conv-row" style={i ? undefined : { borderTop: 0 }} onClick={() => onResume(r.threadId)}>
                   <Icon name="conversations" size={18} />
                   <span className="grow ellipsis">{r.title}</span>
-                  <span className="meta">{g.title === "Today" ? new Date(r.startedAt).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" }).toLowerCase() : dayLabel(new Date(r.startedAt))}</span>
+                  <span className="meta">{g.title === "Today" ? new Date(r.startedAt).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" }).toLowerCase() : fmtDate(isoDay(new Date(r.startedAt)))}</span>
                 </button>
               ))}
             </div>

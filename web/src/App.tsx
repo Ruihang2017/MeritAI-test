@@ -14,6 +14,7 @@ import { FilesPage, MemoryPage, ProfilePage, SettingsPage } from "./components/P
 import { HiringPage } from "./components/Hiring";
 import { FirstRun } from "./components/FirstRun";
 import { AllConversations } from "./components/AllConversations";
+import { now, setAppToday } from "./clock";
 
 export function App() {
   const api = useMemo(() => Api.fromLocation(), []);
@@ -39,6 +40,9 @@ function Shell({ api }: { api: Api }) {
   const [connection, setConnection] = useState<Connection>(api.connection);
   const [state, setState] = useState<ShellState | null>(null);
   const [page, setPage] = useState<Page>("conversations");
+  /** An employee to open on the Staff page (Attention's "Open employee"). */
+  const [staffOpen, setStaffOpen] = useState<number | null>(null);
+  const openEmployee = (id: number) => (setStaffOpen(id), setPage("staff"));
   const [turns, setTurns] = useState<Turn[]>([]);
   const [reminders, setReminders] = useState<Reminder[] | null>(null);
   const [recent, setRecent] = useState<SessionRecord[]>([]);
@@ -75,19 +79,20 @@ function Shell({ api }: { api: Api }) {
   const refresh = useCallback(async () => {
     try {
       const s = await api.call("state");
+      setAppToday(s.today);
       setState(s);
       // After a page reload the conversation is still open on the server: show its messages again.
       if (!restored.current) {
         restored.current = true;
         if (s.hasConversation && !turnsRef.current.length) {
           const entries = await api.call("transcript").catch(() => []);
-          if (entries.length && !turnsRef.current.length) setTurns(turnsFromTranscript(entries, new Date()));
+          if (entries.length && !turnsRef.current.length) setTurns(turnsFromTranscript(entries, now()));
         }
       }
       // A reply still running on the server (e.g. after a reload): follow it again (its events and Stop).
       if (s.turnId && !turnsRef.current.some((t) => t.id === s.turnId)) {
         const id = s.turnId;
-        setTurns((ts) => (ts.some((t) => t.id === id) ? ts : [...ts, { id, at: new Date(), user: { text: "", attachments: [] }, steps: [], blocks: [], status: "running" }]));
+        setTurns((ts) => (ts.some((t) => t.id === id) ? ts : [...ts, { id, at: now(), user: { text: "", attachments: [] }, steps: [], blocks: [], status: "running" }]));
       }
       // Questions still open on the server are shown again: in their reply, or as a dialog.
       for (const c of s.confirms) {
@@ -168,7 +173,7 @@ function Shell({ api }: { api: Api }) {
   const send = async (text: string, skill?: string, attachments: string[] = [], mode?: "setup") => {
     const turnId = crypto.randomUUID();
     setPage("conversations");
-    setTurns((ts) => [...ts, { id: turnId, at: new Date(), user: { text, attachments }, ...(skill ? { skill } : {}), steps: [], blocks: [], status: "running" }]);
+    setTurns((ts) => [...ts, { id: turnId, at: now(), user: { text, attachments }, ...(skill ? { skill } : {}), steps: [], blocks: [], status: "running" }]);
     try {
       await api.call("send", { text, turnId, ...(skill ? { skill } : {}), ...(mode ? { mode } : {}) });
       setState((s) => (s ? { ...s, busy: true } : s));
@@ -208,7 +213,7 @@ function Shell({ api }: { api: Api }) {
         const rec = recent.find((x) => x.threadId === threadId);
         setResumedTitle(rec?.title ?? "an earlier conversation");
         const entries = await api.call("transcript").catch(() => []);
-        setTurns(turnsFromTranscript(entries, rec ? new Date(rec.startedAt) : new Date()));
+        setTurns(turnsFromTranscript(entries, rec ? new Date(rec.startedAt) : now()));
       }
       void refresh();
     } catch (e) {
@@ -242,7 +247,7 @@ function Shell({ api }: { api: Api }) {
         />
       ) : (
       <div className="body">
-        <Nav page={page} onPage={setPage} onNew={() => void newConversation()} recent={recent} onRecent={(id) => void resume(id)} currentThread={currentThread} state={state} />
+        <Nav page={page} onPage={(p) => (setStaffOpen(null), setPage(p))} onNew={() => void newConversation()} recent={recent} onRecent={(id) => void resume(id)} currentThread={currentThread} state={state} />
         {page === "conversations" && (
           <ConversationPage
             api={api}
@@ -260,20 +265,20 @@ function Shell({ api }: { api: Api }) {
           />
         )}
         {page === "all" && <AllConversations api={api} onResume={(id) => void resume(id)} onNew={() => void newConversation()} />}
-        {page === "staff" && <StaffPage api={api} onAsk={(t) => (setDraft(t), setPage("conversations"))} onChanged={() => void refresh()} />}
+        {page === "staff" && <StaffPage key={staffOpen ?? "list"} api={api} openId={staffOpen} onAsk={(t) => (setDraft(t), setPage("conversations"))} onChanged={() => void refresh()} />}
         {page === "files" && <FilesPage api={api} onAsk={(t) => (setDraft(t), setPage("conversations"))} />}
         {page === "profile" && <ProfilePage api={api} onAsk={() => void send("Set up my business profile", undefined, [], "setup")} onChanged={() => void refresh()} />}
-        {page === "memory" && <MemoryPage api={api} />}
+        {page === "memory" && <MemoryPage api={api} onProfile={() => setPage("profile")} />}
         {page === "settings" && <SettingsPage api={api} login={login} onChanged={() => void refresh()} />}
         {page === "hiring" && <HiringPage api={api} progress={lastProgress} onAsk={(t) => (setDraft(t), setPage("conversations"))} />}
-        {showPanel && <AttentionPanel reminders={reminders} onAsk={(t) => void send(t)} />}
+        {showPanel && <AttentionPanel reminders={reminders} rulesChecked={state?.rulesChecked ?? null} onAsk={(t) => void send(t)} onOpenEmployee={openEmployee} />}
       </div>
       )}
       {attentionOpen && !showPanel && (
         <>
           <div className="scrim fill" onClick={() => setAttentionOpen(false)} />
           <div className="attention-drawer">
-            <AttentionPanel reminders={reminders} onClose={() => setAttentionOpen(false)} onAsk={(t) => (setAttentionOpen(false), void send(t))} />
+            <AttentionPanel reminders={reminders} rulesChecked={state?.rulesChecked ?? null} onClose={() => setAttentionOpen(false)} onAsk={(t) => (setAttentionOpen(false), void send(t))} onOpenEmployee={(id) => (setAttentionOpen(false), openEmployee(id))} />
           </div>
         </>
       )}

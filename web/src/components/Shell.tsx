@@ -1,7 +1,16 @@
 import type { Reminder } from "../../../src/business/reminders";
 import type { ShellState } from "../../../src/server/protocol";
 import type { Connection } from "../api";
-import { fmtDate, fmtDatesIn } from "../format";
+import { useState } from "react";
+import { now } from "../clock";
+import { dayLabel, fmtDate, fmtDatesIn, fmtDay, fmtTime } from "../format";
+
+/** "Today 9:42 am", "Yesterday" or "Fri 25 Sep", as in the design's Recent list. */
+const whenStarted = (iso: string) => {
+  const d = new Date(iso);
+  const day = dayLabel(d);
+  return day === "Today" ? `Today ${fmtTime(d)}` : day;
+};
 import { Icon, type IconName } from "./Icon";
 
 export type Page = "conversations" | "all" | "staff" | "hiring" | "profile" | "files" | "memory" | "settings";
@@ -24,7 +33,7 @@ export function AppBar({ state, connection, onAttention, showAttention }: { stat
       <div className="vr" />
       <Icon name="building" size={18} />
       <div className="biz">{state?.business.name ?? "Your business"}</div>
-      {state?.engine === "fake" && <span className="sample">Demo · sample data</span>}
+      {state?.sampleData && <span className="sample">Sample data</span>}
       <span className="grow" />
       {showAttention && state && (state.attention.overdue > 0 || state.attention.soon > 0) && (
         <button type="button" className="attn-btn" onClick={onAttention}>
@@ -110,7 +119,7 @@ export function Nav({
           {recent.slice(0, 3).map((r) => (
             <button key={r.threadId} type="button" className={`recent-item${r.threadId === currentThread ? " on" : ""}`} onClick={() => onRecent(r.threadId)}>
               <span className="t">{r.title}</span>
-              <span className="w">{new Date(r.startedAt).toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" })}</span>
+              <span className="w">{whenStarted(r.startedAt)}</span>
             </button>
           ))}
           <button type="button" className="all-conv" onClick={() => onPage("all")}>
@@ -121,12 +130,13 @@ export function Nav({
       <div className="grow" />
       <div className="me">
         <div className="av" style={{ background: "#DCE6FA", color: "#1446A6", width: 32, height: 32, borderRadius: 999, fontSize: 13 }}>
-          {state?.engine === "fake" ? "D" : "Me"}
+          {state?.sampleData ? "JK" : "Me"}
         </div>
         <div className="me-t">
-          <span>{state?.engine === "fake" ? "Demo user" : "Owner"}</span>
+          {/* The demo is the design's owner, Jo Kim (synthetic sample data). */}
+          <span>{state?.sampleData ? "Jo Kim" : "Owner"}</span>
           <span className="meta" style={{ fontSize: 12 }}>
-            {state?.account.loggedIn ? "signed in" : "not signed in"}
+            {state?.account.loggedIn ? (state.engine === "fake" ? "Owner · demo engine" : "Owner · signed in with ChatGPT") : "not signed in"}
           </span>
         </div>
       </div>
@@ -134,22 +144,66 @@ export function Nav({
   );
 }
 
-export function AttentionPanel({ reminders, onClose, onAsk }: { reminders: Reminder[] | null; onClose?: () => void; onAsk: (text: string) => void }) {
-  const overdue = reminders?.filter((r) => r.overdue) ?? [];
-  const rest = reminders?.filter((r) => !r.overdue) ?? [];
+type When = "overdue" | "week" | "month";
+const FILTERS: [When | "all", string][] = [
+  ["all", "All"],
+  ["overdue", "Overdue"],
+  ["week", "This week"],
+  ["month", "This month"],
+];
+
+/** Overdue, due within a week (the Attention button's "this week"), or later in the 30 days shown. */
+function whenOf(r: Reminder): When {
+  if (r.overdue) return "overdue";
+  const soon = now();
+  soon.setDate(soon.getDate() + 7);
+  const iso = `${soon.getFullYear()}-${String(soon.getMonth() + 1).padStart(2, "0")}-${String(soon.getDate()).padStart(2, "0")}`;
+  return r.due <= iso ? "week" : "month";
+}
+
+export function AttentionPanel({
+  reminders,
+  rulesChecked,
+  onClose,
+  onAsk,
+  onOpenEmployee,
+}: {
+  reminders: Reminder[] | null;
+  rulesChecked: string | null;
+  onClose?: () => void;
+  onAsk: (text: string) => void;
+  onOpenEmployee: (id: number) => void;
+}) {
+  const [filter, setFilter] = useState<When | "all">("all");
+  const items = (reminders ?? []).map((r) => ({ r, when: whenOf(r) }));
+  const count = (w: When) => items.filter((x) => x.when === w).length;
+  const order: Record<When, number> = { overdue: 0, week: 1, month: 2 };
+  const shown = items.filter((x) => filter === "all" || x.when === filter).sort((a, b) => order[a.when] - order[b.when] || a.r.due.localeCompare(b.r.due));
+  const status = (x: { r: Reminder; when: When }) =>
+    x.when === "overdue" ? `Overdue · since ${fmtDay(x.r.due)}` : x.when === "week" ? `Due ${fmtDate(x.r.due)}` : fmtDate(x.r.due);
   return (
     <aside className="attention" aria-label="Attention">
       <div className="attention-h">
         <h2 className="h2" style={{ flexGrow: 1 }}>
           Attention
         </h2>
-        {overdue.length > 0 && <span className="pill bad">{overdue.length} overdue</span>}
+        {count("overdue") > 0 && <span className="pill bad">{count("overdue")} overdue</span>}
+        {count("week") > 0 && <span className="pill warn">{count("week")} this week</span>}
         {onClose && (
           <button type="button" className="ib" aria-label="Close attention" onClick={onClose}>
             <Icon name="close" />
           </button>
         )}
       </div>
+      {items.length > 0 && (
+        <div className="att-tabs" role="tablist" aria-label="Filter">
+          {FILTERS.map(([key, label]) => (
+            <button key={key} type="button" role="tab" aria-selected={filter === key} onClick={() => setFilter(key)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="attention-list">
         {reminders === null && <div className="meta">Loading…</div>}
         {reminders?.length === 0 && (
@@ -158,28 +212,32 @@ export function AttentionPanel({ reminders, onClose, onAsk }: { reminders: Remin
             <span className="meta">Worked out from your staff register and business profile.</span>
           </div>
         )}
-        {[...overdue, ...rest].map((r, i) => (
-          <article key={i} className={`rem${r.overdue ? " over" : ""}`}>
-            <div className="rem-top">
-              <span className={`pill ${r.overdue ? "bad" : "warn"}`}>{r.overdue ? `Overdue · was due ${fmtDate(r.due)}` : `By ${fmtDate(r.due)}`}</span>
-            </div>
-            <b className="rem-t">{fmtDatesIn(r.title)}</b>
-            <p className="rem-d">{fmtDatesIn(r.detail)}</p>
+        {reminders !== null && reminders.length > 0 && shown.length === 0 && <div className="meta">Nothing here.</div>}
+        {shown.map((x, i) => (
+          <article key={i} className="rem">
+            <div className={`rem-s ${x.when === "overdue" ? "over" : x.when}`}>{status(x)}</div>
+            <b className="rem-t">{fmtDatesIn(x.r.title)}</b>
+            <p className="rem-d">{fmtDatesIn(x.r.detail, { short: true })}</p>
+            {x.r.source && (
+              <a className="rem-src" href={x.r.source.url} target="_blank" rel="noreferrer noopener">
+                <Icon name="shield" size={13} stroke={2} />
+                {x.r.source.title}
+              </a>
+            )}
             <div className="rem-a">
-              {r.source && (
-                <a className="chip" href={r.source.url} target="_blank" rel="noreferrer noopener">
-                  <Icon name="shield" size={14} />
-                  {r.source.title}
-                </a>
-              )}
-              <button type="button" className="btn g sm" onClick={() => onAsk(`Help me with this: ${r.title}`)}>
+              <button type="button" onClick={() => onAsk(`Help me with this: ${x.r.title}`)}>
                 Ask about this
               </button>
+              {x.r.employeeId !== null && (
+                <button type="button" onClick={() => onOpenEmployee(x.r.employeeId!)}>
+                  Open employee
+                </button>
+              )}
             </div>
           </article>
         ))}
       </div>
-      <p className="attention-foot">Worked out from your register and profile each time; rules checked against Fair Work and the ATO. Check anything important with an adviser.</p>
+      <p className="attention-foot">Worked out from your register and business profile each time you open MeritAI.{rulesChecked ? ` Rules checked ${fmtDay(rulesChecked, { year: true })}.` : ""}</p>
     </aside>
   );
 }

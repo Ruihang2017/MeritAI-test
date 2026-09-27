@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { now } from "../clock";
 
 /**
  * The business profile: one per business workspace (files root), stored as
@@ -225,7 +226,7 @@ export class BusinessStore {
   }
 
   update(patch: ProfilePatch): BusinessProfile {
-    const next: BusinessProfile = { ...this.get(), ...patch, updatedAt: new Date().toISOString() };
+    const next: BusinessProfile = { ...this.get(), ...patch, updatedAt: now().toISOString() };
     writeFileSync(this.path, JSON.stringify(next, null, 2) + "\n");
     return next;
   }

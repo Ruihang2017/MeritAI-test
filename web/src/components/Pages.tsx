@@ -4,10 +4,11 @@ import type { BusinessProfile } from "../../../src/business/profile";
 import type { Preference, TaskNote } from "../../../src/memory/store";
 import type { FileRow, Settings, WorkspaceFiles } from "../../../src/server/protocol";
 import type { Api } from "../api";
-import { fmtDate, fmtDatesIn } from "../format";
+import { dayLabel, fmtDate, fmtDatesIn, fmtDay, fmtWhen, localDay } from "../format";
+import { now } from "../clock";
 import { Icon } from "./Icon";
 
-const isoDay = (iso: string) => iso.slice(0, 10);
+const isoDay = localDay;
 const kb = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 
 function useLoad<T>(load: () => Promise<T>) {
@@ -187,7 +188,13 @@ export function FilesPage({ api, onAsk }: { api: Api; onAsk: (text: string) => v
                           <FileBadge name={f.name} />
                           <span>
                             {"title" in f && (f as FileRow & { title: string }).title !== f.name ? (f as FileRow & { title: string }).title : f.name}
-                            {!f.readable && <span className="pill warn" style={{ marginLeft: 8 }}>Can't be read</span>}
+                            {"draft" in f && (f as FileRow & { draft: boolean }).draft && (
+                              <span className="pill n" style={{ marginLeft: 8, height: 20, fontSize: 11 }}>
+                                DRAFT
+                              </span>
+                            )}
+                            {/* Only where the adviser reads files; images go to it as pictures. */}
+                            {!f.readable && tab === "inbox" && !/\.(png|jpe?g|gif|webp)$/i.test(f.name) && <span className="pill warn" style={{ marginLeft: 8 }}>Can't be read</span>}
                             {"description" in f && (f as FileRow & { description: string }).description && (
                               <span className="meta" style={{ display: "block", fontWeight: 400 }}>
                                 {(f as FileRow & { description: string }).description}
@@ -196,7 +203,7 @@ export function FilesPage({ api, onAsk }: { api: Api; onAsk: (text: string) => v
                           </span>
                         </span>
                       </td>
-                      <td>{fmtDate(isoDay(f.modified))}</td>
+                      <td>{fmtWhen(f.modified)}</td>
                       <td>{kb(f.size)}</td>
                       <td style={{ textAlign: "right", paddingRight: 12, whiteSpace: "nowrap" }}>
                         <button type="button" className="btn sm" onClick={() => void open(f.path)}>
@@ -256,43 +263,83 @@ function toBase64(f: File): Promise<string> {
 const STATES = ["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"];
 const ADVISER: Record<string, string> = { "hr-adviser": "HR adviser", "employment-lawyer": "Employment lawyer", "employer-association": "Employer association", accountant: "Accountant", none: "None" };
 
+const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
+
+/** The "What this means" lines (the design's Profile artboard). */
+function smallBusinessText(headcount: number | null): string {
+  if (headcount === null) return "Add your number of employees: some rules differ for businesses with fewer than 15.";
+  return `Based on ${headcount} employee${headcount === 1 ? "" : "s"}. Count everyone employed, including associated entities; casuals only if they work regular and systematic hours. Some rules differ below 15, such as unfair dismissal and redundancy pay.`;
+}
+function adviserTitle(kind: string | null): string {
+  if (!kind || kind === "none") return "No adviser yet";
+  return `Your adviser is ${kind === "accountant" ? "an accountant" : kind === "hr-adviser" ? "an HR adviser" : kind === "employment-lawyer" ? "an employment lawyer" : "an employer association"}`;
+}
+function adviserText(kind: string | null): string {
+  if (kind === "accountant") return "Good for payroll, tax and super questions only. For dismissals, disputes or legal risk, I'll point you to an employment lawyer, an employer association or the Fair Work Infoline (13 13 94).";
+  if (kind === "employment-lawyer" || kind === "employer-association" || kind === "hr-adviser") return "For dismissals, disputes or legal risk, I'll point you to them first.";
+  return "For dismissals, disputes or legal risk, I'll point you to an employment lawyer, an employer association or the Fair Work Infoline (13 13 94).";
+}
+
 export function ProfilePage({ api, onAsk, onChanged }: { api: Api; onAsk: (text: string) => void; onChanged: () => void }) {
   const load = useCallback(() => api.call("profile"), [api]);
   const { data, error, reload } = useLoad(load);
   const [editing, setEditing] = useState(false);
   const [receipt, setReceipt] = useState<string[] | null>(null);
+  const [files, setFiles] = useState<WorkspaceFiles | null>(null);
+  useEffect(() => {
+    api.call("files").then(setFiles, () => null);
+  }, [api, data]);
   const p = data?.profile;
-  const rows: [string, React.ReactNode][] = p
+  // The design's groups (Profile artboard): 15 fields, "Not set yet" when empty.
+  const groups: { title: string; fields: [string, string | null][] }[] = p
     ? [
-        ["Legal name", p.legalName],
-        ["Trading name", p.tradingName],
-        ["ABN", p.abn],
-        ["What the business does", p.industry],
-        ["States where staff work", p.states.join(", ")],
-        ["Business address", p.address],
-        ["Number of employees", p.headcount === null ? null : `${p.headcount}${data?.smallBusiness ? " (a small business employer: fewer than 15)" : ""}`],
-        ["Employment types", p.employmentTypes.join(", ")],
-        ["Awards", p.awards.join(", ")],
-        ["Pay frequency", p.payFrequency],
-        ["Payroll system", p.payrollSystem],
-        ["Benefits and own rules", p.benefitsAndRules.length ? <ul style={{ margin: 0, paddingLeft: 18 }}>{p.benefitsAndRules.map((b) => <li key={b}>{b}</li>)}</ul> : null],
-        ["Signs letters and contracts", p.signer],
-        ["HR / legal adviser", p.adviser ? `${ADVISER[p.adviser.kind] ?? p.adviser.kind}${p.adviser.name ? `: ${p.adviser.name}` : ""}${p.adviser.contact ? ` (${p.adviser.contact})` : ""}` : null],
-        ["Employee Assistance Program", p.hasEap === null ? null : p.hasEap ? "Yes" : "No"],
-        ["Other notes", p.notes],
+        { title: "Business", fields: [["Legal name", p.legalName], ["Trading name", p.tradingName], ["ABN", p.abn], ["Industry", p.industry], ["States", p.states.join(", ") || null], ["Address", p.address]] },
+        { title: "People", fields: [["Employees", p.headcount === null ? null : String(p.headcount)], ["Employment types", cap(p.employmentTypes.join(", ")) || null], ["Awards", p.awards.join(", ") || null], ["Who signs letters", p.signer]] },
+        { title: "Pay", fields: [["Pay frequency", p.payFrequency ? cap(p.payFrequency) : null], ["Payroll system", p.payrollSystem], ["Benefits and rules", p.benefitsAndRules.join("; ") || null]] },
+        { title: "Advice and support", fields: [["Adviser", p.adviser ? (ADVISER[p.adviser.kind] ?? p.adviser.kind) : null], ["Employee assistance (EAP)", p.hasEap === null ? null : p.hasEap ? "Yes" : "No, we don't have one"]] },
       ]
     : [];
+  const filled = groups.flatMap((g) => g.fields).filter(([, v]) => v).length;
+  const sep = files?.root.includes("\\") ? "\\" : "/";
+  const policiesDir = files ? `${files.root}${sep}Policies` : null;
+  const group = (g: (typeof groups)[number]) => (
+    <section key={g.title} className="card" style={{ padding: "8px 20px 12px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0 6px" }}>
+        <h2 className="h2" style={{ flexGrow: 1 }}>
+          {g.title}
+        </h2>
+        <button type="button" className="btn g sm" onClick={() => (setEditing(true), setReceipt(null))}>
+          Edit
+        </button>
+      </div>
+      <dl className="dl">
+        {g.fields.map(([k, v]) => (
+          <div key={k}>
+            <dt>{k}</dt>
+            <dd>{v ? v : <span className="meta" style={{ fontStyle: "italic" }}>Not set yet</span>}</dd>
+          </div>
+        ))}
+      </dl>
+      <button type="button" className="link-btn" style={{ margin: "6px 0 2px" }} onClick={() => onAsk("/setup")}>
+        Tell the adviser
+      </button>
+    </section>
+  );
   return (
     <main className="main" style={{ background: "#EEF2F7" }}>
-      <PageHead title="Profile & policies" sub="The adviser uses these in every answer">
-        {data?.exists === false && (
-          <button type="button" className="btn" onClick={() => onAsk("/setup")}>
-            Set up with the adviser
-          </button>
+      <PageHead title="Profile & policies" sub={p?.updatedAt ? `Used in every answer · updated ${fmtDay(localDay(p.updatedAt), { year: true })}` : "Used in every answer"}>
+        {data?.exists === false ? (
+          <>
+            <button type="button" className="btn" onClick={() => onAsk("/setup")}>
+              Set up with the adviser
+            </button>
+            <button type="button" className="btn p" onClick={() => (setEditing(true), setReceipt(null))}>
+              Fill in the form
+            </button>
+          </>
+        ) : (
+          p && <span className="pill n">{filled} of 15 filled</span>
         )}
-        <button type="button" className="btn p" onClick={() => (setEditing(true), setReceipt(null))}>
-          {data?.exists ? "Edit profile" : "Fill in the form"}
-        </button>
       </PageHead>
       <div className="staff-body">
         {error && <LoadError what="your business profile" error={error} retry={() => void reload()} />}
@@ -315,45 +362,50 @@ export function ProfilePage({ api, onAsk, onChanged }: { api: Api; onAsk: (text:
         )}
         {p && (
           <div className="two-col">
-            <section className="card" style={{ padding: "8px 20px 12px" }}>
-              <h2 className="h2" style={{ padding: "10px 0" }}>
-                Business profile
-              </h2>
-              <dl className="dl">
-                {rows.map(([k, v]) => (
-                  <div key={k}>
-                    <dt>{k}</dt>
-                    <dd>{v || <span className="meta">Not set</span>}</dd>
-                  </div>
-                ))}
-              </dl>
-              {p.updatedAt && <p className="meta">Last changed {fmtDate(isoDay(p.updatedAt))}</p>}
-            </section>
-            <section className="card" style={{ padding: "8px 20px 12px", alignSelf: "start" }}>
-              <h2 className="h2" style={{ padding: "10px 0" }}>
-                Policies
-              </h2>
-              {data.policies.length === 0 ? (
-                <p className="meta">No policies yet. Put them in the Policies folder (Files page).</p>
-              ) : (
-                <ul className="docs">
-                  {data.policies.map((x) => (
-                    <li key={x.id}>
-                      <Icon name="file" size={16} />
-                      <span className="grow">
-                        {x.title}
-                        {x.description && (
-                          <span className="meta" style={{ display: "block" }}>
-                            {x.description}
-                          </span>
-                        )}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <p className="meta">Where a policy and the law differ, the adviser follows the law and says so.</p>
-            </section>
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>{groups.slice(0, 3).map(group)}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 16, alignSelf: "start" }}>
+              {groups.slice(3).map(group)}
+              <section className="card" style={{ padding: "8px 20px 14px" }}>
+                <h2 className="h2" style={{ padding: "10px 0 6px" }}>
+                  What this means <span className="meta" style={{ fontWeight: 400, fontSize: 13 }}>worked out from the profile</span>
+                </h2>
+                <p style={{ margin: "4px 0 10px", lineHeight: 1.5 }}>
+                  <b>Small business employer: {p.headcount === null ? "not known yet" : data.smallBusiness ? "yes" : "no"}</b>{" "}
+                  <span className="meta">{smallBusinessText(p.headcount)}</span>
+                </p>
+                <p style={{ margin: 0, lineHeight: 1.5 }}>
+                  <b>{adviserTitle(p.adviser?.kind ?? null)}</b> <span className="meta">{adviserText(p.adviser?.kind ?? null)}</span>
+                </p>
+              </section>
+              <section className="card" style={{ padding: "8px 20px 12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0 4px" }}>
+                  <h2 className="h2" style={{ flexGrow: 1 }}>
+                    Policies
+                  </h2>
+                  {policiesDir && (
+                    <button type="button" className="btn g sm" onClick={() => void api.call("openFile", { path: policiesDir })}>
+                      Open folder
+                    </button>
+                  )}
+                </div>
+                <p className="meta" style={{ margin: "0 0 8px" }}>
+                  I read these when a question touches them, and quote your policy before general rules.
+                </p>
+                {!files?.policies.length ? (
+                  <p className="meta">No policies yet. Put them in the Policies folder.</p>
+                ) : (
+                  <ul className="docs">
+                    {files.policies.map((x) => (
+                      <li key={x.path}>
+                        <FileBadge name={x.name} />
+                        <span className="grow">{x.name}</span>
+                        <span className="meta">{fmtDay(localDay(x.modified), { year: true })}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            </div>
           </div>
         )}
       </div>
@@ -567,7 +619,16 @@ function ProfileForm({ api, p, onClose, onSaved }: { api: Api; p: BusinessProfil
 
 // ------------------------------------------------------------------ Memory
 
-export function MemoryPage({ api }: { api: Api }) {
+/** When a note was written, as the design shows it: "Today", "Yesterday", "Thu" within the week, else "18 Sep". */
+function recentDay(iso: string): string {
+  const d = new Date(iso);
+  const day = dayLabel(d);
+  if (day === "Today" || day === "Yesterday") return day;
+  const days = (now().getTime() - d.getTime()) / 86_400_000;
+  return days < 7 ? day.split(" ")[0] : fmtDay(localDay(iso));
+}
+
+export function MemoryPage({ api, onProfile }: { api: Api; onProfile: () => void }) {
   const load = useCallback(() => api.call("memories"), [api]);
   const { data, error, reload } = useLoad<{ preferences: Preference[]; notes: TaskNote[] }>(load);
   const [confirm, setConfirm] = useState<{ id: string; text: string } | null>(null);
@@ -592,47 +653,51 @@ export function MemoryPage({ api }: { api: Api }) {
   );
   return (
     <main className="main" style={{ background: "#EEF2F7" }}>
-      <PageHead title="Memory" sub="What the adviser remembers about how you work" />
+      <PageHead title="Memory" sub="What I remember between conversations" />
       <div className="staff-body">
+        <p className="meta" style={{ margin: "0 0 14px", fontSize: 14 }}>
+          I only remember preferences you approve, and short notes about recent work. I never store candidate or employee personal details here. Business facts live in your{" "}
+          <button type="button" className="link-btn" onClick={onProfile}>
+            profile
+          </button>
+          .
+        </p>
         {error && <LoadError what="memory" error={error} retry={() => void reload()} />}
         {data && (
           <div className="two-col">
             <section className="card" style={{ padding: "8px 20px 12px" }}>
-              <h2 className="h2" style={{ padding: "10px 0 4px" }}>
-                Preferences
+              <h2 className="h2" style={{ padding: "10px 0 8px" }}>
+                Preferences <span className="meta" style={{ fontWeight: 400, fontSize: 13 }}>kept until you forget them</span>
               </h2>
-              <p className="meta" style={{ margin: "0 0 8px" }}>
-                Kept until you forget them. The adviser asks before remembering anything.
-              </p>
               {data.preferences.length === 0 ? (
-                <p className="meta">Nothing remembered yet. Tell the adviser, e.g. "Remember that I sign letters as Jo Kim, Director".</p>
+                <p className="meta">Nothing remembered yet.</p>
               ) : (
                 <ul className="docs">
                   {data.preferences.map((x) => (
-                    <Item key={x.id} id={x.id} text={x.text} meta={`${x.source === "explicit" ? "You asked" : "You agreed"} · ${fmtDate(isoDay(x.createdAt))}`} />
+                    <Item key={x.id} id={x.id} text={x.text} meta={`${x.source === "explicit" ? "You asked me to remember" : "I suggested, you said yes"} · ${fmtDay(isoDay(x.createdAt))}`} />
                   ))}
                 </ul>
               )}
             </section>
             <section className="card" style={{ padding: "8px 20px 12px", alignSelf: "start" }}>
-              <h2 className="h2" style={{ padding: "10px 0 4px" }}>
-                Recent work notes
+              <h2 className="h2" style={{ padding: "10px 0 8px" }}>
+                Recent work notes <span className="meta" style={{ fontWeight: 400, fontSize: 13 }}>each note expires after 30 days</span>
               </h2>
-              <p className="meta" style={{ margin: "0 0 8px" }}>
-                Short notes from past conversations, so the adviser can pick up where you left off. They expire after 30 days. Never personal details about staff or candidates.
-              </p>
               {data.notes.length === 0 ? (
                 <p className="meta">No notes yet.</p>
               ) : (
                 <ul className="docs">
                   {data.notes.map((x) => (
-                    <Item key={x.id} id={x.id} text={fmtDatesIn(x.text)} meta={`Expires ${fmtDate(isoDay(x.expiresAt))}`} />
+                    <Item key={x.id} id={x.id} text={fmtDatesIn(x.text)} meta={`${recentDay(x.createdAt)} · expires ${fmtDay(isoDay(x.expiresAt))}`} />
                   ))}
                 </ul>
               )}
             </section>
           </div>
         )}
+        <p className="meta" style={{ margin: "14px 0 0" }}>
+          To add a preference, tell the adviser: "Remember that I sign letters as Jo Kim, Director."
+        </p>
       </div>
       {confirm && (
         <>

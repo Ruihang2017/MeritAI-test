@@ -4,15 +4,13 @@ import type { ChecklistItem, FormNote, LeavingItem, LeavingReason } from "../../
 import type { DocumentId } from "../../../src/business/register";
 import type { EmployeeFields, StaffRow } from "../../../src/server/protocol";
 import type { Api } from "../api";
-import { fmtDate, fmtDatesIn } from "../format";
+import { fmtDate, fmtDatesIn, fmtDay } from "../format";
 import { Icon } from "./Icon";
+import { todayIso } from "../clock";
 
 const TYPES: EmployeeFields["employmentType"][] = ["full-time", "part-time", "casual", "fixed-term"];
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-const today = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
+const today = todayIso;
 
 type Panel =
   | { kind: "detail"; id: number }
@@ -25,19 +23,21 @@ type Panel =
   | { kind: "leftDone"; name: string; lines: string[]; checklist: LeavingItem[] }
   | null;
 
-export function StaffPage({ api, onAsk, onChanged }: { api: Api; onAsk: (text: string) => void; onChanged: () => void }) {
+export function StaffPage({ api, openId, onAsk, onChanged }: { api: Api; openId?: number | null; onAsk: (text: string) => void; onChanged: () => void }) {
   const [rows, setRows] = useState<StaffRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [type, setType] = useState("");
   const [showLeft, setShowLeft] = useState(false);
-  const [panel, setPanel] = useState<Panel>(null);
+  const [panel, setPanel] = useState<Panel>(openId ? { kind: "detail", id: openId } : null);
   const [menu, setMenu] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setRows(await api.call("staff", { includeLeft: true }));
+      // By name, as in the design (people who left after everyone else).
+      const all = await api.call("staff", { includeLeft: true });
+      setRows([...all].sort((a, b) => (a.status === b.status ? a.name.localeCompare(b.name) : a.status === "active" ? -1 : 1)));
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -181,7 +181,7 @@ export function StaffPage({ api, onAsk, onChanged }: { api: Api; onAsk: (text: s
                         </td>
                         <td>{r.role}</td>
                         <td>{cap(r.employmentType)}</td>
-                        <td>{fmtDate(r.startDate)}</td>
+                        <td>{fmtDay(r.startDate, { year: true })}</td>
                         <td className={`next ${r.next?.tone ?? "n"}`}>{r.next ? fmtDatesIn(r.next.text) : "—"}</td>
                         <td>
                           {r.status === "left" ? (

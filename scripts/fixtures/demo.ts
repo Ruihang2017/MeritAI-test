@@ -1,7 +1,8 @@
 // SYNTHETIC DEMO DATA (not a real business, not real people): the sample data of the MeritAI
 // design canvas ("MeritAI UI"), so the browser UI can be compared with the design screen by
 // screen. Used by `npm run ui:demo` (real engine) and `npm run ui:fake` (src/server/main.ts).
-// The design assumes today is Sat 26 Sep 2026, so the dates below are absolute.
+// The design is dated Sat 26 Sep 2026 (DEMO_TODAY): the dates below are absolute, and the demo
+// runs with its clock on that day (FX_TODAY, src/clock.ts), so it reads like the design on any day.
 // Nothing here calls the model: screening results are written straight into the catalog.
 import { copyFileSync, mkdirSync, renameSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -15,6 +16,7 @@ import { saveReports } from "../../src/screening/report";
 import { UserMemory } from "../../src/memory/store";
 import type { Engine } from "../../src/engine/types";
 
+export const DEMO_TODAY = "2026-09-26";
 const SYNTHETIC = "Synthetic demo data for MeritAI testing: not a real business or person.";
 const DRAFT = "DRAFT: check with your HR adviser or an employment lawyer before sending.";
 
@@ -65,7 +67,11 @@ const JPEG = Buffer.from(
   "base64",
 );
 
-async function writeFile(dir: string, name: string, content: string | string[] | Buffer, when: Date): Promise<string> {
+/**
+ * Writes a demo file. `sizeKb` pads a PDF (comment lines after %%EOF) or a JPEG (bytes after the
+ * end marker) to the size the design shows; readers ignore the padding.
+ */
+async function writeFile(dir: string, name: string, content: string | string[] | Buffer, when: Date, sizeKb?: number): Promise<string> {
   mkdirSync(dir, { recursive: true });
   const path = join(dir, name);
   const lines = Array.isArray(content) ? content : typeof content === "string" ? content.split("\n") : null;
@@ -75,7 +81,9 @@ async function writeFile(dir: string, name: string, content: string | string[] |
     : ext === ".pdf" ? pdf(lines!)
     : ext === ".docx" ? await markdownToDocx(lines!.join("\n"), name.replace(/\.docx$/i, ""))
     : lines!.join("\n");
-  writeFileSync(path, data);
+  const pad = sizeKb && (ext === ".pdf" || ext === ".jpg") ? Math.max(0, sizeKb * 1024 - Buffer.byteLength(data)) : 0;
+  const filler = ext === ".pdf" ? Buffer.from(`%${" ".repeat(78)}\n`.repeat(Math.ceil(pad / 80)).slice(0, pad), "latin1") : Buffer.alloc(pad);
+  writeFileSync(path, pad ? Buffer.concat([Buffer.from(data), filler]) : data);
   touch(path, when);
   return path;
 }
@@ -91,7 +99,7 @@ const STAFF: Seeded[] = [
   { name: "Leo Tran", role: "Cleaner", employmentType: "part-time", startDate: "2026-04-02", probationEnd: "2026-10-02", award: "Cleaning Services Award 2020", docs: "all" },
   { name: "Marco Silva", role: "Cleaner", employmentType: "casual", startDate: "2026-09-06", award: "Cleaning Services Award 2020", notes: "Weekend shifts, Parramatta sites", docs: ["contract", "fwis", "tfn"] },
   { name: "Mia Rossi", role: "Cleaner", employmentType: "casual", startDate: "2025-06-19", visaExpiry: "2027-02-14", award: "Cleaning Services Award 2020", docs: "all" },
-  { name: "Priya Nair", role: "Cleaner", employmentType: "part-time", startDate: "2025-01-20", award: "Cleaning Services Award 2020", docs: "all" },
+  { name: "Priya Nair", role: "Cleaner", employmentType: "part-time", startDate: "2025-01-20", leftDate: "2026-10-09", award: "Cleaning Services Award 2020", docs: "all" },
   { name: "Sam Park", role: "Project cleaner", employmentType: "fixed-term", startDate: "2026-05-01", endDate: "2026-10-23", award: "Cleaning Services Award 2020", classification: "Level 1", notes: "Parramatta office refit project", docs: "all" },
   { name: "Tom Becker", role: "Cleaner", employmentType: "casual", startDate: "2025-11-03", award: "Cleaning Services Award 2020", docs: "all" },
   { name: "Chloe Wang", role: "Cleaner", employmentType: "casual", startDate: "2025-03-04", award: "Cleaning Services Award 2020", docs: "all", left: "2026-06-30" },
@@ -153,7 +161,7 @@ const CANDIDATES: Candidate[] = [
     ]),
     status: ["met", "met", "met", "met", "partly"],
     evidence: ["Team Leader, Kestrel Office Cleaning (2022 to now): supervise a crew of 6 across 4 office sites.", "Rostered 5 am starts, Monday to Friday.", "Full NSW driver licence.", "Commercial office and retail contracts.", "\"First aid course\" is listed with no date."],
-    summary: "Supervises a 6-person crew across four office sites and already works early starts; led a 6-person commercial cleaning crew for 3 years.",
+    summary: "Led a 6-person commercial cleaning crew for 3 years; early starts",
     strengths: ["Leads a crew across several sites", "Used to early rosters"],
     gaps: ["First aid currency unclear"],
     questions: ["Tell me about a time a cleaner didn't show for a 5 am start.", "How do you check quality across sites you can't visit daily?", "When did you last renew your first aid certificate?"],
@@ -167,7 +175,7 @@ const CANDIDATES: Candidate[] = [
     ]),
     status: ["met", "met", "met", "met", "not_evidenced"],
     evidence: ["Site supervisor on a hospital cleaning contract, 9 cleaners.", "4:30 am shift start.", "Current NSW driver licence.", "Commercial office cleaner, 3 years.", ""],
-    summary: "Site supervisor on a hospital cleaning contract with early starts and a licence.",
+    summary: "Site supervisor on a hospital cleaning contract",
     strengths: ["Supervises a large crew", "Early shifts are routine"],
     gaps: ["No first aid certificate mentioned"],
     questions: ["How do hospital cleaning standards carry over to offices?", "Do you hold a current first aid certificate?"],
@@ -182,7 +190,7 @@ const CANDIDATES: Candidate[] = [
     ]),
     status: ["met", "partly", "met", "partly", "partly"],
     evidence: ["Housekeeping team lead, team of 5 room attendants.", "Hotel shifts; early starts not mentioned.", "Driver licence (NSW, unrestricted).", "Some office cleaning for the conference floor.", "First aid refresher planned."],
-    summary: "Hotel housekeeping team lead; early starts not mentioned.",
+    summary: "Hotel housekeeping team lead; early starts not mentioned",
     strengths: ["Leads a housekeeping team"],
     gaps: ["Early-morning starts not shown", "Little commercial cleaning"],
     questions: ["Are you available for 5 am starts?", "What commercial cleaning have you done?"],
@@ -196,7 +204,7 @@ const CANDIDATES: Candidate[] = [
     ]),
     status: ["met", "met", "not_evidenced", "met", "met"],
     evidence: ["Cleaning supervisor, crew of 8.", "5 am opening clean.", "", "Commercial cleaning for retail tenants and offices.", "Senior First Aid certificate, renewed 2026."],
-    summary: "Strong supervision; no driver licence mentioned.",
+    summary: "Strong supervision; no driver licence mentioned",
     strengths: ["Supervises a large crew", "Current first aid"],
     gaps: ["No driver licence mentioned"],
     questions: ["Do you hold a driver licence? The role moves between sites."],
@@ -210,7 +218,7 @@ const CANDIDATES: Candidate[] = [
     ]),
     status: ["not_evidenced", "met", "not_evidenced", "not_evidenced", "met"],
     evidence: ["", "Opens the cafe at 6 am.", "", "", "First aid certificate (2025)."],
-    summary: "No supervision experience in the application; it is written for a cafe role.",
+    summary: "No supervision experience in the application",
     strengths: ["Used to early starts"],
     gaps: ["No cleaning or supervision experience shown", "Applied for a different kind of role"],
     questions: ["Did you mean to apply for the team leader role?"],
@@ -225,7 +233,7 @@ const CANDIDATES: Candidate[] = [
     ]),
     status: ["partly", "not_evidenced", "not_evidenced", "not_evidenced", "not_evidenced"],
     evidence: ["Supervised a team of 4 retail staff.", "", "", "", ""],
-    summary: "Six years in retail sales and store supervision; retail background, no cleaning experience.",
+    summary: "Retail background; no cleaning experience",
     strengths: ["Has supervised a small team"],
     gaps: ["No cleaning experience", "No early starts or licence shown"],
     questions: ["What draws you to cleaning supervision?"],
@@ -263,6 +271,7 @@ async function seedHiring(f: Folders): Promise<void> {
   for (const c of CANDIDATES) await writeFile(tl, c.file, c.resume, at(2026, 9, 22));
   await writeFile(tl, "scan_0192.pdf", [], at(2026, 9, 22));
   copyFileSync(join(tl, "Daniel Ortiz resume.docx"), join(tl, "Daniel Ortiz resume (1).docx"));
+  touch(join(tl, "Daniel Ortiz resume (1).docx"), at(2026, 9, 23)); // a later copy: the duplicate
   await ingestJob(cat, f, "Team leader");
   const r = cat.saveRubric("Team leader", "Team leader", TEAM_LEADER, "demo");
   cat.confirmRubric("Team leader", r.version);
@@ -298,6 +307,7 @@ async function seedHiring(f: Folders): Promise<void> {
   ];
   for (const [name, lines] of weekend) await writeFile(wc, name, lines, at(2026, 9, 25, 10));
   copyFileSync(join(wc, "Aroha Ngata CV.pdf"), join(wc, "Aroha Ngata CV (1).pdf"));
+  touch(join(wc, "Aroha Ngata CV (1).pdf"), at(2026, 9, 25, 10, 5));
   await ingestJob(cat, f, "Weekend cleaner");
   cat.saveRubric("Weekend cleaner", "Weekend cleaner", WEEKEND_CLEANER, "demo");
 
@@ -319,9 +329,9 @@ async function seedFiles(f: Folders): Promise<void> {
   await writeFile(p, "Code of conduct.docx", ["# Code of conduct", "", `(${SYNTHETIC})`, "", "Treat clients, their offices and each other with respect."], at(2025, 1, 20));
 
   const i = f.inbox;
-  await writeFile(i, "Priya Nair resignation.pdf", ["Dear Jo,", "", "Please accept this letter as my resignation. My last day will be Friday 9 October 2026.", "", "Priya Nair", "", SYNTHETIC], at(2026, 9, 26, 9, 41));
-  await writeFile(i, "Marco induction form.pdf", ["Induction form: Marco Silva", "Site safety, chemicals, alarms and keys covered.", SYNTHETIC], at(2026, 9, 25, 16, 8));
-  await writeFile(i, "Roster photo.jpg", JPEG, at(2026, 9, 22, 12));
+  await writeFile(i, "Priya Nair resignation.pdf", ["Dear Jo,", "", "Please accept this letter as my resignation. My last day will be Friday 9 October 2026.", "", "Priya Nair", "", SYNTHETIC], at(2026, 9, 26, 9, 41), 84);
+  await writeFile(i, "Marco induction form.pdf", ["Induction form: Marco Silva", "Site safety, chemicals, alarms and keys covered.", SYNTHETIC], at(2026, 9, 25, 16, 8), 120);
+  await writeFile(i, "Roster photo.jpg", JPEG, at(2026, 9, 22, 12), 1229);
   await writeFile(i, "Uniform policy draft.docx", ["# Uniform policy (draft)", "", `(${SYNTHETIC})`], at(2026, 9, 11, 14));
 
   const o = f.outbox;
@@ -329,6 +339,107 @@ async function seedFiles(f: Folders): Promise<void> {
   await writeFile(o, "Leo Tran probation letter.docx", [DRAFT, "", "Dear Leo,", "", "Your probation period ends on Friday 2 October 2026. We would like to meet on Thursday 1 October to review it.", "", `(${SYNTHETIC})`], at(2026, 9, 26, 8, 21));
   await writeFile(o, "Marco Silva welcome letter.docx", ["Dear Marco,", "", "Welcome to Wattle Lane Cleaning. We're glad to have you on the weekend crew.", "", `(${SYNTHETIC})`], at(2026, 9, 25, 16, 11));
 }
+
+// ------------------------------------------------------------------ conversations (fake engine only)
+
+interface DemoConversation {
+  threadId: string;
+  title: string;
+  startedAt: Date;
+  messages: { role: "user" | "assistant"; text: string }[];
+}
+
+/**
+ * The design's conversation list. The real engine keeps conversations itself and cannot be
+ * seeded, so only the fake engine (npm run ui:fake) loads these (FX_FAKE_CONVERSATIONS).
+ */
+const CONVERSATIONS: DemoConversation[] = [
+  {
+    threadId: "demo-priya-resigning",
+    title: "Priya is resigning",
+    startedAt: at(2026, 9, 26, 9, 42),
+    messages: [
+      { role: "user", text: '[attached: "Priya Nair resignation.pdf" (in the Inbox)] Priya just handed in her resignation. Her last day is Friday 9 October. What do I need to do?' },
+      {
+        role: "assistant",
+        text: [
+          "Thanks for letting me know. Priya is part-time under the Cleaning Services Award, so her notice period comes from the award and her contract. Before her last day:",
+          "",
+          "1. **Confirm in writing.** Acknowledge the resignation and her last day. I can draft the letter.",
+          "2. **Final pay.** Pay it by the time the award sets (most say within 7 days). Include unused annual leave with loading; personal/carer's leave isn't paid out.",
+          "3. **Property, access and records.** Collect keys and uniform, turn off access on her last day, keep her records for 7 years.",
+          "",
+          "Sources: [Fair Work: Final pay](https://www.fairwork.gov.au/ending-employment/final-pay) · [Services Australia: Separation Certificates](https://www.servicesaustralia.gov.au/employment-separation-certificates-for-employers)",
+        ].join("\n"),
+      },
+    ],
+  },
+  {
+    threadId: "demo-leo-probation",
+    title: "Leo probation review",
+    startedAt: at(2026, 9, 26, 8, 15),
+    messages: [
+      { role: "user", text: "Leo's probation finishes next week. What should I do?" },
+      { role: "assistant", text: "Leo's probation ends on Friday 2 October. Probation is set by you, not by law, so if you do nothing his job simply continues. Before Friday, have a short review: what's gone well, anything to improve, and confirm he's staying on. I can draft a letter confirming that." },
+      { role: "user", text: "Yes, draft it. And note in the register that the review's booked for Thursday." },
+      { role: "assistant", text: `I've saved the draft to your Outbox: **Leo Tran probation letter.docx** (it starts with "${DRAFT}"). The register note wasn't saved during voice: say yes when you're ready and I'll add "probation review booked for Thu 1 Oct" to Leo's record.` },
+    ],
+  },
+  {
+    threadId: "demo-setup",
+    title: "Set up your business",
+    startedAt: at(2026, 9, 26, 8, 2),
+    messages: [
+      { role: "user", text: "Wattle Lane Cleaning Pty Ltd. We clean offices around Sydney. 9 staff: 4 casual cleaners, the rest part-time or full-time, and one on a fixed-term contract. Payroll is in Xero, fortnightly. My accountant does our BAS and super." },
+      { role: "assistant", text: "Thanks. Offices in Sydney usually fall under the Cleaning Services Award 2020; we'll confirm that together with the award finder guide next. I've saved your business profile: legal name, industry, NSW, 9 employees, full-time, part-time, casual and fixed-term, fortnightly pay in Xero, and your accountant as your adviser." },
+    ],
+  },
+  {
+    threadId: "demo-marco-casual",
+    title: "Marco started as a casual",
+    startedAt: at(2026, 9, 25, 16, 10),
+    messages: [
+      { role: "user", text: "Marco started with us as a casual on 6 September, weekend shifts at the Parramatta sites. Can you write him a short welcome letter?" },
+      { role: "assistant", text: "Done: **Marco Silva welcome letter.docx** is in your Outbox. I kept it short and friendly, with his first week's contacts left as blanks for you to fill in.\n\nHis register still shows three starting documents not recorded: the Casual Employment Information Statement, the super choice form (due by 4 October) and his induction. If they're done, tell me and I'll record them." },
+    ],
+  },
+  {
+    threadId: "demo-team-leader",
+    title: "Team leader applications",
+    startedAt: at(2026, 9, 24, 15, 20),
+    messages: [
+      { role: "user", text: "Screen the team leader applications." },
+      { role: "assistant", text: "Screened 13 applications for Team leader against the criteria you confirmed: 2 strong, 2 partial, 9 weak.\n\n1. **Hannah Cole** (strong): leads a 6-person crew across four office sites; early starts.\n2. **Daniel Ortiz** (strong): site supervisor on a hospital cleaning contract.\n\nOne file couldn't be read (scan_0192.pdf has no text) and one was a duplicate. One application contains hidden instructions to an AI screener; I ignored them and flagged it. The Word report (top 10) and the Excel list of everyone are in your Outbox." },
+    ],
+  },
+  {
+    threadId: "demo-tom-permanent",
+    title: "Tom asking to go permanent",
+    startedAt: at(2026, 9, 22, 10, 5),
+    messages: [
+      { role: "user", text: "Tom has worked every Tuesday and Thursday for a year. He's asked if he can go permanent. Do I have to say yes?" },
+      { role: "assistant", text: "Tom has worked a regular pattern for close to 12 months, so this is worth handling carefully. Because you have fewer than 15 employees, the small business rules apply: you don't have to offer permanent employment yourself, but Tom can ask. Once he has worked for you for 12 months (from 3 November 2026) he can give you written notice that he wants to change; you must reply in writing within 21 days and can only refuse for the reasons the law allows. You can also offer it earlier if it suits you both.\n\nSource: [Fair Work: Becoming a permanent employee](https://www.fairwork.gov.au/starting-employment/types-of-employees/casual-employees/becoming-a-permanent-employee)" },
+    ],
+  },
+  {
+    threadId: "demo-uniform-policy",
+    title: "Uniform policy question",
+    startedAt: at(2026, 9, 11, 13, 40),
+    messages: [
+      { role: "user", text: "Can I ask staff to pay for their own uniforms?" },
+      { role: "assistant", text: "If you require staff to wear a uniform, awards usually say you provide it or pay for it (often as an allowance). Check the Cleaning Services Award's allowances with the Fair Work Pay and Conditions Tool before you write it into a policy. I can help you draft the uniform policy once you've checked." },
+    ],
+  },
+  {
+    threadId: "demo-weekend-roster",
+    title: "Weekend roster and breaks",
+    startedAt: at(2026, 9, 7, 9, 30),
+    messages: [
+      { role: "user", text: "What breaks do the cleaners need on a 6-hour weekend shift?" },
+      { role: "assistant", text: "Breaks come from the award, so check the Cleaning Services Award's breaks clause for a 6-hour shift (the Fair Work Pay and Conditions Tool shows it). Weekend work may also attract penalty rates. Once you've checked, I can help you set the roster so everyone gets their breaks." },
+    ],
+  },
+];
 
 function seedMemory(memoryRoot: string, userId: string): void {
   new UserMemory(memoryRoot, userId); // creates the user's folder
@@ -347,11 +458,18 @@ function seedMemory(memoryRoot: string, userId: string): void {
   ].map((t) => ({ ...t, expiresAt: expires(new Date(t.createdAt)) }));
   writeFileSync(join(dir, "preferences.jsonl"), prefs.map((p) => JSON.stringify(p)).join("\n") + "\n");
   writeFileSync(join(dir, "tasks.jsonl"), tasks.map((t) => JSON.stringify(t)).join("\n") + "\n");
+  // The history index (a real engine lists only the conversations it has, so these stay hidden there).
+  const sessions = CONVERSATIONS.map((c) => ({ threadId: c.threadId, title: c.title, startedAt: iso(c.startedAt) }));
+  writeFileSync(join(dir, "sessions.jsonl"), sessions.map((x) => JSON.stringify(x)).join("\n") + "\n");
+  writeFileSync(demoConversationsFile(memoryRoot, userId), JSON.stringify(CONVERSATIONS.map((c) => ({ ...c, startedAt: iso(c.startedAt) })), null, 2));
 }
 
+/** Where the demo conversations are for the fake engine (FX_FAKE_CONVERSATIONS). */
+export const demoConversationsFile = (memoryRoot: string, userId: string) => join(memoryRoot, "users", userId, "fake-conversations.json");
+
 /**
- * Seeds the design's sample data into an empty workspace and this user's memory.
- * Conversations are not seeded: they live in the engine and only come from real chats.
+ * Seeds the design's sample data into an empty workspace and this user's memory. The
+ * conversations are for the fake engine only (a real engine's come from real chats).
  */
 export async function seedDemo(opts: { filesRoot: string; memoryRoot: string; userId: string }): Promise<void> {
   const f = ensureFolders(opts.filesRoot);

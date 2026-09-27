@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import type { Engine } from "../engine/types";
 import { jobDir, walk, type Folders } from "../files/folders";
 import { extractText, MAX_FILE_BYTES } from "../files/parse";
@@ -44,7 +44,13 @@ export async function ingestJob(cat: Catalog, folders: Folders, job: string, onP
   const dir = jobDir(folders, job);
   const { files, truncated } = walk(dir);
   const jdFiles = files.filter((f) => !f.rel.includes("/") && JD_NAME.test(f.rel)).map((f) => f.rel);
-  const apps = files.filter((f) => !jdFiles.includes(f.rel));
+  // Oldest first (then shorter names), so of identical files the original is kept and the later
+  // copy ("CV (1).pdf") is the duplicate.
+  const mtime = (abs: string) => statSync(abs).mtimeMs;
+  const apps = files
+    .filter((f) => !jdFiles.includes(f.rel))
+    .map((f) => ({ ...f, mtime: mtime(f.abs) }))
+    .sort((a, b) => a.mtime - b.mtime || a.rel.length - b.rel.length || a.rel.localeCompare(b.rel));
 
   const firstByHash = new Map<string, string>();
   const summary: IngestSummary = { job, applications: 0, newApplications: 0, unreadable: [], duplicates: [], jdFiles, truncated };

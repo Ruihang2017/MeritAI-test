@@ -65,9 +65,9 @@ const emp = (x: Partial<Employee>): Employee => ({
   });
   const t = rs.map((r) => r.title).join(" | ");
   record("unit: register reminders", [
-    ["probation: 2 weeks before, overdue now", rs.some((r) => /Probation ends 2026-10-06: Pat/.test(r.title) && r.overdue)],
-    ["visa: 30 days before", rs.some((r) => /Visa .* 2026-10-20: Vi/.test(r.title) && r.due === "2026-09-20")],
-    ["fixed-term: 4 weeks before", rs.some((r) => /Fixed-term contract ends 2026-10-15: Fay/.test(r.title))],
+    ["probation: shown ahead, dated the end date", rs.some((r) => /Probation ends 2026-10-06: Pat/.test(r.title) && r.due === "2026-10-06" && !r.overdue)],
+    ["visa: shown ahead, dated the expiry", rs.some((r) => /Visa .* 2026-10-20: Vi/.test(r.title) && r.due === "2026-10-20")],
+    ["fixed-term: shown ahead, dated the end date", rs.some((r) => /Fixed-term contract ends 2026-10-15: Fay/.test(r.title) && r.due === "2026-10-15")],
     ["new casual: paperwork not recorded", rs.some((r) => /paperwork not recorded in the register for Newbie/.test(r.title) && /Casual Employment Information Statement/.test(r.detail) && /TFN/.test(r.detail))],
     ["super only: due 28 days after start", rs.some((r) => /SuperOnly/.test(r.title) && r.due === "2026-10-18" && !r.overdue)],
     ["far-off dates not shown", !/Later/.test(t)],
@@ -78,7 +78,7 @@ const emp = (x: Partial<Employee>): Employee => ({
 
   const june = computeReminders({ employees: [], headcount: 5, today: "2026-06-01", payrollSystem: "Xero" });
   record("unit: annual wage review", [
-    ["shown in June", june.some((r) => /1 July 2026/.test(r.title) && /first full pay period on or after 1 July/.test(r.detail) && /Xero/.test(r.detail))],
+    ["shown in June, dated 1 July", june.some((r) => /1 July 2026/.test(r.title) && r.due === "2026-07-01" && /first full pay period on or after 1 July/.test(r.detail) && /Xero/.test(r.detail))],
     ["official source", june.every((r) => r.source?.url.startsWith("https://www.fairwork.gov.au/"))],
   ]);
 }

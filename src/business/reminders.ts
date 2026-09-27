@@ -2,6 +2,7 @@ import type { ClientTool } from "../engine/types";
 import type { BusinessStore } from "./profile";
 import { DOCUMENTS, outstandingDocuments, type DocumentId, type Employee, type Register } from "./register";
 import { isApprenticeRole } from "./leaving";
+import { todayIso } from "../clock";
 
 /**
  * Compliance reminders (plan P3), worked out by code from the employee register,
@@ -17,7 +18,7 @@ export const RULES_CHECKED_ON = "2026-09-25";
 export const HORIZON_DAYS = 30;
 
 export interface Reminder {
-  /** YYYY-MM-DD: when to act. */
+  /** YYYY-MM-DD: the date itself (probation or contract end, visa expiry, paperwork due); shown ahead of it. */
   due: string;
   overdue: boolean;
   title: string;
@@ -94,10 +95,11 @@ export function computeReminders(opts: {
   const inWindow = (due: string, graceDays: number) => due <= horizon && daysBetween(due, today) <= graceDays;
 
   for (const e of opts.employees.filter((x) => x.status === "active")) {
-    const who = `${e.name} (${e.role})`;
+    const who = e.name;
 
     // Starting documents not recorded yet.
-    const missing = outstandingDocuments(e);
+    // In the order they are given (as the design lists them).
+    const missing = outstandingDocuments(e).sort((a, b) => DOC_ORDER.indexOf(a) - DOC_ORDER.indexOf(b));
     if (missing.length && e.startDate <= horizon) {
       // Each item with its own timing, so a recorded item is never reported and nothing looks overdue early.
       const superDue = addDays(e.startDate, 28);
@@ -106,28 +108,30 @@ export function computeReminders(opts: {
       push({
         due: superOnly ? superDue : e.startDate,
         title: `Starting paperwork not recorded in the register for ${who}`,
-        detail: `Only these are not recorded (they may already be done; if so, record them): ${missing.map((d) => `${DOCUMENTS[d]} (${timing[d]})`).join("; ")}. Everything else is recorded.`,
+        detail: `Not recorded yet: ${missing.map((d) => (d === "induction" ? DOC_SHORT[d] : `${DOC_SHORT[d]} (${timing[d]})`)).join("; ")}.`,
         employeeId: e.id,
-        source: superOnly ? SRC.superChoice : null,
+        source: missing.includes("ceis") ? SRC.ceis : superOnly ? SRC.superChoice : null,
       });
     }
 
+    // Shown from 6 weeks before the end date until a week after it.
     if (e.probationEnd && inWindow(addDays(e.probationEnd, -14), 21)) {
       const apprentice = isApprenticeRole(e.role);
       push({
-        due: addDays(e.probationEnd, -14),
+        due: e.probationEnd,
         title: `Probation ends ${e.probationEnd}: ${who}`,
         detail: apprentice
           ? "An apprentice's or trainee's probation follows their training contract and the state training authority's rules: check with the authority before extending or ending it, then confirm the outcome in writing."
-          : "Probation is set by the business, not by law, so this is not a legal deadline; good practice is to hold the review and confirm the outcome in writing before the end date. Employment usually continues if nothing is done. Probation does not change unfair dismissal rules: protection generally starts after 6 months of employment (12 months with a small business employer).",
+          : "Probation is set by the business, not by law, and does not change unfair dismissal rules (protection generally starts after 6 months, or 12 in a small business). Have the review conversation before this date.",
         employeeId: e.id,
         source: SRC.probation,
       });
     }
 
+    // Shown from 60 days before the expiry until a month after it.
     if (e.visaExpiry && inWindow(addDays(e.visaExpiry, -30), 60)) {
       push({
-        due: addDays(e.visaExpiry, -30),
+        due: e.visaExpiry,
         title: `Visa / work rights expire ${e.visaExpiry}: ${who}`,
         detail: "Check their current work rights in VEVO before the expiry (e.g. a new visa and its conditions) and save the VEVO result (PDF) as your record. They cannot keep working without valid work rights.",
         employeeId: e.id,
@@ -135,11 +139,12 @@ export function computeReminders(opts: {
       });
     }
 
+    // Shown from 8 weeks before the end date until a week after it.
     if (e.employmentType === "fixed-term" && e.endDate && inWindow(addDays(e.endDate, -28), 35)) {
       push({
-        due: addDays(e.endDate, -28),
+        due: e.endDate,
         title: `Fixed-term contract ends ${e.endDate}: ${who}`,
-        detail: "Decide whether to renew (check the limits on fixed-term renewals) or end it as planned (final pay, handover).",
+        detail: "Decide whether to extend or let it end. Limits apply: 2 years in total including extensions, and at most one extension.",
         employeeId: e.id,
         source: SRC.fixedTerm,
       });
@@ -175,10 +180,10 @@ export function computeReminders(opts: {
   // Annual wage review: new minimum wages and award rates from the first full pay period on or after 1 July.
   const year = Number(today.slice(0, 4));
   for (const y of [year, year + 1]) {
-    const due = `${y}-06-15`;
-    if (inWindow(due, 30)) {
+    // Shown from mid-May until mid-July.
+    if (inWindow(`${y}-06-15`, 30)) {
       push({
-        due,
+        due: `${y}-07-01`,
         title: `New minimum wages and award rates from 1 July ${y}`,
         detail: `Most changes start from the first full pay period on or after 1 July. Check the new rates for your awards and update pay${opts.payrollSystem ? ` in ${opts.payrollSystem}` : ""}.`,
         employeeId: null,
@@ -193,14 +198,64 @@ export function computeReminders(opts: {
 export function formatReminders(rs: Reminder[], today: string): string {
   if (!rs.length) return `Nothing due in the next ${HORIZON_DAYS} days.`;
   return rs
-    .map((r) => `- ${r.overdue ? `OVERDUE (was due ${r.due})` : r.due === today ? "TODAY" : `by ${r.due}`}: ${r.title}. ${r.detail}${r.source ? ` Source: ${r.source.title} ${r.source.url}` : ""}`)
+    .map((r) => {
+      // For the model: unrecorded paperwork may simply not be recorded yet.
+      const note = /^Starting paperwork/.test(r.title) ? " (These may already be done; if so, record them. Everything else is recorded.)" : "";
+      return `- ${r.overdue ? `OVERDUE (was due ${r.due})` : r.due === today ? "TODAY" : `by ${r.due}`}: ${r.title}. ${r.detail}${note}${r.source ? ` Source: ${r.source.title} ${r.source.url}` : ""}`;
+    })
     .join("\n");
 }
 
-export const todayLocal = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+/** Today (the demo workspace uses the design's date: see src/clock.ts). */
+export const todayLocal = todayIso;
+
+const DOC_ORDER: DocumentId[] = ["contract", "fwis", "ceis", "ftcis", "tfn", "vevo", "super_choice", "induction"];
+
+/** Short names for starting documents in reminder text. */
+const DOC_SHORT: Record<DocumentId, string> = {
+  contract: "written contract",
+  fwis: "Fair Work Information Statement",
+  ceis: "Casual Employment Information Statement",
+  ftcis: "Fixed Term Contract Information Statement",
+  tfn: "TFN declaration",
+  super_choice: "super choice form",
+  vevo: "right to work (VEVO) check",
+  induction: "induction",
 };
+
+export interface KeyDate {
+  text: string;
+  /** YYYY-MM-DD */
+  due: string;
+  tone: "red" | "amber" | "n";
+}
+
+/**
+ * The one date shown next to a person on the Staff page, whatever the reminder window:
+ * overdue paperwork (or an expired visa) first, else the soonest of start, last day,
+ * probation end, contract end and visa expiry; amber within `soonDays`. People who have
+ * left: the date and the year their records can go (kept 7 years).
+ */
+export function nextKeyDate(e: Employee, today: string, soonDays = 7): KeyDate | null {
+  if (e.status === "left") return e.leftDate ? { text: `Left ${e.leftDate} · records kept to ${Number(e.leftDate.slice(0, 4)) + 7}`, due: e.leftDate, tone: "n" } : null;
+  const missing = outstandingDocuments(e);
+  if (missing.length && e.startDate < today) {
+    const superDue = addDays(e.startDate, 28);
+    if (!missing.every((d) => d === "super_choice")) return { text: `Paperwork overdue since ${e.startDate}`, due: e.startDate, tone: "red" };
+    if (superDue < today) return { text: `Super choice form overdue since ${superDue}`, due: superDue, tone: "red" };
+  }
+  if (e.visaExpiry && e.visaExpiry < today) return { text: `Visa expired ${e.visaExpiry}`, due: e.visaExpiry, tone: "red" };
+  const dates: [string | null, string][] = [
+    [e.startDate > today ? e.startDate : null, "Starts"],
+    [e.leftDate, "Last day"],
+    [e.probationEnd, "Probation ends"],
+    [e.employmentType === "fixed-term" ? e.endDate : null, "Contract ends"],
+    [e.visaExpiry, "Visa expires"],
+  ];
+  const next = dates.filter((x): x is [string, string] => x[0] !== null && x[0] >= today).sort((a, b) => a[0].localeCompare(b[0]))[0];
+  if (!next) return null;
+  return { text: `${next[1]} ${next[0]}`, due: next[0], tone: next[0] <= addDays(today, soonDays) ? "amber" : "n" };
+}
 
 export function remindersFor(register: Register, business: BusinessStore, today = todayLocal()): Reminder[] {
   const p = business.get();

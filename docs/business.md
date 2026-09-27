@@ -153,17 +153,20 @@ The `onboarding-plan` skill also calls the checklist for its pre-start items. `d
 
 A local CLI cannot notify while it is closed, so reminders appear when it starts.
 
+Each reminder is dated the day itself (the end of probation, the expiry, the end of the contract, 1 July), not the day to start acting; it appears ahead of that date. "Overdue" means the date has passed.
+
 | Reminder | When it shows | Rule (checked 2026-09-25) |
 |---|---|---|
-| Starting paperwork not recorded | From the start date (super choice alone: 28 days after the start) until it is recorded | Information statements and TFN by the start; super choice within 28 days |
-| Probation ends | 14 days before the end, and up to 21 days after | Confirm the outcome in writing |
-| Visa / work rights expire | 30 days before | Re-check VEVO |
-| Fixed-term contract ends | 28 days before | Renew (within the limits) or end it |
+| Starting paperwork not recorded | From the start date (super choice alone: 28 days after the start) until it is recorded; dated the start date (or the super deadline) | Information statements and TFN by the start; super choice within 28 days |
+| Probation ends | From about 6 weeks before the end until a week after | Have the review conversation before the date |
+| Visa / work rights expire | From 60 days before until a month after | Re-check VEVO |
+| Fixed-term contract ends | From about 8 weeks before until a week after | Extend (2 years in total, at most one extension) or let it end |
 | CEIS again (casuals) | On the due date, until a newer CEIS is recorded | Small business employer (headcount under 15): after 12 months. Otherwise: after 6 and 12 months, then every 12 months |
 | Casual may ask to become permanent | At 6 months (12 for a small business employer) | Employee choice pathway; the employer must respond in writing within 21 days |
-| New minimum wages and award rates | From 15 June to mid-July | From the first full pay period on or after 1 July |
+| New minimum wages and award rates | From mid-May to mid-July, dated 1 July | From the first full pay period on or after 1 July |
 
-- Reminders are due within 30 days or overdue, and sorted by date. People who have left are ignored.
+- Sorted by date. People who have left are ignored. Titles name the person (no role).
+- **Staff page "Next date"** (`nextKeyDate()`): one date per person whatever the reminder window: overdue paperwork (or an expired visa) first, else the soonest of start, last day, probation end, contract end and visa expiry (amber within 7 days); for people who left, the date and the year their records can go (kept 7 years). An active employee can have a last day (`leftDate`) set before they leave.
 - **Unknown headcount:** the rules for 15 or more employees are used, because they remind earlier.
 - **Clearing a reminder:** record the document, or update the date, in the register. Reminders are recomputed every time, so nothing is stored.
 

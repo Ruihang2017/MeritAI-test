@@ -8,7 +8,7 @@ import { userInfo } from "node:os";
 import { AssistantApp, TIERS } from "../app/app";
 import { ROOT } from "../assistant";
 import { ensureFolders } from "../files/folders";
-import { seedDemo } from "../../scripts/fixtures/demo";
+import { DEMO_TODAY, demoConversationsFile, seedDemo } from "../../scripts/fixtures/demo";
 import { UiSession } from "./session";
 import { startUiServer } from "./server";
 
@@ -48,6 +48,8 @@ async function demoWorkspace(): Promise<{ filesRoot: string; memoryRoot: string 
   }
   const filesRoot = resolve(ROOT, "workspace-demo", "Wattle Lane");
   const memoryRoot = resolve(ROOT, "memory-demo");
+  // The design's day (src/clock.ts), set before seeding, so the sample data reads as on the canvas.
+  process.env.FX_TODAY ??= DEMO_TODAY;
   if (flag("--reseed")) {
     rmSync(filesRoot, { recursive: true, force: true });
     rmSync(resolve(memoryRoot, "users", DEMO_USER), { recursive: true, force: true });
@@ -56,6 +58,8 @@ async function demoWorkspace(): Promise<{ filesRoot: string; memoryRoot: string 
     await seedDemo({ filesRoot, memoryRoot, userId: DEMO_USER });
     console.log(`Demo workspace seeded with the design's sample data (synthetic): ${filesRoot}`);
   }
+  // Earlier conversations for the fake engine (a real engine keeps its own).
+  process.env.FX_FAKE_CONVERSATIONS = demoConversationsFile(memoryRoot, DEMO_USER);
   return { filesRoot, memoryRoot };
 }
 
@@ -64,8 +68,8 @@ const tierName = value("--tier") ?? process.env.FX_TIER ?? "fast";
 const serviceTier = TIERS[tierName.toLowerCase()];
 if (!serviceTier) throw new Error(`unknown tier "${tierName}" (use fast or standard)`);
 
-const session = new UiSession({ engine: fake ? "fake" : "codex" });
 const demo = fake || demoMode ? await demoWorkspace() : null;
+const session = new UiSession({ engine: fake ? "fake" : "codex", sampleData: demo !== null });
 const app = new AssistantApp({
   userId: demo ? DEMO_USER : userId(),
   ui: { confirm: session.confirm, progress: session.progress },

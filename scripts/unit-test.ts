@@ -7,13 +7,13 @@ import { tmpdir } from "node:os";
 import { ensureFolders, validateFilesRoot } from "../src/files/folders";
 import { allCodexHomes, codexHomeFor } from "../src/engine/codexHome";
 import { JD_NAME } from "../src/screening/pipeline";
-import { seedDemo } from "./fixtures/demo";
+import { DEMO_TODAY, demoConversationsFile, seedDemo } from "./fixtures/demo";
 import { BusinessStore, adviserLine, renderProfile, smallBusinessLine, EMPTY_PROFILE } from "../src/business/profile";
 import { CHECKLIST_URLS, TRAINING_AUTHORITIES, authoritiesFor, newStarterChecklist } from "../src/business/onboarding";
 import { leavingChecklist, leavingText, isApprenticeRole } from "../src/business/leaving";
 import { Register, employeeLine, normaliseEmployee, type Employee } from "../src/business/register";
 import { registerTools, FIXED_TERM_NOTE } from "../src/business/registerTools";
-import { computeReminders } from "../src/business/reminders";
+import { computeReminders, formatReminders, nextKeyDate } from "../src/business/reminders";
 import { isOfficialUrl } from "../src/research/officialSources";
 import { AssistantApp, usageLimit, withoutName } from "../src/app/app";
 import { PendingConfirms } from "../src/app/confirms";
@@ -121,7 +121,10 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   const pe = rs.find((r) => /Ella/.test(r.title))!;
   const pl = rs.find((r) => /Leo/.test(r.title))!;
   record("reminder wording", [
-    ["paperwork: only unrecorded items", /Super choice form given/.test(paper.detail) && /Induction/.test(paper.detail) && !/Fair Work Information Statement|TFN/.test(paper.detail)],
+    ["paperwork: only unrecorded items", /super choice form/.test(paper.detail) && /induction/.test(paper.detail) && !/Fair Work Information Statement|TFN/.test(paper.detail)],
+    ["paperwork: the model is told they may already be done", /may already be done/.test(formatReminders([paper], "2026-09-26"))],
+    ["probation: dated the end date, shown ahead, not overdue before it", pl.due === "2026-09-24" && pl.overdue && computeReminders({ employees: [{ ...leo, probationEnd: "2026-10-02" }], headcount: 30, today: "2026-09-26" })[0]?.due === "2026-10-02"],
+    ["titles name the person without the role", /: Leo$/.test(pl.title)],
     ["paperwork: super date, not overdue yet (due at start for induction)", /by 2026-10-04/.test(paper.detail)],
     ["apprentice probation: training authority", /training contract/.test(pe.detail) && /authority/.test(pe.detail)],
     ["normal probation: not a legal deadline", /not by law/.test(pl.detail)],
@@ -605,20 +608,47 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
 // ------------------------------------------------------------ demo workspace = the design's sample data
 {
   const root = join(TMP, "demo");
+  // The demo runs on the design's date (src/clock.ts), as npm run ui:demo does.
+  const realToday = process.env.FX_TODAY;
+  process.env.FX_TODAY = DEMO_TODAY;
   await seedDemo({ filesRoot: join(root, "Wattle Lane"), memoryRoot: join(root, "memory"), userId: "demo" });
+  process.env.FX_FAKE_CONVERSATIONS = demoConversationsFile(join(root, "memory"), "demo");
   const app = new AssistantApp({ userId: "demo", ui: { confirm: async () => false }, engine: "fake", filesRoot: join(root, "Wattle Lane"), memoryRoot: join(root, "memory") });
   const staff = app.staffOverview(true);
   const tl = await app.screenResults("Team leader");
   const wc = await app.screenResults("Weekend cleaner");
-  const files = app.workspaceFiles();
+  const files = await app.workspaceFiles();
+  const nextOf = Object.fromEntries(staff.map((e) => [e.name, e.next ? `${e.next.text} [${e.next.tone}]` : "—"]));
+  const DESIGN_NEXT = {
+    "Aisha Rahman": "—", "Ben O'Brien": "—", "Grace Liu": "—",
+    "Leo Tran": "Probation ends 2026-10-02 [amber]",
+    "Marco Silva": "Paperwork overdue since 2026-09-06 [red]",
+    "Mia Rossi": "Visa expires 2027-02-14 [n]",
+    "Priya Nair": "Last day 2026-10-09 [n]",
+    "Sam Park": "Contract ends 2026-10-23 [n]",
+    "Tom Becker": "—",
+    "Chloe Wang": "Left 2026-06-30 · records kept to 2033 [n]",
+  };
+  const same = (x: unknown, y: unknown) => JSON.stringify(x) === JSON.stringify(y);
+  const rems = app.reminders().map((r) => `${r.due} ${r.overdue} ${r.title}`);
+  const history = await app.history();
   record("demo workspace (design sample data)", [
     ["profile: Wattle Lane Cleaning Pty Ltd, small business", app.profile().profile.legalName === "Wattle Lane Cleaning Pty Ltd" && app.profile().smallBusiness === true],
     ["staff: 9 active, 1 left; Marco has 3 documents not recorded", staff.filter((e) => e.status === "active").length === 9 && staff.filter((e) => e.status === "left").length === 1 && staff.find((e) => e.name === "Marco Silva")!.documentsExpected.filter((d) => !d.recorded).length === 3],
     ["Team leader: 13 ranked, Hannah first, Tariq flagged, 1 unreadable", tl.ranked.length === 13 && tl.ranked[0].name === "Hannah Cole" && tl.ranked.find((c) => c.name === "Tariq Aziz")?.evaluation.flags.suspiciousInstructions === true && tl.ingest.unreadable.length === 1],
     ["Weekend cleaner: criteria not confirmed, JD recognised", wc.rubric?.confirmed === false && wc.ingest.jdFiles[0] === "Weekend cleaner JD.pdf"],
     ["files: Inbox 4, Outbox 5, Policies 3; memory 3 + 3", files.inbox.length === 4 && files.outbox.length === 5 && files.policies.length === 3 && app.memories().preferences.length === 3],
-  ], JSON.stringify({ ranked: tl.ranked.map((c) => c.name), outbox: files.outbox.map((f) => f.name) }).slice(0, 600));
+    ["Outbox: the two letters starting with DRAFT are marked", same(files.outbox.filter((f) => f.draft).map((f) => f.name).sort(), ["Leo Tran probation letter.docx", "Priya Nair resignation acknowledgement.docx"])],
+    ["Staff next dates as in the design", same(Object.entries(nextOf).sort(), Object.entries(DESIGN_NEXT).sort())],
+    ["Attention: 1 overdue (Marco, since 6 Sep), 1 this week (Leo, 2 Oct), Sam on 23 Oct", same(app.attentionSummary(), { overdue: 1, soon: 1 }) && same(rems, ["2026-09-06 true Starting paperwork not recorded in the register for Marco Silva", "2026-10-02 false Probation ends 2026-10-02: Leo Tran", "2026-10-23 false Fixed-term contract ends 2026-10-23: Sam Park"])],
+    ["duplicates: the later \"(1)\" copies", tl.ingest.duplicates[0]?.file === "Daniel Ortiz resume (1).docx" && wc.ingest.duplicates[0]?.file === "Aroha Ngata CV (1).pdf"],
+    ["8 earlier conversations for the fake engine", history.length === 8 && history[0].title === "Priya is resigning"],
+    ["a future start shows as Starts", nextKeyDate({ ...staff[0], status: "active", startDate: "2026-10-12", documents: [], probationEnd: null, endDate: null, visaExpiry: null, leftDate: null }, DEMO_TODAY)?.text === "Starts 2026-10-12"],
+  ], JSON.stringify({ nextOf, rems, dups: [tl.ingest.duplicates, wc.ingest.duplicates], history: history.map((h) => h.title) }).slice(0, 1500));
   await app.close();
+  if (realToday === undefined) delete process.env.FX_TODAY;
+  else process.env.FX_TODAY = realToday;
+  delete process.env.FX_FAKE_CONVERSATIONS;
 }
 
 // ------------------------------------------------------------ attachments uploaded as bytes (a browser UI)

@@ -1,6 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
+import { now as clockNow } from "../clock";
 
 /**
  * Per-user long-term memory, stored as JSONL under memory/users/<user>/.
@@ -138,7 +139,7 @@ export class UserMemory {
     let items = this.prefs.read();
     if (replaces) items = items.filter((p) => p.id !== replaces);
     if (items.length >= MAX_PREFERENCES) throw new Error(`too many preferences (max ${MAX_PREFERENCES}); forget one first`);
-    const pref: Preference = { id: newId("p"), text: clean, source, createdAt: new Date().toISOString() };
+    const pref: Preference = { id: newId("p"), text: clean, source, createdAt: clockNow().toISOString() };
     this.prefs.write([...items, pref]);
     return pref;
   }
@@ -146,7 +147,7 @@ export class UserMemory {
   // --- tasks ---
 
   /** Unexpired task notes, newest first. Expired ones are purged on read. */
-  tasks(now = new Date()): TaskNote[] {
+  tasks(now = clockNow()): TaskNote[] {
     const all = this.tasksFile.read();
     const live = all.filter((t) => new Date(t.expiresAt) > now);
     if (live.length !== all.length) this.tasksFile.write(live);
@@ -158,7 +159,7 @@ export class UserMemory {
     if (!clean || findPii(clean)) return null;
     let items = this.tasks();
     if (replaces) items = items.filter((t) => t.id !== replaces);
-    const now = new Date();
+    const now = clockNow();
     const note: TaskNote = {
       id: newId("t"),
       text: clean,

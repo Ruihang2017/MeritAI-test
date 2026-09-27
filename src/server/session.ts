@@ -6,7 +6,9 @@ import type { Confirm, ConfirmRequest } from "../engine/types";
 import { DOCUMENTS } from "../business/register";
 import { LEAVING_REASONS } from "../business/leaving";
 import { OFFICIAL_DOMAINS } from "../research/officialSources";
+import { todayIso } from "../clock";
 import type { ClientMessage, Method, Methods, ServerEvent, Settings, ShellState } from "./protocol";
+import { RULES_CHECKED_ON } from "../business/reminders";
 
 /**
  * Connects UI messages to one AssistantApp: an allowlist of methods, the reply
@@ -29,7 +31,7 @@ export class UiSession {
   private tier: "fast" | "standard" | null = null;
   private limit: { resetAt: string | null } | null = null;
 
-  constructor(private readonly opts: { engine: "codex" | "fake" }) {}
+  constructor(private readonly opts: { engine: "codex" | "fake"; sampleData?: boolean }) {}
 
   /** The confirm to give AssistantApp's ui: the question goes to every connected UI. */
   readonly confirm: Confirm = (req, ctx) =>
@@ -155,7 +157,7 @@ export class UiSession {
       return this.app.markLeft(int(p.id), str(p.leftDate, "leftDate", 10), p.reason);
     },
     removeEmployee: async (p) => this.app.removeEmployee(int(p?.id)),
-    jobs: async () => this.app.jobs().map(({ job, files, criteria }) => ({ job, files, criteria })),
+    jobs: async () => this.app.jobs(),
     createJob: async (p) => {
       const job = str(p?.job, "job", 80).trim();
       if (!job) throw new Error("give the job a name");
@@ -261,6 +263,9 @@ export class UiSession {
     return {
       account,
       engine: this.opts.engine,
+      sampleData: this.opts.sampleData ?? false,
+      today: todayIso(),
+      rulesChecked: RULES_CHECKED_ON,
       business: { name: p.profile.tradingName ?? p.profile.legalName ?? "Your business", needsSetup: this.app.needsSetup() },
       workspace: basename(f.root),
       workspacePath: f.root,
