@@ -2,7 +2,7 @@
 
 从上到下做一遍，每步对照"预期"。有问题记下步骤号和截图；也可以在 app 里用 Send feedback 存一个文件发给开发。
 
-全部用示例企业或虚构数据。A–G 大约 60 分钟；语音（第 F 步）另算，真实语音约 US$0.05/分钟。
+全部用示例企业或虚构数据。A–H 大约 60 分钟，J–P（今晚新做的）大约 45 分钟；语音（第 F 步）另算，真实语音约 US$0.05/分钟。
 
 ## 0 准备
 
@@ -15,7 +15,7 @@
 
 | # | 做什么 | 预期 |
 |---|---|---|
-| A1 | 运行 `release\MeritAI Setup 0.1.0.exe` | 可能弹出 SmartScreen 警告（没有签名），点 More info › Run anyway；装到当前用户下，开始菜单出现 MeritAI |
+| A1 | 运行 `release\MeritAI Setup 0.2.0.exe` | 可能弹出 SmartScreen 警告（没有签名），点 More info › Run anyway；装到当前用户下，开始菜单出现 MeritAI |
 | A2 | 从开始菜单打开 MeritAI | 一个窗口，标题 MeritAI；出现首次运行的登录页 |
 | A3 | Sign in with ChatGPT → 在浏览器里登录并输入代码 | 回到 app 后自动进入下一步，**不用**手动刷新 |
 | A4 | 工作区保留默认的 `C:\Users\<你>\MeritAI` | 下一步是选企业 |
@@ -79,7 +79,7 @@
 |---|---|---|
 | Fa1 | Conversations › 麦克风 | 浏览器问麦克风权限（由你决定点允许）；出现语音条：listening |
 | Fa2 | 随便说一句话，停一下 | 替身按顺序"听到"脚本里的请求（先是 "What do I need to do this week?"），聊天里显示成你说的话，AI 回答；语音条显示 working，然后 speaking（一个轻音） |
-| Fa3 | 第二、第三句 | "Priya is resigning…"：这类要确认的改动在语音中**不保存**，结束后出现 Review and save |
+| Fa3 | 第二、第三句 | 第二句是 "Hannah accepted…"：确认卡片出现在右边的 On screen 面板等你；替身下一句会说 "Yes, save it." 自动确认（详见 K 节） |
 | Fa4 | 静音 / 取消静音，换麦克风（Settings） | 静音时替身听不到 |
 | Fa5 | End | 显示 Voice ended、时长和估算的费用（替身不会真的扣费） |
 | Fa6 | 语音中切到别的页面，或在另一个标签页打开 | 别的标签页里不能开始其它操作（提示 Voice is on）；关掉开始语音的那个标签页，语音会停止 |
@@ -91,7 +91,7 @@
 | Fb1 | Conversations › 麦克风 | Windows 可能问麦克风权限；app 只申请麦克风这一项权限 |
 | Fb2 | 问 "What do I need to do this week?" | 语音回答，同时聊天里有文字 |
 | Fb3 | 它说话时打断它，问别的 | 马上停下来，回答新的问题（上次付费测试这一项失败过一次，要特别看） |
-| Fb4 | "Just hired Hannah, she accepted the offer, starting Monday as a cleaner" | 语音中不保存；结束后出现 Review and save，确认后 Staff 里有 Hannah（Hiring 那边**不会**跟着变，见下一轮的讨论） |
+| Fb4 | "Hannah accepted the Team leader offer, she starts Monday" | 确认卡片出现在右边，语音会请你说 yes；说 "yes" 后 Staff 里有 Hannah，Team leader 显示已录用，右边出现两张卡片 |
 | Fb5 | End | 显示计费秒数和大概费用；和 platform.openai.com 上的用量大致对得上 |
 
 ## G 反馈（5 分钟）
@@ -101,7 +101,7 @@
 | G1 | 在一条回答下点 👍 | 显示 "Thanks: marked helpful." |
 | G2 | 在另一条下点 👎，选两个原因，写一句话，Save feedback | 显示 "Thanks: noted what went wrong." |
 | G3 | 名字 › Send feedback：写一句话，三项都勾上，保存 | 显示 Saved；Show in folder 打开 `C:\Users\<你>\MeritAI\Feedback\` |
-| G4 | 用记事本打开那个 json | 有你写的话、2 条评分（包括问题和回答开头）、当前对话、版本号 0.1.0；**没有** key 或密码 |
+| G4 | 用记事本打开那个 json | 有你写的话、2 条评分（包括问题和回答开头）、当前对话、版本号 0.2.0；**没有** key 或密码 |
 
 ## H 切换到自己的企业（5 分钟）
 
@@ -110,6 +110,74 @@
 | H1 | 点顶部 **Sample data** › Switch to my own business | 进入空的工作区 `C:\Users\<你>\MeritAI`，日期变成今天，Sample data 标签消失 |
 | H2 | Set up with the adviser，扮演 tester guide 里的 Dan Kowalski / Ridgeline Plumbing | 一步步问你企业信息；每次保存都先问你确认 |
 | H3 | 看 Memory | 示例企业没有往你的 memory 里写东西 |
+
+## J 对话和页面联动（今晚新做，15 分钟）
+
+在示例企业里做。可以在 Conversations 页打字，也可以在别的页面打开右栏打字。
+
+| # | 做什么 | 预期 |
+|---|---|---|
+| J1 | 在 Conversations 里说："Hannah accepted the Team leader offer, she starts Monday 5 October, full-time." | 只问**一次**确认，确认内容里有"Hired from: Team leader (Hannah Cole's application)"；回答下面出现"变更 / What changed"卡片：Hannah（入职前 N 件事，**Record paperwork**）和 Team leader（1 of 2 hired，进度条） |
+| J2 | 看左侧导航 | Staff 和 Hiring 旁边有蓝点 |
+| J3 | 点卡片上的 **Open in Staff** | 跳到 Staff，Hannah 那一行高亮并标着"New · MeritAI"；顶部有一条"MeritAI: Hannah Cole added · in “…”"，可以点 Back to the conversation；Staff 的蓝点消失 |
+| J4 | 点 Hiring | Team leader 显示 1 of 2，Hannah 显示"Hired · in Staff"；顶部同样有一条变更说明 |
+| J5 | 说 "Daniel Ortiz accepted too, same start date" | 卡片显示 2 of 2 hired，并出现 **Close the job**；AI 会问要不要关闭职位，不会自己关 |
+| J6 | 在 Staff 页打开右栏，说 "I gave Marco his CEIS and TFN declaration today" | 确认后，右栏旁边的 Staff 表格马上刷新，Marco 那一行高亮 |
+| J7 | 在 Conversations 里说 "Put Ruth on the shortlist for team leader, Kenji is a no" | Hiring 的排名里 Ruth 入围、Kenji 暂不考虑，两行都高亮 |
+| J8 | 说 "We now need 4 weekend cleaners" / "Close the Office admin job" | 招聘人数、关闭状态都同步到 Hiring 页 |
+
+## K 语音时屏幕跟着走（F-a 的免费替身就能看）
+
+| # | 做什么 | 预期 |
+|---|---|---|
+| K1 | `npm run ui:fake` › Conversations › 麦克风；说一句话停一下，再说一句话停一下 | 替身先"听到"本周提醒，第二句是"Hannah accepted the Team leader offer…" |
+| K2 | 看右边 | Attention 面板变成 **On screen / 屏幕上**：添加 Hannah 的确认卡片在这里等你（聊天里也有），语音条显示"Waiting for your OK: …" |
+| K3 | 再说一句话 | 替身这次说的是 "Yes, save it."，确认卡片自动变成已保存；右边出现 Hannah 和 Team leader 的卡片 |
+| K4 | 真实语音（要花钱）时直接说 "yes" | 同上。删除类的改动必须点按钮，说 yes 无效 |
+
+## L 语音用量（Settings）
+
+| # | 做什么 | 预期 |
+|---|---|---|
+| L1 | Settings › Voice › Usage | 今天 / 本月 / 累计的估算美元和分钟（ui:fake 下显示"演示引擎不计入"） |
+| L2 | Monthly limit 填 1，Save limit | 显示"US$x of US$1.00 used this month"；达到上限后语音无法开始，通话中会自动停 |
+
+## M 邮件草稿（MeritAI 不发邮件）
+
+| # | 做什么 | 预期 |
+|---|---|---|
+| M1 | 说 "Email Priya the resignation acknowledgement, priya.nair@example.com" | 回答里有邮件卡片：收件人、主题、附件（那封确认信）、正文开头；**Open in email app**；旁边"Send from MeritAI · Coming soon"是灰的 |
+| M2 | 点 Open in email app | Outlook（或默认邮件应用）打开一封**新邮件草稿**，收件人、主题、附件都在；你自己点发送（这一步我没法验证，因为会在你电脑上打开 Outlook） |
+| M3 | Files › Outbox | 有一个 .eml 文件 |
+
+## N 新建职位：模板
+
+| # | 做什么 | 预期 |
+|---|---|---|
+| N1 | Hiring › New job | 默认"From a template"：行业按钮里你的行业排第一（示例企业是清洁），下面是职位卡片 |
+| N2 | 搜 "chef"、"sparky" | 分别找到 Cook、Electrician |
+| N3 | 选 Cleaner | 左边表单，右边职位描述随你的选择实时变化；上面有"Likely award: Cleaning Services Award [MA000022]"；方括号部分高亮，要你自己填 |
+| N4 | 改名字、勾掉一条职责、Create job | 新职位出现，里面有"<名字> JD.docx"，下一步是 Draft the criteria；页面顶部有 **Add applications** |
+| N5 | 另建一个，选 "Create and ask MeritAI to tailor it" | 右栏里 AI 用企业资料补全方括号部分，并在你确认后替换职位描述 |
+| N6 | "My own job description" 和 "Write it with MeritAI" 两个标签 | 旧的上传表单、和 AI 一起写，都还在 |
+
+## O 即将推出（Coming soon）
+
+| # | 做什么 | 预期 |
+|---|---|---|
+| O1 | 左侧导航 **Connections**（标着 Soon） | 邮件和日历、招聘网站、发薪/任务/备份三组，每张卡片都是"Coming soon"；最下面是"套餐与更新" |
+| O2 | 点几个 **I want this**，再 Send feedback | 反馈文件里有 `wantedConnections` |
+| O3 | Hiring › 某职位 › **Advertise** | "Write the job ad"可用；Post to SEEK / LinkedIn Jobs / Indeed 是灰的"Coming soon" |
+| O4 | Settings › About | "Plan and updates"一行，说明将来是订阅制、自动更新 |
+
+## P 中文
+
+| # | 做什么 | 预期 |
+|---|---|---|
+| P1 | Settings › Language · 语言 › 中文（简体） | 整个界面变中文（导航、按钮、表格标题、确认卡片、日期如"10月9日（周五）"）；员工姓名、职位名称、文件名保持英文 |
+| P2 | 用中文问："Priya 辞职了，最后一天是 10 月 9 日，帮我起草确认信" | AI 用中文回答；保存的信是**英文**；Priya 标为离职 |
+| P3 | 切回 English | 页面重新加载，恢复英文；AI 从下一条消息起用英文 |
+| P4 | 语音用中文说话 | GPT-Live 本来就会跟着你说的语言回答（这一项没改过） |
 
 ## I 清理
 

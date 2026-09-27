@@ -1,6 +1,6 @@
 {
   "name": "fx-chatbot",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Office chatbot CLI on top of a locally hosted codex app-server",
   "type": "module",
