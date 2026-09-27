@@ -21,7 +21,8 @@ export const SCREEN_CONCURRENCY = Number(process.env.FX_SCREEN_CONCURRENCY ?? 20
 const MAX_EVAL_CHARS = 20_000;
 
 const FOLDER_SOURCE = "folder";
-const JD_NAME = /^(jd\b|jd[-_ ]|job[-_ ]?description|position[-_ ]?description|职位描述|岗位描述)/i;
+// "JD - Cleaner.docx", "Job description.pdf", and also "Cleaner JD.docx" / "Cleaner job description.pdf".
+export const JD_NAME = /^(jd\b|jd[-_ ]|job[-_ ]?description|position[-_ ]?description|职位描述|岗位描述)|[-_ ](jd|job[-_ ]?description|position[-_ ]?description)\.[a-z0-9]+$/i;
 
 export const sha256 = (data: Buffer | string) => createHash("sha256").update(data).digest("hex");
 

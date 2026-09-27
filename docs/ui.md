@@ -19,10 +19,11 @@ engine: codex app-server (default) or FakeEngine (FX_ENGINE=fake / --fake)
 |---|---|
 | `npm run ui:build` | Builds `web/` into `web/dist` (needed before `npm run ui`) |
 | `npm run ui` | Real engine; same user, memory and workspace as the CLI (`--user`, `FX_USER`, `--tier`, `FX_TIER` as in the CLI); opens the browser |
-| `npm run ui:fake` | Fake engine and a demo workspace (`workspace-demo/`, `memory-demo/`, gitignored) seeded with the synthetic Wattle Lane Cleaning business, its policies and three synthetic employees |
+| `npm run ui:demo` | Real engine on the demo workspace (`workspace-demo/Wattle Lane/`, `memory-demo/`, gitignored, user `demo`), seeded on first use with the design canvas's sample data (`scripts/fixtures/demo.ts`, synthetic): the Wattle Lane Cleaning profile, 9 staff + 1 left, 3 policies, Inbox and Outbox files, three jobs (Team leader screened: 13 ranked, 1 unreadable, 1 duplicate; Weekend cleaner with criteria to confirm; Office admin without a JD) and 3 preferences + 3 work notes. The design assumes today is 26 Sep 2026, so the dates are absolute. Conversations are not seeded (they only come from real chats). Uses the Codex quota |
+| `npm run ui:fake` | Fake engine on the same demo workspace (no model, no quota) |
 | `npm run ui:dev` | Vite dev server with hot reload (5173) proxying `/ws` to the server (5174), fake engine |
 
-Options: `--no-open`, `--port <n>`; demo: `--fresh` (an empty demo workspace, for the first-run screens), `FX_FAKE_SIGNED_OUT=1` (start signed out), `FX_FAKE_DELAY_MS` (streaming speed; tests use 0–2).
+Options: `--no-open`, `--port <n>`; demo: `--reseed` (back to the design's sample data), `--fresh` (an empty demo workspace, for the first-run screens), `FX_FAKE_SIGNED_OUT=1` (start signed out), `FX_FAKE_DELAY_MS` (streaming speed; tests use 0–2).
 
 ## 2 Local security
 

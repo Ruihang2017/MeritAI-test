@@ -6,6 +6,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpath
 import { tmpdir } from "node:os";
 import { ensureFolders, validateFilesRoot } from "../src/files/folders";
 import { allCodexHomes, codexHomeFor } from "../src/engine/codexHome";
+import { JD_NAME } from "../src/screening/pipeline";
+import { seedDemo } from "./fixtures/demo";
 import { BusinessStore, adviserLine, renderProfile, smallBusinessLine, EMPTY_PROFILE } from "../src/business/profile";
 import { CHECKLIST_URLS, TRAINING_AUTHORITIES, authoritiesFor, newStarterChecklist } from "../src/business/onboarding";
 import { leavingChecklist, leavingText, isApprenticeRole } from "../src/business/leaving";
@@ -588,6 +590,35 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["default: codex_home/; FX_CODEX_HOME=test: codex_home_test/", product === join(ROOT, "codex_home") && test === join(ROOT, "codex_home_test")],
     ["neither home can be the workspace (both hold credentials)", refused(join(ROOT, "codex_home_test")) && refused(join(ROOT, "codex_home", "x")) && allCodexHomes(ROOT).length === 2],
   ]);
+}
+
+// ------------------------------------------------------------ job description file names
+{
+  const jd = ["JD.docx", "jd-cleaner.pdf", "Job description.docx", "Team leader JD.docx", "Weekend cleaner JD.pdf", "Cleaner job description.docx", "职位描述.docx"];
+  const notJd = ["Aroha Ngata CV.pdf", "Jordan resume.docx", "JDoe resume.pdf", "Lucy Brennan application.docx"];
+  record("job description file names", [
+    ["starts or ends with JD / job description", jd.every((n) => JD_NAME.test(n))],
+    ["applications are not taken for a JD", notJd.every((n) => !JD_NAME.test(n))],
+  ], JSON.stringify({ missed: jd.filter((n) => !JD_NAME.test(n)), wrong: notJd.filter((n) => JD_NAME.test(n)) }));
+}
+
+// ------------------------------------------------------------ demo workspace = the design's sample data
+{
+  const root = join(TMP, "demo");
+  await seedDemo({ filesRoot: join(root, "Wattle Lane"), memoryRoot: join(root, "memory"), userId: "demo" });
+  const app = new AssistantApp({ userId: "demo", ui: { confirm: async () => false }, engine: "fake", filesRoot: join(root, "Wattle Lane"), memoryRoot: join(root, "memory") });
+  const staff = app.staffOverview(true);
+  const tl = await app.screenResults("Team leader");
+  const wc = await app.screenResults("Weekend cleaner");
+  const files = app.workspaceFiles();
+  record("demo workspace (design sample data)", [
+    ["profile: Wattle Lane Cleaning Pty Ltd, small business", app.profile().profile.legalName === "Wattle Lane Cleaning Pty Ltd" && app.profile().smallBusiness === true],
+    ["staff: 9 active, 1 left; Marco has 3 documents not recorded", staff.filter((e) => e.status === "active").length === 9 && staff.filter((e) => e.status === "left").length === 1 && staff.find((e) => e.name === "Marco Silva")!.documentsExpected.filter((d) => !d.recorded).length === 3],
+    ["Team leader: 13 ranked, Hannah first, Tariq flagged, 1 unreadable", tl.ranked.length === 13 && tl.ranked[0].name === "Hannah Cole" && tl.ranked.find((c) => c.name === "Tariq Aziz")?.evaluation.flags.suspiciousInstructions === true && tl.ingest.unreadable.length === 1],
+    ["Weekend cleaner: criteria not confirmed, JD recognised", wc.rubric?.confirmed === false && wc.ingest.jdFiles[0] === "Weekend cleaner JD.pdf"],
+    ["files: Inbox 4, Outbox 5, Policies 3; memory 3 + 3", files.inbox.length === 4 && files.outbox.length === 5 && files.policies.length === 3 && app.memories().preferences.length === 3],
+  ], JSON.stringify({ ranked: tl.ranked.map((c) => c.name), outbox: files.outbox.map((f) => f.name) }).slice(0, 600));
+  await app.close();
 }
 
 // ------------------------------------------------------------ attachments uploaded as bytes (a browser UI)

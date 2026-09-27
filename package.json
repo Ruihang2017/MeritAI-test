@@ -31,6 +31,7 @@
     "eval:report": "tsx eval/report.ts",
     "eval:compare": "tsx eval/compare.ts",
     "ui": "tsx src/server/main.ts",
+    "ui:demo": "tsx src/server/main.ts --demo",
     "ui:fake": "tsx src/server/main.ts --fake",
     "ui:build": "vite build web",
     "ui:dev": "tsx src/server/main.ts --dev --fake"

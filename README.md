@@ -45,11 +45,12 @@ The same assistant in the browser, on this computer only (see `docs/ui.md`):
 ```
 npm run ui:build     # once, and after UI changes
 npm run ui           # real engine: opens http://127.0.0.1:<port>/?t=<one-time key> (same account, memory and workspace as the CLI)
-npm run ui:fake      # demo: scripted replies, no model and no quota, a separate demo workspace with synthetic data
+npm run ui:demo      # real engine on a separate demo workspace with the design's sample data (synthetic)
+npm run ui:fake      # the same demo workspace with scripted replies: no model and no quota
 npm run ui:dev       # UI development: hot reload, fake engine
 ```
 
-Demo options: `FX_FAKE_SIGNED_OUT=1` starts signed out (the first-run screens); `npm run ui:fake -- --fresh` starts from an empty workspace. Voice is not in the browser UI yet.
+Demo options: `-- --reseed` puts the demo workspace back to the design's sample data; `FX_FAKE_SIGNED_OUT=1` starts signed out (the first-run screens); `npm run ui:fake -- --fresh` starts from an empty workspace. Voice is not in the browser UI yet.
 
 Voice mode reads `.env` (copy `.env.example`): `VOICE_OPENAI_API_KEY`, `VOICE_MODEL` (default `gpt-live-1`), `VOICE_NAME` (default `gleam`). It needs `ffmpeg` and `ffplay` on PATH. Voice is billed per minute to that key; it is not part of the ChatGPT subscription.
 

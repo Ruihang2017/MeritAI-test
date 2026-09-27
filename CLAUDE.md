@@ -35,7 +35,7 @@ prompts/                   base.md (replaces Codex's coding prompt), developer.m
 codex_home/                isolated CODEX_HOME: config.toml + skills/ are ours; everything else is runtime (gitignored)
 codex_home_test/           CODEX_HOME for test suites, evals and ab-* (gitignored; own sign-in, npm run login:test): scripts/testHome.ts copies config.toml + skills in on each run (src/engine/codexHome.ts)
 eval/                      evaluation: personas.ts (9 synthetic businesses), scenarios/*.ts (~200), sets.ts (core 70 / regression / full), run.ts, checks.ts, judge.ts (gpt-6-sol), report.ts, compare.ts; results in eval/results/ (gitignored). See docs/eval.md
-scripts/                   e2e, skills-test, memory-test, research-test, files-test, hr-test, screening-test, business-test, hiring-test, register-test, reminders-test, award-test, voice-test, inspect, ab-* experiments; fixtures/ (synthetic test business)
+scripts/                   e2e, skills-test, memory-test, research-test, files-test, hr-test, screening-test, business-test, hiring-test, register-test, reminders-test, award-test, voice-test, inspect, ab-* experiments; fixtures/ (synthetic test business; demo.ts = the design canvas's sample data for npm run ui:demo / ui:fake)
 ```
 
 ## Decisions (keep unless the owner changes them)

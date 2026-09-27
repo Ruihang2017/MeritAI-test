@@ -7,7 +7,7 @@ Screening a job's applications is a fixed workflow run by code: **judgement by t
 ```
 files/
   Jobs/<job>/          one workspace per role (the folder name is the job id)
-    JD....             optional JD file at the top level (name starts with "JD", "Job description" or "职位描述")
+    JD....             optional JD file at the top level (name starts with "JD", "Job description" or "职位描述", or ends with "JD" or "job description", e.g. "Cleaner JD.docx")
     anything/…         applications: any file types, any subfolders (depth ≤ 6, ≤ 5,000 files)
   Inbox/               loose files not tied to a job (read with read_file)
   Outbox/              reports and documents the assistant saves

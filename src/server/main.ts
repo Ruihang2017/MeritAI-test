@@ -1,15 +1,14 @@
-// The browser UI: `npm run ui` (real engine) or `npm run ui:fake` (scripted engine, demo workspace).
+// The browser UI: `npm run ui` (real engine), `npm run ui:demo` (real engine, demo workspace) or
+// `npm run ui:fake` (scripted engine, demo workspace).
 // Starts one AssistantApp for this user, the local server, and opens the browser.
 import { spawn } from "node:child_process";
-import { cpSync, existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { userInfo } from "node:os";
 import { AssistantApp, TIERS } from "../app/app";
 import { ROOT } from "../assistant";
-import { BusinessStore } from "../business/profile";
-import { Register } from "../business/register";
 import { ensureFolders } from "../files/folders";
-import { TEST_PROFILE } from "../../scripts/fixtures/business";
+import { seedDemo } from "../../scripts/fixtures/demo";
 import { UiSession } from "./session";
 import { startUiServer } from "./server";
 
@@ -21,6 +20,8 @@ const value = (f: string) => {
 };
 
 const fake = flag("--fake") || process.env.FX_ENGINE === "fake";
+// --demo: the real engine on the demo workspace (the design's sample data); --fake implies it.
+const demoMode = flag("--demo");
 const dev = flag("--dev");
 const port = Number(value("--port") ?? (dev ? 5174 : 0));
 
@@ -32,31 +33,28 @@ function userId(): string {
   return id;
 }
 
+const DEMO_USER = "demo";
+
 /**
- * Demo mode never touches the real memory/ and files/: it uses workspace-demo/ and
- * memory-demo/ (gitignored), seeded once with the SYNTHETIC test business and a few
- * synthetic employees from the design (not real people).
+ * Demo mode never touches the real memory/ and files/: it uses workspace-demo/Wattle Lane/
+ * and memory-demo/ (gitignored), seeded once with the design canvas's SYNTHETIC sample data
+ * (scripts/fixtures/demo.ts). --reseed starts it again from the design's state.
  */
-function demoWorkspace(): { filesRoot: string; memoryRoot: string } {
+async function demoWorkspace(): Promise<{ filesRoot: string; memoryRoot: string }> {
   // --fresh: an empty demo workspace (no profile, no staff) to try the first-run screens.
   if (flag("--fresh")) {
     const stamp = new Date().toISOString().replace(/\D/g, "").slice(0, 14);
     return { filesRoot: ensureFolders(resolve(ROOT, "workspace-demo", "fresh", stamp)).root, memoryRoot: resolve(ROOT, "memory-demo", "fresh", stamp) };
   }
-  const filesRoot = resolve(ROOT, "workspace-demo");
+  const filesRoot = resolve(ROOT, "workspace-demo", "Wattle Lane");
   const memoryRoot = resolve(ROOT, "memory-demo");
+  if (flag("--reseed")) {
+    rmSync(filesRoot, { recursive: true, force: true });
+    rmSync(resolve(memoryRoot, "users", DEMO_USER), { recursive: true, force: true });
+  }
   if (!existsSync(resolve(filesRoot, ".assistant", "business.json"))) {
-    const f = ensureFolders(filesRoot);
-    new BusinessStore(f.data).update(TEST_PROFILE);
-    cpSync(resolve(ROOT, "scripts", "fixtures", "policies"), f.policies, { recursive: true });
-    const reg = new Register(f.data);
-    const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
-    const priya = reg.add({ name: "Priya Nair", role: "Cleaner", employmentType: "part-time", startDate: day(-600), award: "Cleaning Services Award", notes: "Synthetic demo employee" });
-    const leo = reg.add({ name: "Leo Tran", role: "Cleaner", employmentType: "full-time", startDate: day(-176), probationEnd: day(6), notes: "Synthetic demo employee" });
-    reg.recordDocuments(priya.id, ["contract", "fwis", "tfn", "super_choice", "induction"], day(-600));
-    reg.recordDocuments(leo.id, ["contract", "fwis", "tfn", "super_choice", "induction"], day(-176));
-    reg.add({ name: "Marco Silva", role: "Cleaner", employmentType: "casual", startDate: day(-3), notes: "Synthetic demo employee" });
-    reg.close();
+    await seedDemo({ filesRoot, memoryRoot, userId: DEMO_USER });
+    console.log(`Demo workspace seeded with the design's sample data (synthetic): ${filesRoot}`);
   }
   return { filesRoot, memoryRoot };
 }
@@ -67,9 +65,9 @@ const serviceTier = TIERS[tierName.toLowerCase()];
 if (!serviceTier) throw new Error(`unknown tier "${tierName}" (use fast or standard)`);
 
 const session = new UiSession({ engine: fake ? "fake" : "codex" });
-const demo = fake ? demoWorkspace() : null;
+const demo = fake || demoMode ? await demoWorkspace() : null;
 const app = new AssistantApp({
-  userId: fake ? "demo" : userId(),
+  userId: demo ? DEMO_USER : userId(),
   ui: { confirm: session.confirm, progress: session.progress },
   format: "markdown",
   serviceTier,
@@ -88,7 +86,7 @@ if (!dev && !existsSync(resolve(staticDir, "index.html"))) {
 }
 const ui = await startUiServer({ session, port, ...(dev ? { devOrigin: "http://127.0.0.1:5173" } : { staticDir }) });
 const url = dev ? `http://127.0.0.1:5173/?t=${ui.token}` : ui.url;
-console.log(`MeritAI ${fake ? "(demo: fake engine, workspace-demo/)" : ""} at ${url}`);
+console.log(`MeritAI ${fake ? "(demo: fake engine, workspace-demo/) " : demo ? "(demo workspace: workspace-demo/) " : ""}at ${url}`);
 console.log(`account: ${status.description}${status.loggedIn ? "" : "  (not signed in: run `npm run login`)"}`);
 if (dev) {
   // Vite serves web/ with hot reload and proxies /ws to this server (web/vite.config.ts).
