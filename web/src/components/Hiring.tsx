@@ -467,8 +467,9 @@ function JobPane(p: {
 
   return (
     <>
-      <div className="page-h">
-        <div style={{ flexGrow: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+      {/* The actions wrap to a second row before they squeeze the job's name out (narrow windows, Chinese). */}
+      <div className="page-h" style={{ height: "auto", minHeight: 64, flexWrap: "wrap", rowGap: 8, paddingTop: 8, paddingBottom: 8 }}>
+        <div style={{ flex: "1 1 200px", minWidth: 200, display: "flex", flexDirection: "column", gap: 2 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
             <h2 className="h1 ellipsis" style={{ fontSize: 20 }}>
               {job.job}
@@ -491,7 +492,9 @@ function JobPane(p: {
               Candidate emails
             </button>
             <button type="button" className="btn p" disabled={!!p.busy} onClick={p.onReport}>
-              Report<span className="hide-docked">: Word (top 10)</span>
+              <span>
+                Report<span className="hide-docked">: Word (top 10)</span>
+              </span>
             </button>
           </>
         )}

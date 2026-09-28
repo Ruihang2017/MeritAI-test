@@ -2,6 +2,8 @@
 
 An HR adviser for **small business owners with no HR department**, as a CLI and as a browser UI (MeritAI, `npm run ui`). It tells them what to do and does as much of the work as it can. The AI engine is a local `codex app-server` with its own isolated configuration, running on the owner's own ChatGPT account. This is a proof of concept, tested internally by the HR team playing small business owners.
 
+**Product page, with a video of each feature, and the Windows download:** https://ruihang2017.github.io/MeritAI-test/ (source `docs/index.html`).
+
 ## What it helps with
 
 | Area | How |
@@ -187,7 +189,7 @@ Conversations are deleted after 30 days.
 
 **Feedback:** use **Was this helpful?** under a reply, and **Send feedback** (bottom left) for a file you send to the MeritAI team.
 
-*Screenshots and video: `node_modules/electron/dist/electron.exe scripts/docs-media.cjs <demo url>` against `npm run ui:fake -- --demo-dir shots --reseed --no-open --port 5190` (see the script's header).*
+*Screenshots and videos: `node_modules/electron/dist/electron.exe scripts/docs-media.cjs <demo url>` (stills and the hire video) or `... <demo url> --clips` (one video per feature, for the product page), each against a freshly reseeded `npm run ui:fake -- --demo-dir shots --reseed --no-open --port 5190` (see the script's header).*
 
 ## Run
 

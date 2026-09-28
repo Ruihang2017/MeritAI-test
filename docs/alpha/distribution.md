@@ -32,6 +32,13 @@ On the tester's computer: sign-in, memory, conversations and the voice key (DPAP
 - Voice needs each tester's own OpenAI API key with billing (about US$0.05 a minute).
 - Fill in the test coordinator's name and email in `tester-guide.md`, then rebuild the guide.
 
+## Publishing (GitHub)
+
+The repo is public (`Ruihang2017/MeritAI-test`, synthetic data only; keys and `auth.json` are gitignored). There is no CI: build and try the installer on this computer first.
+
+- **Release**: tag `vX.Y.Z`, then `gh release create vX.Y.Z "release/MeritAI Setup X.Y.Z.exe" "release/MeritAI alpha tester guide.docx"` (GitHub turns the spaces in asset names into dots).
+- **Product page**: `docs/index.html` on GitHub Pages (branch `main`, folder `/docs`), https://ruihang2017.github.io/MeritAI-test/. After a release, update its download links and version (they name the file, e.g. `MeritAI.Setup.0.2.1.exe`). Its feature videos and the README's screenshots come from `scripts/docs-media.cjs` (see its header): stills and the hire video by default, one clip per feature with `--clips`.
+
 ## Collecting feedback
 
 Testers send `MeritAI feedback <date time>.json` files (from Send feedback): their note, their ratings of replies (question, start of the reply, what went wrong), optionally the conversation, and technical details (app version, model, platform, recent errors). There is no server: nothing is collected automatically.
