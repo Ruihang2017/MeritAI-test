@@ -85,7 +85,7 @@ export function hiringTools(opts: { folders: () => Folders; catalog: () => Catal
           const decision = d.decision === "clear" ? null : d.decision;
           picked.push({ hash: f.candidate.hash, name: f.candidate.name, decision, label: decision === "shortlist" ? "Shortlist" : decision === "not" ? "Not this time" : "No decision" });
         }
-        if (!(await confirm({ kind: "hiring", title: `Record your decisions for ${job}?`, items: picked.map((p) => `${p.name}: ${p.label}`) }))) return { success: true, text: "The owner did not confirm; nothing was saved.", display: "hiring: not saved" };
+        if (!(await confirm({ kind: "hiring", title: `Record your decisions for ${job}?`, items: picked.map((p) => `${p.name}: ${p.label}`), about: { kind: "job", job } }))) return { success: true, text: "The owner did not confirm; nothing was saved.", display: "hiring: not saved" };
         for (const p of picked) opts.catalog().setDecision(job, p.hash, p.decision);
         return { success: true, text: `Saved: ${picked.map((p) => `${p.name}: ${p.label}`).join("; ")}.`, display: `hiring: ${picked.length} decision(s) saved for ${job}` };
       },
@@ -109,7 +109,7 @@ export function hiringTools(opts: { folders: () => Folders; catalog: () => Catal
         if (!e) return fail(`No employee with id ${a.employeeId}. Call list_employees first.`);
         const f = findCandidate(opts.catalog(), job, String(a.candidate ?? ""));
         if (!f.ok) return fail(`Not saved: ${f.error}.`);
-        if (!(await confirm({ kind: "hiring", title: `Record ${e.name} as hired for ${job}?`, items: [`Application: ${f.candidate.name} (${f.candidate.file})`, `Employee: ${e.name}, ${e.role}`] }))) return { success: true, text: "The owner did not confirm; nothing was saved.", display: "hiring: not saved" };
+        if (!(await confirm({ kind: "hiring", title: `Record ${e.name} as hired for ${job}?`, items: [`Application: ${f.candidate.name} (${f.candidate.file})`, `Employee: ${e.name}, ${e.role}`], about: { kind: "job", job } }))) return { success: true, text: "The owner did not confirm; nothing was saved.", display: "hiring: not saved" };
         linkHire(opts.catalog(), opts.register(), job, f.candidate.file, e.id);
         return { success: true, text: `Recorded. ${countLine(job)}`, display: `hiring: ${e.name} hired for ${job}` };
       },
@@ -138,7 +138,7 @@ export function hiringTools(opts: { folders: () => Folders; catalog: () => Catal
         }
         if (a.open !== null && a.open !== undefined && a.open === (cur.closedAt !== null)) items.push(a.open ? "Reopen the job" : "Close the job (kept, read-only; you can reopen it)");
         if (!items.length) return fail("Nothing to change.");
-        if (!(await confirm({ kind: "hiring", title: `Change ${job}?`, items }))) return { success: true, text: "The owner did not confirm; nothing was saved.", display: "hiring: not saved" };
+        if (!(await confirm({ kind: "hiring", title: `Change ${job}?`, items, about: { kind: "job", job } }))) return { success: true, text: "The owner did not confirm; nothing was saved.", display: "hiring: not saved" };
         if (a.openings && a.openings !== cur.openings) opts.catalog().setOpenings(job, a.openings);
         if (a.open !== null && a.open !== undefined && a.open === (cur.closedAt !== null)) opts.catalog().setClosed(job, !a.open);
         const now = hireCount(opts.catalog(), opts.register(), job);
@@ -175,7 +175,7 @@ export function hiringTools(opts: { folders: () => Folders; catalog: () => Catal
         if (current && !a.replace) return fail(`"${job}" already has a job description file (${current.rel}). If the owner wants the new version to replace it, call again with replace: true; otherwise save it to the Outbox with save_document.`);
         if (current && !/\.docx$/i.test(current.rel)) return fail(`"${job}"'s job description is ${current.rel}, not a Word file. Save the new version to the Outbox with save_document and tell the owner to swap the file in the job's folder.`);
         const name = current ? current.rel : `${job} JD.docx`;
-        if (!(await confirm({ kind: "hiring", title: current ? `Replace the job description of ${job}?` : `Save this job description into ${job}?`, items: [current ? `${name} is replaced by the new version` : `Saved as "${name}" in the job's folder`, `${jd.split("\n")[0].replace(/^#+\s*/, "").slice(0, 80)}`] }))) {
+        if (!(await confirm({ kind: "hiring", title: current ? `Replace the job description of ${job}?` : `Save this job description into ${job}?`, items: [current ? `${name} is replaced by the new version` : `Saved as "${name}" in the job's folder`, `${jd.split("\n")[0].replace(/^#+\s*/, "").slice(0, 80)}`], about: { kind: "job", job } }))) {
           return { success: true, text: "The owner did not confirm; nothing was saved.", display: "hiring: not saved" };
         }
         const p = join(dir, name);

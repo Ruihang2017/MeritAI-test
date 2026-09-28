@@ -31,12 +31,14 @@ export interface Live {
   recent: Seen[];
   /** Bumped when data changed: live views reload. */
   refreshKey: number;
+  /** In voice, what a question waiting for the owner's OK is about: the page highlights it ("Talking about"; design: DockVoice). */
+  talking: EntityRef[];
   open: (t: OpenTarget) => void;
 }
 
 export const RECENT_MS = 10 * 60_000;
 
-export const LiveContext = createContext<Live>({ recent: [], refreshKey: 0, open: () => {} });
+export const LiveContext = createContext<Live>({ recent: [], refreshKey: 0, talking: [], open: () => {} });
 export const useLive = () => useContext(LiveContext);
 
 /** The page that shows a thing. */

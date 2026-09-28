@@ -124,7 +124,7 @@ export function registerTools(opts: { register: () => Register; business: () => 
         }
         const e = c.input;
         const items = hire ? [...c.lines, `Hired from: ${hire.job} (${hire.name}'s application)`] : c.lines;
-        if (!(await confirm({ kind: "register", title: "Add to the employee register?", items }))) return { success: true, text: "The owner did not confirm; nothing was saved.", display: "register: not saved" };
+        if (!(await confirm({ kind: "register", title: "Add to the employee register?", items, ...(hire ? { about: { kind: "job" as const, job: hire.job } } : {}) }))) return { success: true, text: "The owner did not confirm; nothing was saved.", display: "register: not saved" };
         const saved = opts.register().add(e);
         let note = "";
         if (hire && opts.hires) {
@@ -167,7 +167,7 @@ export function registerTools(opts: { register: () => Register; business: () => 
         const c = checkEmployeeChanges(opts.register(), current.id, a.changes);
         if (!c.ok) return fail(c.error === "nothing to change" ? "Nothing to change." : `Not saved: ${c.error}.`);
         const changes = c.changes;
-        if (!(await confirm({ kind: "register", title: `Update ${current.name} in the employee register?`, items: c.lines }))) return { success: true, text: "The owner did not confirm; nothing was saved.", display: "register: not saved" };
+        if (!(await confirm({ kind: "register", title: `Update ${current.name} in the employee register?`, items: c.lines, about: { kind: "employee", id: current.id, name: current.name } }))) return { success: true, text: "The owner did not confirm; nothing was saved.", display: "register: not saved" };
         const saved = opts.register().update(current.id, changes);
         // Code-added guidance for changes that carry legal obligations (found missing in the evaluation).
         const notes: string[] = [];
@@ -206,7 +206,7 @@ export function registerTools(opts: { register: () => Register; business: () => 
         const c = checkDocuments(opts.register(), current.id, a.documents, a.date);
         if (!c.ok) return fail(c.error);
         const docs = c.docs;
-        if (!(await confirm({ kind: "register", title: `Record for ${current.name} (${a.date})?`, items: c.lines }))) {
+        if (!(await confirm({ kind: "register", title: `Record for ${current.name} (${a.date})?`, items: c.lines, about: { kind: "employee", id: current.id, name: current.name } }))) {
           return { success: true, text: "The owner did not confirm; nothing was saved.", display: "register: not saved" };
         }
         const saved = opts.register().recordDocuments(current.id, docs, String(a.date));
@@ -228,7 +228,7 @@ export function registerTools(opts: { register: () => Register; business: () => 
       handle: async (args) => {
         const current = opts.register().get(Number((args as { id?: number }).id));
         if (!current) return fail("No such employee. Call list_employees first.");
-        if (!(await confirm({ kind: "register", title: `Delete ${current.name} and all their records from the register? This cannot be undone.`, destructive: true }))) {
+        if (!(await confirm({ kind: "register", title: `Delete ${current.name} and all their records from the register? This cannot be undone.`, destructive: true, about: { kind: "employee", id: current.id, name: current.name } }))) {
           return { success: true, text: "The owner did not confirm; nothing was deleted.", display: "register: not deleted" };
         }
         opts.register().remove(current.id);

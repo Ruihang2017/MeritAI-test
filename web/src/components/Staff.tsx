@@ -26,8 +26,9 @@ type Panel =
   | null;
 
 export function StaffPage({ api, openId, openDocs, addPrefill, onAsk: ask, onChanged, refreshKey, arrival }: { api: Api; openId?: number | null; /** Open on the record-documents form (a card's "Record paperwork"). */ openDocs?: boolean; addPrefill?: { name: string; role: string; hireFrom?: { job: string; file: string } } | null; onAsk: (a: Ask) => void; onChanged: () => void; refreshKey: number; /** What the adviser changed here meanwhile (design: SyncStaff). */ arrival?: React.ReactNode }) {
-  const { recent } = useLive();
+  const { recent, talking } = useLive();
   const marked = marks(recent, (r) => (r.kind === "employee" ? r.id : null));
+  const talkingAbout = new Set(talking.flatMap((r) => (r.kind === "employee" ? [r.id] : [])));
   /** A request about someone; `draft`: fill the side panel's box and wait for the owner's words. */
   const onAsk = (r: { id: number; name: string }, text: string, draft = false) => ask({ text, from: fromEmployee(r.id, r.name), ...(draft ? { draft } : {}) });
   const [rows, setRows] = useState<StaffRow[] | null>(null);
@@ -184,13 +185,21 @@ export function StaffPage({ api, openId, openDocs, addPrefill, onAsk: ask, onCha
                     const missing = r.status === "active" ? r.documentsExpected.filter((d) => !d.recorded).length : 0;
                     const sel = panel && "id" in panel && panel.id === r.id;
                     const mark = marked.get(r.id);
+                    const talk = talkingAbout.has(r.id);
                     return (
-                      <tr key={r.id} className={`${sel ? "sel" : ""}${r.status === "left" ? " left" : ""}${mark ? " fresh" : ""}`}>
+                      <tr key={r.id} className={`${sel ? "sel" : ""}${r.status === "left" ? " left" : ""}${mark ? " fresh" : ""}${talk ? " talk" : ""}`}>
                         <td className="b" style={{ paddingLeft: 16 }}>
                           <button type="button" className="name-btn" onClick={() => setPanel({ kind: "detail", id: r.id })}>
                             {r.name}
                           </button>
-                          {mark && <span className="pill info fresh-pill">{markLabel(mark)}</span>}
+                          {talk ? (
+                            <span className="pill info fresh-pill">
+                              <Icon name="mic" size={11} stroke={2.2} />
+                              Talking about
+                            </span>
+                          ) : (
+                            mark && <span className="pill info fresh-pill">{markLabel(mark)}</span>
+                          )}
                           {r.status === "left" && <span className="pill n" style={{ marginLeft: 8 }}>Left</span>}
                         </td>
                         <td>{r.role}</td>

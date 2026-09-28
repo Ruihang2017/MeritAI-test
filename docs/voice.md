@@ -76,7 +76,7 @@ Deviation from the plan: there is no cancel event, so "stop" or "never mind" arr
 
 ## 5 In the browser
 
-The browser UI passes its own `audio` to `startVoice`: the page's microphone (PCM16 mono 24 kHz, 100 ms chunks through the WebSocket, `voiceAudio`) and its speaker (the output audio sent back only to that page). Mute sends silence. See `docs/ui.md` (Voice). With the demo engine, `src/voice/fakeLive.ts` stands in for GPT-Live (no key, no cost): it streams silence, "hears" a scripted request after about a second of speech and a pause, and speaks a demo line as a soft tone.
+The browser UI passes its own `audio` to `startVoice`: the page's microphone (PCM16 mono 24 kHz, 100 ms chunks through the WebSocket, `voiceAudio`) and its speaker (the output audio sent back only to that page). Mute sends silence. Voice starts from Conversations or from the side panel on any page (the page stays; questions say what they are about, `ConfirmRequest.about`, so the page can highlight it). See `docs/ui.md` (Voice). With the demo engine, `src/voice/fakeLive.ts` stands in for GPT-Live (no key, no cost): it streams silence, "hears" a scripted request after about a second of speech and a pause, and speaks a demo line as a soft tone.
 
 ## 6 Tests
 

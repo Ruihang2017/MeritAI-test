@@ -1091,15 +1091,22 @@ function HiredButton({ onClick, small }: { onClick: () => void; small?: boolean 
 
 /** One job in the list: open or closed, where it is, and how many are hired of how many. */
 function JobCard({ j, on, onPick }: { j: Job; on: boolean; onPick: () => void }) {
-  const { recent } = useLive();
+  const { recent, talking } = useLive();
   const fresh = marks(recent, (r) => (r.kind === "job" || r.kind === "candidate" ? r.job : null)).get(j.job);
+  const talk = talking.some((r) => r.kind === "job" && r.job === j.job);
   const closed = !!j.closedAt;
   const pill = j.stage === "decided" ? `${j.shortlisted} shortlisted` : STAGE[j.stage];
   const tone = closed ? "n" : j.stage === "screened" || j.stage === "decided" || j.stage === "filled" ? "ok" : "warn";
   return (
-    <button type="button" className={`job${on ? " on" : ""}${closed ? " closed" : ""}${fresh ? " fresh" : ""}`} onClick={onPick} title={fresh ? fresh.change.summary : undefined}>
+    <button type="button" className={`job${on ? " on" : ""}${closed ? " closed" : ""}${fresh || talk ? " fresh" : ""}`} onClick={onPick} title={fresh ? fresh.change.summary : undefined}>
       <span className="job-top">
         <b className="ellipsis grow">{j.job}</b>
+        {talk && (
+          <span className="pill info" style={{ height: 20, fontSize: 11 }}>
+            <Icon name="mic" size={11} stroke={2.2} />
+            Talking about
+          </span>
+        )}
         <span className={closed ? "job-state closed" : "job-state"}>{closed ? "Closed" : "Open"}</span>
       </span>
       <span style={{ display: "flex", alignItems: "center", gap: 8 }}>

@@ -120,9 +120,9 @@ MeritAI never sends email. Ask for an email (an offer with the contract, an inte
 
 ### 8 Voice
 
-The microphone in Conversations. It needs your own OpenAI API key in Settings, costs about US$0.05 a minute, and the demo has a free stand-in voice.
+The microphone in Conversations, and in the side panel on any page. It needs your own OpenAI API key in Settings, costs about US$0.05 a minute, and the demo has a free stand-in voice.
 
-Talk as you would on the phone. While you talk, the right-hand panel becomes **On screen** and shows what the conversation is about.
+Talk as you would on the phone. On Conversations, the right-hand panel becomes **On screen** and shows what the conversation is about. From the side panel the page stays where you are: the person or job a question is about is marked **Talking about**, and closing the panel doesn't end the call (**Voice on** at the top brings it back).
 
 **Saving during voice:**
 - A change that needs your OK waits there: press **Yes, save**, or say "yes".

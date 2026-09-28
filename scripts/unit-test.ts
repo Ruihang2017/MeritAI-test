@@ -1194,6 +1194,24 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   ], JSON.stringify({ keys: Object.keys(extras), hire: hire?.changes?.length, mail: mail?.files }).slice(0, 500));
 }
 
+// ------------------------------------------------------------------ voice in the side panel: a question says what it is about (the page highlights it)
+{
+  const reg = new Register(ensureFolders(join(TMP, "about-files")).data);
+  const bo = reg.add(normaliseEmployee({ name: "Bo Chen", role: "Cleaner", employmentType: "casual", startDate: "2026-09-01" }, true));
+  const asked: ConfirmRequest[] = [];
+  const tools = registerTools({ register: () => reg, confirm: async (r: ConfirmRequest) => (asked.push(r), false), business: () => new BusinessStore(join(TMP, "about-files", ".assistant")) } as never);
+  const run = (name: string, args: object) => tools.find((x) => x.name === name)!.handle(args);
+  await run("update_employee", { id: bo.id, changes: { notes: "Weekend shifts" } });
+  await run("record_documents", { id: bo.id, documents: ["tfn"], date: "2026-09-02" });
+  await run("remove_employee", { id: bo.id });
+  await run("add_employee", { name: "Cy Park", role: "Cleaner", employmentType: "casual", startDate: "2026-10-05" });
+  const aboutBo = (r: ConfirmRequest) => r.about?.kind === "employee" && r.about.id === bo.id;
+  record("voice in the side panel: what a question is about", [
+    ["update, record and remove are about the employee", asked.length === 4 && asked.slice(0, 3).every(aboutBo)],
+    ["a new employee (no job) is about nothing yet", asked[3]?.about === undefined],
+  ], JSON.stringify(asked.map((a) => a.about ?? null)));
+}
+
 try {
   rmSync(TMP, { recursive: true, force: true });
 } catch {

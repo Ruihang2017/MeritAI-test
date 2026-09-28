@@ -168,7 +168,8 @@ function Shell({ api }: { api: Api }) {
     voiceFrom.current = turnsRef.current.length;
     const micId = savedMicrophone();
     setVoiceNote(null);
-    setPage("conversations");
+    // From the side panel the page stays where it is (the page is the screen; design: DockVoice).
+    if (!dockVisible.current) setPage("conversations");
     setVoiceUi({ started: false, muted: false, working: false, line: "Getting the microphone and voice ready", startedAt: Date.now(), micId });
     const b = newBrowserVoice();
     bv.current = b;
@@ -305,8 +306,12 @@ function Shell({ api }: { api: Api }) {
               setTurns((ts) => ts.map((t) => (t.id === m.turnId ? addConfirm(t, m.id, m.req) : t)));
               // Voice: the question waits on screen (the On screen panel); the voice asks for it.
               setVoiceUi((v) => (v ? { ...v, line: `Waiting for your OK: ${m.req.title}` } : v));
-              // The side panel is closed on another page: a short popup under its button.
-              if (!dockVisible.current && pageRef.current !== "conversations") setAskPopup(m.req.title);
+              // The side panel is closed on another page: in voice it opens again (the OK waits there;
+              // design: DockVoiceClosed), else a short popup under its button.
+              if (!dockVisible.current && pageRef.current !== "conversations" && pageRef.current !== "all") {
+                if (voiceLive.current) setDockOpen(true);
+                else setAskPopup(m.req.title);
+              }
             } else setDialog({ id: m.id, req: m.req });
             setState((s) => (s ? { ...s, confirms: [...s.confirms.filter((c) => c.id !== m.id), { id: m.id, req: m.req, turnId: m.turnId }] } : s));
             break;
@@ -551,7 +556,9 @@ function Shell({ api }: { api: Api }) {
         else setPage("conversations");
     }
   };
-  const live: Live = { recent: recentChanges, refreshKey, open: openTarget };
+  // Voice: what a question waiting for the owner's OK is about; the page highlights it (design: DockVoice).
+  const talking = voiceUi ? turns.flatMap((t) => t.blocks.flatMap((b) => (b.kind === "confirm" && b.state === "open" && b.req.about ? [b.req.about] : []))) : [];
+  const live: Live = { recent: recentChanges, refreshKey, talking, open: openTarget };
   // One line per thing (a hire also shortlists: only the hire is said).
   const arrivalNote = (p: Page) => {
     if (arrivals?.page !== p) return null;
@@ -566,8 +573,23 @@ function Shell({ api }: { api: Api }) {
 
   const currentThread = state?.threadId ?? null;
   const showPanel = page === "conversations" && wide;
-  const askButton: AskButton = !dockable ? "none" : showDock ? "open" : waitingOnYou ? "waiting" : running ? "working" : "closed";
+  const askButton: AskButton = !dockable ? "none" : showDock ? "open" : waitingOnYou ? "waiting" : voiceUi ? "voice" : running ? "working" : "closed";
   const docked = showDock && wide;
+
+  // The side panel closed during voice: the call carries on; a short note says so (design: DockVoiceClosed).
+  const [voicePop, setVoicePop] = useState(false);
+  const wasShown = useRef(showDock);
+  useEffect(() => {
+    if (wasShown.current && !showDock && voiceUi && dockable) setVoicePop(true);
+    if (showDock || !voiceUi) setVoicePop(false);
+    wasShown.current = showDock;
+  }, [showDock, voiceUi, dockable]);
+  useEffect(() => {
+    if (!voicePop) return;
+    const t = setTimeout(() => setVoicePop(false), 10_000);
+    return () => clearTimeout(t);
+  }, [voicePop]);
+  const lastVoiceSave = voiceUi ? recentChanges.filter((s) => s.by === "adviser" && s.at >= voiceUi.startedAt).at(-1)?.change.summary ?? null : null;
 
   return (
     <LiveContext.Provider value={live}>
@@ -578,6 +600,7 @@ function Shell({ api }: { api: Api }) {
         showAttention={!showPanel}
         onAttention={() => setAttentionOpen(true)}
         ask={askButton}
+        voiceSince={voiceUi?.started ? voiceUi.startedAt : null}
         onAskToggle={() => setDockOpen(!dockOpen)}
         onLeaveSample={() =>
           void api.call("setWorkspace", { path: null }).then(
@@ -680,8 +703,7 @@ function Shell({ api }: { api: Api }) {
             onFull={() => setPage("conversations")}
             onClose={() => setDockOpen(false)}
             onGoFrom={goFrom}
-            voiceOn={voiceUi !== null}
-            onEndVoice={voiceProps.onEnd}
+            voice={voiceProps}
           />
         )}
         {showPanel && voiceUi && <VoiceStage turns={turns.slice(voiceFrom.current).filter((t) => t.voice)} api={api} onAnswer={(id, yes) => void answer(id, yes)} />}
@@ -695,6 +717,30 @@ function Shell({ api }: { api: Api }) {
             <AttentionPanel reminders={reminders} rulesChecked={state?.rulesChecked ?? null} onClose={() => setAttentionOpen(false)} onAsk={(r) => (setAttentionOpen(false), pageRef.current === "conversations" || pageRef.current === "all" ? void send(`Help me with this: ${r.title}`) : ask({ text: `Help me with this: ${r.title}`, from: fromReminder(r) }))} onOpenEmployee={(id) => (setAttentionOpen(false), openEmployee(id))} />
           </div>
         </>
+      )}
+      {voicePop && voiceUi && !showDock && dockable && (
+        <div className="ask-pop" role="dialog" aria-label="Voice is on">
+          <div className="cap" style={{ color: "#1446A6", display: "flex", alignItems: "center", gap: 8 }}>
+            <span className="dot" style={{ color: "#1A57CC" }} />
+            Voice on
+          </div>
+          <b>Keep talking: the side panel is closed, not the call.</b>
+          {lastVoiceSave && (
+            <div className="receipt" style={{ padding: "8px 10px", fontSize: 13 }}>
+              <Icon name="check" size={15} stroke={2.2} />
+              Saved: {lastVoiceSave}
+            </div>
+          )}
+          <span className="meta">A change that needs your OK opens the panel again.</span>
+          <div className="row-wrap">
+            <button type="button" className="btn p sm" onClick={() => setDockOpen(true)}>
+              Open the side panel
+            </button>
+            <button type="button" className="btn sm" style={{ color: "#B3261E", fontWeight: 700 }} onClick={voiceProps.onEnd}>
+              End voice
+            </button>
+          </div>
+        </div>
       )}
       {askPopup && !showDock && dockable && (
         <div className="ask-pop" role="dialog" aria-label="MeritAI needs your OK">

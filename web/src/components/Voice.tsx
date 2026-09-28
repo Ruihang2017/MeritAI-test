@@ -32,8 +32,8 @@ const RATE_PER_MIN = 0.05;
 export const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 export const cost = (s: number) => `about US$${Math.max(0.01, (s / 60) * RATE_PER_MIN).toFixed(2)}`;
 
-/** Replaces the message box while voice is on (design: Voice). */
-export function VoiceBar({ v, levels, demo, onMute, onEnd, onMic }: { v: VoiceUi; levels: { current: VoiceLevels }; demo: boolean; onMute: () => void; onEnd: () => void; onMic: (id: string) => void }) {
+/** Replaces the message box while voice is on (design: Voice). `compact`: the side panel's (design: DockVoice), the microphone choice left to Settings. */
+export function VoiceBar({ v, levels, demo, onMute, onEnd, onMic, compact = false }: { v: VoiceUi; levels: { current: VoiceLevels }; demo: boolean; onMute: () => void; onEnd: () => void; onMic: (id: string) => void; compact?: boolean }) {
   const [now, setNow] = useState(Date.now());
   const [mics, setMics] = useState<{ id: string; label: string }[]>([]);
   useEffect(() => {
@@ -41,15 +41,15 @@ export function VoiceBar({ v, levels, demo, onMute, onEnd, onMic }: { v: VoiceUi
     return () => clearInterval(t);
   }, []);
   useEffect(() => {
-    if (v.started) microphones().then(setMics, () => null);
-  }, [v.started]);
+    if (v.started && !compact) microphones().then(setMics, () => null);
+  }, [v.started, compact]);
   const phase: VoicePhase = !v.started ? "connecting" : v.muted ? "muted" : now - levels.current.outAt < 400 ? "speaking" : v.working ? "working" : "listening";
   const secs = (now - v.startedAt) / 1000;
   const lvl = phase === "speaking" ? levels.current.out : phase === "listening" ? levels.current.mic : 0;
-  const core = phase === "muted" ? 18 : phase === "connecting" ? 14 : Math.round(24 + lvl * 18);
+  const core = Math.round((phase === "muted" ? 18 : phase === "connecting" ? 14 : 24 + lvl * 18) * (compact ? 0.7 : 1));
   const muted = phase === "muted";
   return (
-    <section className={`voice-bar${muted ? " muted" : ""}`} aria-label="Voice">
+    <section className={`voice-bar${muted ? " muted" : ""}${compact ? " compact" : ""}`} aria-label="Voice">
       <div className="voice-top">
         <div className="orb" aria-hidden="true">
           <div className="orb-mid">
@@ -84,7 +84,7 @@ export function VoiceBar({ v, levels, demo, onMute, onEnd, onMic }: { v: VoiceUi
           </label>
         )}
         <span className="grow" />
-        <span className="voice-meta">{phase === "connecting" ? (demo ? "Demo voice: a stand-in, no cost" : "Paid voice, about US$0.05 a minute") : `${mmss(secs)} · stops after 60 s of silence`}</span>
+        <span className="voice-meta">{phase === "connecting" ? (demo ? "Demo voice: a stand-in, no cost" : "Paid voice, about US$0.05 a minute") : compact ? `${mmss(secs)} · ${demo ? "demo voice" : "about US$0.05/min"}` : `${mmss(secs)} · stops after 60 s of silence`}</span>
         <button type="button" className="voice-btn" aria-pressed={muted} onClick={onMute} disabled={phase === "connecting"}>
           {muted ? "Unmute" : "Mute"}
         </button>

@@ -134,6 +134,10 @@
 | K2 | 看右边 | Attention 面板变成 **On screen / 屏幕上**：添加 Daniel 的确认卡片在这里等你（聊天里也有），语音条显示"Waiting for your OK: …" |
 | K3 | 再说一句话 | 替身这次说的是 "Yes, save it."，确认卡片自动变成已保存；右边出现 Daniel 和 Team leader 的卡片 |
 | K4 | 真实语音（要花钱）时直接说 "yes" | 同上。删除类的改动必须点按钮，说 yes 无效 |
+| K5 | `npm run ui:fake` › Hiring › 右上 Ask MeritAI 打开侧栏 › 侧栏输入框里的麦克风；说一句话停一下 | 页面不跳走，还在 Hiring；侧栏里蓝色语音条代替输入框，第一句是本周提醒 |
+| K6 | 点右上按钮关掉侧栏 | 通话不断：按钮变成 "Voice on · 0:xx"，下面弹出一条说明（可以重新打开侧栏或结束语音） |
+| K7 | 再说一句话 | 替身说 "Daniel Ortiz accepted…"：侧栏自己打开，确认卡片在最下面等你；左边 Team leader 标着 "Talking about" |
+| K8 | 再说一句话（"Yes, save it."），然后在侧栏里点 End voice | 保存后 Daniel 在候选人表里显示已录用；结束后侧栏显示 Voice ended（替身不计费），顶栏按钮回到 Ask MeritAI |
 
 ## L 语音用量（Settings）
 

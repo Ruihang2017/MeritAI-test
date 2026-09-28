@@ -5,9 +5,10 @@ import type { Api } from "../api";
 import { fromText, type Ask } from "../ask";
 import { dayLabel, fmtTime } from "../format";
 import type { Turn } from "../conversation";
-import { Composer, TurnView, type ComposerHandle } from "./Conversation";
+import { Composer, TurnView, type ComposerHandle, type VoiceProps } from "./Conversation";
 import { Icon } from "./Icon";
 import type { Page } from "./Shell";
+import { MicButton, VoiceBanner, VoiceBar } from "./Voice";
 
 // The side panel (design: Dock, Dock*): the current conversation next to any page except
 // Conversations, so asking MeritAI from a page doesn't leave it. Same conversation as the
@@ -43,9 +44,8 @@ export function Dock(p: {
   draft: string | null;
   floating: boolean;
   hidden: boolean;
-  /** Voice is on (its bar is on Conversations): no typing here meanwhile. */
-  voiceOn: boolean;
-  onEndVoice: () => void;
+  /** Voice, as on Conversations (owner, 2026-09-28; design: DockVoice): the microphone in the box, the voice bar in its place. */
+  voice: VoiceProps;
   onDraftUsed: () => void;
   onSend: (text: string, skill?: string, attachments?: string[]) => void;
   onStop: () => void;
@@ -64,12 +64,18 @@ export function Dock(p: {
   const scroller = useRef<HTMLDivElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
-  // Follow the reply while it streams, unless the owner scrolled up to read.
+  // Follow the reply while it streams, unless the owner scrolled up to read; in voice always (a
+  // question waiting for an OK must be in view).
+  const talking = !!p.voice.ui;
   useEffect(() => {
     const s = scroller.current;
-    if (!s) return;
-    if (s.scrollHeight - s.scrollTop - s.clientHeight < 160) bottom.current?.scrollIntoView({ block: "end" });
-  }, [turns, p.queue]);
+    if (!s || p.hidden) return;
+    if (talking || s.scrollHeight - s.scrollTop - s.clientHeight < 160) bottom.current?.scrollIntoView({ block: "end" });
+  }, [turns, p.queue, talking, p.hidden]);
+  // Shown again (it was closed, or a question in voice opened it): the latest is in view.
+  useEffect(() => {
+    if (!p.hidden) bottom.current?.scrollIntoView({ block: "end" });
+  }, [p.hidden]);
 
   useEffect(() => {
     if (!menu) return;
@@ -80,7 +86,7 @@ export function Dock(p: {
 
   const empty = turns.length === 0;
   const title = empty && !p.title ? "New conversation" : (p.title ?? turns[0]?.user.text.slice(0, 60) ?? "Conversation");
-  const status = p.waiting ? { cls: "warn", label: "Waiting on you" } : p.running ? { cls: "info", label: "Working" } : null;
+  const status = p.waiting ? { cls: "warn", label: "Waiting on you" } : p.voice.ui ? { cls: "info", label: "Voice on" } : p.running ? { cls: "info", label: "Working" } : null;
   const sugg = SUGGESTIONS[p.page] ?? GENERAL;
   const others = p.recent.filter((r) => r.threadId !== p.currentThread);
 
@@ -232,19 +238,9 @@ export function Dock(p: {
       </div>
 
       <div className="dock-composer">
-        {p.voiceOn ? (
-          <div className="banner info" style={{ alignItems: "center" }}>
-            <Icon name="mic" size={16} />
-            <span className="grow">
-              <b>Voice is on.</b> Its controls are on Conversations.
-            </span>
-            <button type="button" className="btn sm" onClick={p.onFull}>
-              Open
-            </button>
-            <button type="button" className="btn sm" onClick={p.onEndVoice}>
-              End voice
-            </button>
-          </div>
+        {p.voice.note && !p.voice.ui && <VoiceBanner note={p.voice.note} demo={p.voice.demo} onAgain={p.voice.onStart} onSettings={p.voice.onSettings} onClose={p.voice.onCloseNote} />}
+        {p.voice.ui ? (
+          <VoiceBar v={p.voice.ui} levels={p.voice.levels} demo={p.voice.demo} onMute={p.voice.onMute} onEnd={p.voice.onEnd} onMic={p.voice.onMic} compact />
         ) : (
         <Composer
           ref={composer}
@@ -259,6 +255,7 @@ export function Dock(p: {
           onDraftUsed={p.onDraftUsed}
           pending={p.state?.attachments ?? []}
           placeholder={empty ? "Ask MeritAI anything" : "Ask a follow-up"}
+          mic={<MicButton keySet={p.voice.keySet} demo={p.voice.demo} disabled={p.running || !p.state?.account.loggedIn} onStart={p.voice.onStart} onSettings={p.voice.onSettings} />}
         />
         )}
         <div className="foot">Replies can be wrong. Only a receipt means something was saved.</div>

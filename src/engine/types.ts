@@ -1,3 +1,5 @@
+import type { EntityRef } from "../changes";
+
 /**
  * Engine-agnostic contract. The CLI (and later a voice front end) only talks
  * to this interface, so the backend can be swapped (app-server, Responses API, ...).
@@ -75,6 +77,8 @@ export interface ConfirmRequest {
   items?: string[];
   /** Cannot be undone (e.g. deleting an employee). */
   destructive?: boolean;
+  /** The employee or job it is about: in voice, the page highlights it ("Talking about"). */
+  about?: EntityRef;
 }
 
 /**

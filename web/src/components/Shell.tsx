@@ -16,10 +16,19 @@ import { Icon, type IconName } from "./Icon";
 export type Page = "conversations" | "all" | "staff" | "hiring" | "profile" | "files" | "connections" | "memory" | "settings";
 
 /** The side panel's button in the app bar (every page except Conversations). */
-export type AskButton = "none" | "closed" | "open" | "working" | "waiting";
+/** "voice": the side panel is closed while voice is on (design: DockVoiceClosed). */
+export type AskButton = "none" | "closed" | "open" | "working" | "waiting" | "voice";
 
-export function AppBar({ state, connection, onAttention, showAttention, ask, onAskToggle, onLeaveSample }: { state: ShellState | null; connection: Connection; onAttention: () => void; showAttention: boolean; ask: AskButton; onAskToggle: () => void; onLeaveSample: () => void }) {
+export function AppBar({ state, connection, onAttention, showAttention, ask, voiceSince = null, onAskToggle, onLeaveSample }: { state: ShellState | null; connection: Connection; onAttention: () => void; showAttention: boolean; ask: AskButton; voiceSince?: number | null; onAskToggle: () => void; onLeaveSample: () => void }) {
   const [sampleOpen, setSampleOpen] = useState(false);
+  // The call's length on the button while voice is on with the side panel closed.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (ask !== "voice") return;
+    const t = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [ask]);
+  const voiceFor = ask === "voice" && voiceSince ? Math.max(0, Math.floor((Date.now() - voiceSince) / 1000)) : null;
   const status =
     connection !== "open"
       ? { word: connection === "connecting" ? "Connecting" : "Offline", dot: "#B3261E" }
@@ -91,8 +100,8 @@ export function AppBar({ state, connection, onAttention, showAttention, ask, onA
         <>
           <div className="vr" />
           <button type="button" className={`ask-btn ${ask}`} aria-pressed={ask === "open"} title="Ask MeritAI (Ctrl J)" onClick={onAskToggle}>
-            {ask === "working" ? <span className="spin" style={{ width: 12, height: 12 }} /> : ask === "waiting" ? <span className="dot" style={{ color: "#D9A400" }} /> : <Icon name="conversations" size={15} stroke={2} />}
-            {ask === "working" ? "MeritAI is working" : ask === "waiting" ? "Waiting on you" : "Ask MeritAI"}
+            {ask === "working" ? <span className="spin" style={{ width: 12, height: 12 }} /> : ask === "waiting" ? <span className="dot" style={{ color: "#D9A400" }} /> : ask === "voice" ? <Icon name="mic" size={15} stroke={2} /> : <Icon name="conversations" size={15} stroke={2} />}
+            {ask === "working" ? "MeritAI is working" : ask === "waiting" ? "Waiting on you" : ask === "voice" ? (voiceFor !== null ? `Voice on · ${Math.floor(voiceFor / 60)}:${String(voiceFor % 60).padStart(2, "0")}` : "Voice on") : "Ask MeritAI"}
             {(ask === "closed" || ask === "open") && <span className="kbd">Ctrl J</span>}
           </button>
         </>
