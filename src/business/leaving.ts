@@ -1,5 +1,7 @@
+import { todayIso } from "../clock";
 import type { ClientTool } from "../engine/types";
 import type { BusinessStore } from "./profile";
+import type { Register } from "./register";
 import { authoritiesFor, SOURCES as S, type ChecklistItem } from "./onboarding";
 
 /**
@@ -157,6 +159,75 @@ export function leavingChecklist(opts: { reason: LeavingReason; apprentice: bool
   return items;
 }
 
+const ISO = /^\d{4}-\d{2}-\d{2}$/;
+/** start + n months (the month's last day when it is shorter). */
+function addMonths(iso: string, n: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const last = new Date(Date.UTC(y, m - 1 + n + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(y, m - 1 + n, Math.min(d, last))).toISOString().slice(0, 10);
+}
+const daysBetween = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000);
+
+/** Whole months from a to b (a day-of-month not yet reached doesn't count). */
+function monthsBetween(a: string, b: string): number {
+  const [ay, am, ad] = a.split("-").map(Number);
+  const [by, bm, bd] = b.split("-").map(Number);
+  let m = (by - ay) * 12 + (bm - am);
+  if (bd < ad && addMonths(a, m) > b) m--;
+  return Math.max(0, m);
+}
+const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+const serviceText = (months: number) => (months < 12 ? plural(months, "month") : `${plural(Math.floor(months / 12), "year")}${months % 12 ? ` ${plural(months % 12, "month")}` : ""}`);
+
+/** NES minimum notice by continuous service (Fair Work, checked 2026-09-27): 1 year or less 1 week; up to 3 years 2; up to 5 years 3; over 5 years 4. */
+export function nesNoticeWeeks(start: string, end: string): number {
+  if (end <= addMonths(start, 12)) return 1;
+  if (end <= addMonths(start, 36)) return 2;
+  if (end <= addMonths(start, 60)) return 3;
+  return 4;
+}
+
+/** NES redundancy pay in weeks by completed years of service (Fair Work, checked 2026-09-28); 0 under 1 year. */
+export function nesRedundancyWeeks(start: string, end: string): number {
+  const years = Math.floor(monthsBetween(start, end) / 12);
+  return years < 1 ? 0 : years >= 10 ? 12 : [0, 4, 6, 7, 8, 10, 11, 13, 14, 16][years];
+}
+
+/**
+ * Service facts for a dismissal or redundancy, worked out from the start date (round 6 evaluation: replies
+ * missed that the unfair dismissal period was 8 days away, and got notice and redundancy pay wrong for the
+ * length of service). At `lastDay` when known, else today. Null without a usable start date.
+ */
+export function serviceNote(o: { start: string | undefined; today: string; lastDay?: string | null; small: boolean | null; casual: boolean; reason: LeavingReason; name?: string }): string | null {
+  const { start, today, small, casual } = o;
+  if (!start || !ISO.test(start) || start > today) return null;
+  const end = o.lastDay && ISO.test(o.lastDay) && o.lastDay >= start ? o.lastDay : today;
+  const at = end === today ? `today (${today})` : `the last day (${end})`;
+  const lines = [`Service${o.name ? ` for ${o.name}` : ""}: started ${start} (from the register or the owner); ${serviceText(monthsBetween(start, end))} of service at ${at}.`];
+  // Unfair dismissal minimum employment period: 6 months, 12 with a small business employer.
+  const periods = small === null ? [6, 12] : [small ? 12 : 6];
+  lines.push(
+    ...periods.map((months) => {
+      const reach = addMonths(start, months);
+      const d = daysBetween(today, reach);
+      const who = small === null ? (months === 12 ? " (if the business has fewer than 15 employees)" : " (if it has 15 or more)") : small ? " (a small business employer)" : " (not a small business employer)";
+      if (d <= 0) return `- Unfair dismissal: the ${months}-month minimum employment period${who} was reached on ${reach}: they can make a claim.`;
+      return `- Unfair dismissal: the ${months}-month minimum employment period${who} is reached on ${reach}, in ${d} days${d <= 30 ? ": a dismissal now still needs a fair process, and must not be timed to beat that date" : ""}.`;
+    }),
+  );
+  if (casual) lines.push("- A casual's service counts towards that period if they worked on a regular and systematic basis with a reasonable expectation of continuing work. Casuals have no NES notice or redundancy pay.");
+  else {
+    const n = nesNoticeWeeks(start, end);
+    lines.push(`- NES minimum notice for this service: ${plural(n, "week")}${monthsBetween(start, end) >= 24 ? ", plus 1 week if they are over 45" : ""} (the award, an agreement or the contract may require more).`);
+    if (o.reason === "redundancy") {
+      const w = nesRedundancyWeeks(start, end);
+      const pay = w === 0 ? "none: under 1 year of service at that date" : `${plural(w, "week")} at their base rate`;
+      lines.push(small === true ? `- NES redundancy pay: most small business employers (fewer than 15 employees) don't have to pay it (it would otherwise be ${pay}).` : `- NES redundancy pay${small === null ? " (if the business has 15 or more employees)" : ""}: ${pay}.${w === 0 ? ` It becomes 4 weeks once they reach 1 year, on ${addMonths(start, 12)}.` : ""}`);
+    }
+  }
+  return lines.join("\n");
+}
+
 export function formatLeaving(items: LeavingItem[]): string {
   const order: LeavingItem["when"][] = ["before the last day", "final pay", "after they leave"];
   return order
@@ -168,9 +239,11 @@ export function formatLeaving(items: LeavingItem[]): string {
 }
 
 /** The checklist as tool text, with instructions for presenting it. */
-export function leavingText(opts: { reason: LeavingReason; apprentice: boolean; states: string[]; casual?: boolean; smallBusiness?: boolean | null; sponsored?: boolean }): string {
+export function leavingText(opts: { reason: LeavingReason; apprentice: boolean; states: string[]; casual?: boolean; smallBusiness?: boolean | null; sponsored?: boolean; startDate?: string; lastDay?: string | null; name?: string; today?: string }): string {
+  const service = opts.reason === "dismissal" || opts.reason === "redundancy" ? serviceNote({ start: opts.startDate, today: opts.today ?? todayIso(), lastDay: opts.lastDay, small: opts.smallBusiness ?? null, casual: opts.casual === true, reason: opts.reason, name: opts.name }) : null;
   return (
     `Leaving checklist (${opts.reason}${opts.casual ? ", casual" : ""}${opts.apprentice ? ", apprentice/trainee" : ""}; official sources checked ${LEAVING_CHECKED_ON}):\n${formatLeaving(leavingChecklist(opts))}\n\n` +
+    (service ? `${service}\nThese are worked out from the dates: use them as they are (don't recalculate), and say them in the answer. Sources: ${S.unfairDismissal.title} ${S.unfairDismissal.url}; ${S.dismissal.title} ${S.dismissal.url}${opts.reason === "redundancy" ? `; ${S.redundancyPay.title} ${S.redundancyPay.url}` : ""}.\n\n` : "") +
     "Tell the owner these steps in plain language, keeping every item and its source link. " +
     "State the final pay deadline in the answer itself: the award sets it, and most awards require final pay within 7 days of the last day; give that date if you know the last day, and say to confirm it in their award. Do not replace it with only 'check your award'. " +
     "Do not calculate the final pay amount: point to the Pay and Conditions Tool and the payroll system."
@@ -182,7 +255,7 @@ export const smallBusinessOf = (headcount: number | null) => (headcount === null
 
 export const isApprenticeRole = (role: string) => /apprentice|trainee/i.test(role);
 
-export function leavingTools(business: () => BusinessStore): ClientTool[] {
+export function leavingTools(business: () => BusinessStore, register?: () => Register, today: () => string = todayIso): ClientTool[] {
   return [
     {
       name: "leaving_checklist",
@@ -197,16 +270,21 @@ export function leavingTools(business: () => BusinessStore): ClientTool[] {
           is_apprentice_or_trainee: { type: "boolean", description: "true if the owner or the register (role) says apprentice or trainee: the training contract has its own rules for ending it." },
           is_casual: { type: "boolean", description: "The person was a casual employee (casuals have no paid leave to pay out and no NES notice)." },
           is_sponsored_visa: { type: "boolean", description: "true if the business sponsors their visa (e.g. Skills in Demand / 482); false if not or unknown." },
+          employee_id: { type: ["integer", "null"], description: "Their id in the register (list_employees), or null if they are not in it. For a dismissal or redundancy the checklist then works out their service, NES notice, redundancy pay and the unfair dismissal date from the register's start date." },
+          start_date: { type: ["string", "null"], description: "Their start date (YYYY-MM-DD) as the owner gave it, only when they are not in the register; null otherwise." },
+          last_day: { type: ["string", "null"], description: "The planned or actual last day (YYYY-MM-DD) if known, else null: service is counted to that day." },
         },
-        required: ["reason", "is_apprentice_or_trainee", "is_casual", "is_sponsored_visa"],
+        required: ["reason", "is_apprentice_or_trainee", "is_casual", "is_sponsored_visa", "employee_id", "start_date", "last_day"],
         additionalProperties: false,
       },
       handle: async (args) => {
-        const a = args as { reason?: string; is_apprentice_or_trainee?: boolean; is_casual?: boolean; is_sponsored_visa?: boolean };
+        const a = args as { reason?: string; is_apprentice_or_trainee?: boolean; is_casual?: boolean; is_sponsored_visa?: boolean; employee_id?: number | null; start_date?: string | null; last_day?: string | null };
+        // The register's start date and type win over what the model passes (round 6: a year misread).
+        const e = register && typeof a.employee_id === "number" ? register().get(a.employee_id) : null;
         const reason = (LEAVING_REASONS as string[]).includes(String(a.reason)) ? (a.reason as LeavingReason) : "other";
         return {
           success: true,
-          text: leavingText({ reason, apprentice: a.is_apprentice_or_trainee === true, casual: a.is_casual === true, sponsored: a.is_sponsored_visa === true, states: business().get().states, smallBusiness: smallBusinessOf(business().get().headcount) }),
+          text: leavingText({ reason, apprentice: a.is_apprentice_or_trainee === true || (e ? isApprenticeRole(e.role) : false), casual: e ? e.employmentType === "casual" : a.is_casual === true, sponsored: a.is_sponsored_visa === true, states: business().get().states, smallBusiness: smallBusinessOf(business().get().headcount), startDate: e?.startDate ?? a.start_date ?? undefined, lastDay: a.last_day ?? null, name: e?.name, today: today() }),
           display: `leaving checklist: ${reason}`,
         };
       },

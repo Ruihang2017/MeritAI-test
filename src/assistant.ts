@@ -150,7 +150,7 @@ export function createAssistant(opts: {
         },
       },
     }),
-    ...leavingTools(business),
+    ...leavingTools(business, register, todayLocal),
     ...parentalLeaveTools(todayLocal),
     ...reminderTools({ register, business }),
     officialSourcesTool(() => engine),

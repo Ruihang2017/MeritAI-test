@@ -1207,6 +1207,41 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   ], JSON.stringify({ keys: Object.keys(extras), hire: hire?.changes?.length, mail: mail?.files }).slice(0, 500));
 }
 
+// ------------------------------------------------------------------ round 6 evaluation fixes: service facts for a dismissal or redundancy, working holiday makers' 6 months
+{
+  const { serviceNote, leavingText, leavingTools, nesNoticeWeeks, nesRedundancyWeeks } = await import("../src/business/leaving");
+  const T = "2026-09-28";
+  const near = serviceNote({ start: "2026-04-06", today: T, small: false, casual: true, reason: "dismissal" });
+  const small = serviceNote({ start: "2026-04-06", today: T, small: true, casual: false, reason: "dismissal" });
+  const unknown = serviceNote({ start: "2025-01-15", today: T, small: null, casual: false, reason: "dismissal" });
+  const month31 = serviceNote({ start: "2026-03-31", today: T, small: false, casual: false, reason: "dismissal" });
+  // term-05: under a year at the planned last day, so no redundancy pay yet, and 1 week's notice.
+  const jess = serviceNote({ start: "2025-12-02", today: T, lastDay: "2026-11-28", small: false, casual: false, reason: "redundancy" });
+  // term-04: over 3 years with a small business employer.
+  const chloe = serviceNote({ start: "2023-06-15", today: T, small: true, casual: false, reason: "redundancy" });
+  const dismissal = leavingText({ reason: "dismissal", apprentice: false, states: ["WA"], smallBusiness: false, startDate: "2026-04-06", today: T });
+  const resigned = leavingText({ reason: "resignation", apprentice: false, states: ["WA"], smallBusiness: false, startDate: "2026-04-06", today: T });
+  // term-09: the register's start date wins over the one the model passes.
+  const reg = new Register(ensureFolders(join(TMP, "r6-files")).data);
+  const kevin = reg.add(normaliseEmployee({ name: "Kevin Test", role: "Cleaner", employmentType: "full-time", startDate: "2024-10-28" }, true));
+  const tool = leavingTools(() => new BusinessStore(join(TMP, "r6-files", ".assistant")), () => reg, () => T)[0];
+  const viaTool = (await tool.handle({ reason: "dismissal", is_apprentice_or_trainee: false, is_casual: false, is_sponsored_visa: false, employee_id: kevin.id, start_date: "2025-10-28", last_day: null })).text;
+  const whm = newStarterChecklist({ employmentType: "casual", mayNeedVisaCheck: true, smallBusiness: true, workingHolidayMaker: true });
+  const whm6 = whm.find((x) => /condition 8547/.test(x.task));
+  record("round 6 fixes (checklists)", [
+    ["6 months reached in 8 days, with the date; a casual's service", !!near && /reached on 2026-10-06, in 8 days/.test(near) && /fair process/.test(near) && /regular and systematic/.test(near) && /5 months of service at today/.test(near)],
+    ["a small business employer: 12 months", !!small && /12-month minimum employment period \(a small business employer\) is reached on 2027-04-06/.test(small)],
+    ["headcount unknown: both periods; already reached", !!unknown && /6-month .* was reached on 2025-07-15/.test(unknown) && /12-month .* was reached on 2026-01-15/.test(unknown)],
+    ["end of a shorter month: 31 Mar + 6 months = 30 Sep", !!month31 && /reached on 2026-09-30/.test(month31)],
+    ["counted to the last day: 11 months, 1 week's notice, no redundancy pay until 2 Dec", !!jess && /11 months of service at the last day \(2026-11-28\)/.test(jess) && /notice for this service: 1 week /.test(jess) && /none: under 1 year/.test(jess) && /4 weeks once they reach 1 year, on 2026-12-02/.test(jess)],
+    ["3 years: 3 weeks' notice (+1 over 45); small business: no redundancy pay", !!chloe && /3 years 3 months/.test(chloe) && /3 weeks, plus 1 week if they are over 45/.test(chloe) && /small business employers .* don't have to pay it/.test(chloe)],
+    ["the NES tables", nesNoticeWeeks("2025-09-28", T) === 1 && nesNoticeWeeks("2025-09-27", T) === 2 && nesNoticeWeeks("2021-01-01", T) === 4 && nesRedundancyWeeks("2025-09-28", T) === 4 && nesRedundancyWeeks("2025-09-29", T) === 0 && nesRedundancyWeeks("2017-09-01", T) === 16 && nesRedundancyWeeks("2010-01-01", T) === 12],
+    ["in the dismissal checklist with its sources, not for a resignation; none without a date", /Service: started 2026-04-06/.test(dismissal) && /don't recalculate/.test(dismissal) && !/Service:/.test(resigned) && serviceNote({ start: undefined, today: T, small: false, casual: false, reason: "dismissal" }) === null],
+    ["the register's start date, not the model's", /Service for Kevin Test: started 2024-10-28/.test(viaTool) && !/started 2025-10-28/.test(viaTool)],
+    ["working holiday maker: at most 6 months with one employer, official link", !!whm6 && isOfficialUrl(whm6.source.url) && /homeaffairs\.gov\.au/.test(whm6.source.url) && !newStarterChecklist({ employmentType: "casual", mayNeedVisaCheck: true, smallBusiness: true }).some((x) => /8547/.test(x.task))],
+  ], JSON.stringify({ near, jess, chloe, viaTool: viaTool.slice(-900) }).slice(0, 900));
+}
+
 // ------------------------------------------------------------------ updates (the desktop app): the session's side, and release notes
 {
   const { notesOf } = await import("../src/desktop/notes");

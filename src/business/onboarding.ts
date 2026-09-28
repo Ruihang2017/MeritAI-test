@@ -59,9 +59,12 @@ const S = {
   tfnPayer: { title: "ATO: TFN declaration, payer information and obligations", url: "https://www.ato.gov.au/forms-and-instructions/tfn-declaration/payer-information-and-obligations" },
   dismissal: { title: "Fair Work: Dismissal (notice periods)", url: "https://www.fairwork.gov.au/ending-employment/dismissal" },
   redundancy: { title: "Fair Work: Redundancy (genuine redundancy)", url: "https://www.fairwork.gov.au/ending-employment/redundancy" },
+  redundancyPay: { title: "Fair Work: Redundancy pay and entitlements", url: "https://www.fairwork.gov.au/ending-employment/redundancy/redundancy-pay-and-entitlements" },
   resignation: { title: "Fair Work: Resignation", url: "https://www.fairwork.gov.au/ending-employment/resignation" },
   annualised: { title: "Fair Work: Annualised wage arrangements", url: "https://www.fairwork.gov.au/pay-and-wages/minimum-wages/annualised-salaries" },
   whm: { title: "ATO: Working holiday makers", url: "https://www.ato.gov.au/individuals-and-families/coming-to-australia-or-going-overseas/coming-to-australia/working-holiday-makers" },
+  // Round 6 evaluation fix (Home Affairs, checked 2026-09-28): condition 8547.
+  whm6: { title: "Home Affairs: Permission to work longer than 6 months with one employer (condition 8547)", url: "https://immi.homeaffairs.gov.au/visas/already-have-a-visa/check-visa-details-and-conditions/waivers-and-permissions/work-longer-than-6-months" },
 };
 export { S as SOURCES };
 
@@ -218,6 +221,12 @@ export function newStarterChecklist(opts: {
       task: "They are a working holiday maker (visa subclass 417 or 462): register with the ATO as an employer of working holiday makers before you pay them, and withhold tax at the working holiday maker rates.",
       why: "If you are not registered as a working holiday maker employer, you must withhold tax at the higher foreign resident rates.",
       source: S.whm,
+    });
+    items.push({
+      when: "before start",
+      task: "Working holiday makers can generally work for any one employer for at most 6 months (visa condition 8547), counting earlier work for your business. Check VEVO for the condition, note when the 6 months end, and don't keep them on past that unless their work falls under an exemption or Home Affairs has given permission.",
+      why: "Working past the limit breaches their visa condition.",
+      source: S.whm6,
     });
   }
   items.push({
