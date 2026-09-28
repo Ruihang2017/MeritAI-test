@@ -26,6 +26,7 @@ src/basePrompt.ts          prompts/base.md for a reply format: plain (as the fil
 src/engine/rpc.ts          JSON-RPC over the app-server's stdio
 src/engine/appServer.ts    Engine implementation: threads, streaming, interrupt, client tools, ephemeral runs, resume
 src/engine/types.ts        engine-agnostic interface (ClientTool, EngineEvent, ...)
+src/engine/leakedNotes.ts  cuts the model's own planning notes from the end of a reply (a client-side backstop)
 src/engine/fakeEngine.ts   scripted engine for UI work without the model (FX_ENGINE=fake / npm run ui:fake): calls the real tools
 src/changes.ts             what changed (employee, job, candidate, profile, file), reported by the stores themselves; the UI's "changed" events
 src/business/              jobTemplates.ts (role templates by industry for New job), hiring.ts (candidates, findCandidate, linkHire: one path for hires from the page and the chat), profile.ts (business profile store + rendering), tools.ts (update_business_profile), policies.ts (Policies/ index + read_policy), onboarding.ts (new_starter_checklist: official items + verified URLs), register.ts + registerTools.ts + registerOps.ts (employee register, SQLite; checks shared by the tools and the forms), reminders.ts (compliance reminders + get_reminders), leaving.ts (leaving_checklist), parentalLeave.ts (parental_leave_checklist), payGuard.ts (flags pay arithmetic in replies)

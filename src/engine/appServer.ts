@@ -18,6 +18,7 @@ import type { SandboxPolicy } from "../protocol/v2/SandboxPolicy";
 import type { JsonValue } from "../protocol/serde_json/JsonValue";
 import { readFile } from "node:fs/promises";
 import { AppServerConnection } from "./rpc";
+import { stripLeakedNotes } from "./leakedNotes";
 import type {
   AccountStatus,
   ClientTool,
@@ -464,8 +465,10 @@ export class AppServerEngine implements Engine {
       }
       case "item/completed":
         if (n.params.item.type === "agentMessage") {
-          turn.replyParts.push(n.params.item.text);
-          turn.queue.push({ type: "text_done", text: n.params.item.text });
+          const { text, removed } = stripLeakedNotes(n.params.item.text);
+          if (removed) this.opts.onLog?.(`[leaked notes removed] ${removed}`);
+          turn.replyParts.push(text);
+          turn.queue.push({ type: "text_done", text, ...(removed ? { notesRemoved: removed } : {}) });
         }
         break;
       case "thread/tokenUsage/updated": {
@@ -560,7 +563,7 @@ export function transcriptOf(turns: { items: ThreadItem[] }[]): TranscriptEntry[
           .join("\n")
           .trim();
         if (text) out.push({ role: "user", text });
-      } else if (it.type === "agentMessage" && it.text.trim()) out.push({ role: "assistant", text: it.text });
+      } else if (it.type === "agentMessage" && it.text.trim()) out.push({ role: "assistant", text: stripLeakedNotes(it.text).text });
     }
   return out;
 }

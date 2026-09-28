@@ -89,6 +89,7 @@ function makePrinter() {
       case "text_done":
         // Fallback if the server sent a whole message without deltas.
         if (!streamed) process.stdout.write(ev.text);
+        else if (ev.notesRemoved) process.stdout.write(dim("\n[the last lines above were the model's own working notes, not advice: left out of the saved reply]"));
         streamed = "";
         break;
       case "warning":

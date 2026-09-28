@@ -7,7 +7,8 @@ import type { EntityRef } from "../changes";
 
 export type EngineEvent =
   | { type: "text_delta"; text: string }
-  | { type: "text_done"; text: string }
+  /** `notesRemoved`: the model's own planning notes cut from the end (leakedNotes.ts); the streamed text still had them. */
+  | { type: "text_done"; text: string; notesRemoved?: string }
   /** `files`: absolute paths of files the tool saved (a UI can offer to open them). */
   | { type: "tool_activity"; summary: string; files?: string[] }
   | { type: "skill_loaded"; name: string }

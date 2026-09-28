@@ -228,6 +228,12 @@ async function worker(w: number) {
         for await (const ev of a.engine.send(text, i === 0 && sc.skill ? { skill: sc.skill } : {}) as AsyncIterable<EngineEvent>) {
           if (ev.type === "text_delta") reply += ev.text;
           if (ev.type === "text_done" && !reply) reply = ev.text;
+          // As a front end does: the message is replaced by the one without the model's own notes.
+          if (ev.type === "text_done" && ev.notesRemoved) {
+            const k = reply.lastIndexOf(ev.notesRemoved);
+            if (k >= 0) reply = reply.slice(0, k).trimEnd();
+            act.push(`leaked notes removed: ${ev.notesRemoved}`);
+          }
           if (ev.type === "tool_activity") act.push(ev.summary);
           if (ev.type === "skill_loaded") result.skills.push(ev.name);
           if (ev.type === "unverified_links") result.flagged.push(...ev.urls);

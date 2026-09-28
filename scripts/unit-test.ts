@@ -1312,6 +1312,28 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   ], JSON.stringify(asked.map((a) => a.about ?? null)));
 }
 
+// ------------------------------------------------------------------ the model's own planning notes at the end of a reply (round 6, rec-06)
+{
+  const { stripLeakedNotes } = await import("../src/engine/leakedNotes");
+  const { transcriptOf } = await import("../src/engine/appServer");
+  const ad = "Summer Casual Labourers\n\nWhat you'll do:\n- Dig, move soil and prepare garden areas\n\nTo apply, send your resume to [email].\n\nGreenline Landscapes welcomes applications from people of all backgrounds.";
+  const leak = ` Rescue wording? We should mention "I've replaced "young blokes" with job-related requirements..." But deliverable first, then note. Also perhaps "fit" can be disability issue; job related okay. Need maybe user asked ad; concise. Also missing details line. \n`;
+  const r = stripLeakedNotes(ad + leak);
+  const letter = "Dear Sam,\n\nThank you for your application. We should be able to let you know by Friday.\n\nKind regards,\nPriya";
+  const perf = "1. Prepare evidence\n- List the missed sprint commitments by date, agreed deliverable, actual result and impact.";
+  const middle = "We should mention the award. Need maybe the user asked for it.\n\nHere is the checklist you asked for.";
+  const onlyNotes = "We should mention the award. Need maybe the user asked for it.";
+  const shown = transcriptOf([{ items: [{ type: "agentMessage", id: "1", text: ad + leak } as never] }]);
+  record("leaked planning notes", [
+    ["rec-06: the notes (and the short question before them) removed, the ad kept", r.text === ad && !!r.removed && r.removed.startsWith("Rescue wording?") && r.removed.endsWith("details line.")],
+    ["one marker alone (a letter's 'We should') is kept", stripLeakedNotes(letter).removed === null && stripLeakedNotes(letter).text === letter],
+    ["'deliverable' in advice is kept", stripLeakedNotes(perf).removed === null],
+    ["only the last paragraph is checked", stripLeakedNotes(middle).removed === null],
+    ["a message that is only notes is left as it is", stripLeakedNotes(onlyNotes).text === onlyNotes],
+    ["a reopened conversation shows the reply without them", shown[0]?.text === ad],
+  ], JSON.stringify(r));
+}
+
 try {
   rmSync(TMP, { recursive: true, force: true });
 } catch {
