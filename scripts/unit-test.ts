@@ -1441,6 +1441,7 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
 {
   const { newStarterChecklist: nsc, onboardingTools } = await import("../src/business/onboarding");
   const vicSydney = nsc({ employmentType: "full-time", mayNeedVisaCheck: false, smallBusiness: true, states: ["VIC"], workState: "NSW" }).map((x) => `${x.task} ${x.source.url}`).join("\n");
+  const both = nsc({ employmentType: "full-time", mayNeedVisaCheck: false, smallBusiness: false, states: ["VIC", "NSW"], workState: "NSW" }).map((x) => x.task).join("\n");
   const same = nsc({ employmentType: "full-time", mayNeedVisaCheck: false, smallBusiness: true, states: ["VIC"], workState: "VIC" }).map((x) => x.task).join("\n");
   const f = ensureFolders(join(TMP, "ws-files"));
   const bs = new BusinessStore(f.data);
@@ -1452,9 +1453,10 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   const vic = (await tool.handle({ ...base, start_date: "2026-10-05", work_state: null })).text;
   const add = (await registerTools({ register: () => new Register(f.data), confirm: async () => true, business: () => bs } as never).find((t) => t.name === "add_employee")!.handle({ name: "Tia Weekday", role: "Developer", employmentType: "full-time", startDate: "2027-01-12" })).text;
   record("based in another state; weekdays in tool results", [
-    ["NSW-based for a Victorian business: NSW public holidays (Fair Work)", /based in NSW while the business is in VIC: they get NSW's public holidays/.test(vicSydney) && /employment-conditions\/public-holidays/.test(vicSydney)],
+    ["NSW-based for a Victorian business: NSW public holidays (Fair Work)", /based in NSW \(the business is in VIC\): they get NSW's public holidays[^.]*, not VIC's/.test(vicSydney) && /employment-conditions\/public-holidays/.test(vicSydney)],
     ["long service leave: ask NSW Industrial Relations or Workforce Inspectorate Victoria, no entitlement stated", /NSW Industrial Relations or Workforce Inspectorate Victoria/.test(vicSydney) && /Don't state the entitlement/.test(vicSydney) && /leave\/long-service-leave/.test(vicSydney)],
-    ["workers compensation names NSW", /They will be based in NSW, not VIC/.test(vicSydney)],
+    ["workers compensation names NSW", /They will be based in NSW \(the business is in VIC\): ask your insurer or the NSW regulator/.test(vicSydney)],
+    ["a business in VIC and NSW, employee in NSW: the NSW items too (onb-08)", /based in NSW \(the business is in VIC, NSW\): they get NSW's public holidays \(where they are based for work\), so roster and pay them for those\./.test(both) && /NSW Industrial Relations or Workforce Inspectorate Victoria/.test(both)],
     ["the same state: none of that", !/based in/.test(same) && !/Long service leave/.test(same)],
     ["the holiday check follows where they are based: Labour Day for NSW, nothing for VIC", /Labour Day \(NSW\)/.test(nsw) && !/public holiday:/.test(vic)],
     ["the checklist starts with the first day's weekday", nsw.startsWith("First day: Monday 5 October 2026 (2026-10-05)") && vic.startsWith("First day: Monday 5 October 2026")],

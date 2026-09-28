@@ -138,7 +138,12 @@ export function newStarterChecklist(opts: {
   const { employmentType: type } = opts;
   const items: ChecklistItem[] = [];
   const known = opts.states ?? [];
-  const elsewhere = opts.workState && STATE_CODES.includes(opts.workState) && known.length && !known.includes(opts.workState) ? opts.workState : null;
+  // Where they are based, when it matters: outside the business's state(s), or one of several (round 6, onb-08: a Sydney
+  // employee of a business in VIC and NSW got no NSW items). A one-state business in its own state: nothing to add.
+  const ws = opts.workState && STATE_CODES.includes(opts.workState) && known.length ? opts.workState : null;
+  const outside = ws !== null && !known.includes(ws);
+  const based = ws !== null && (outside || known.length > 1) ? ws : null;
+  const bizIn = `the business is in ${known.join(", ")}`;
   if (opts.firstEmployee) {
     items.push(
       {
@@ -157,23 +162,23 @@ export function newStarterChecklist(opts: {
   }
   items.push({
     when: "before start",
-    task: elsewhere
-      ? `Make sure you have workers compensation insurance that covers them before they start (from an authorised insurer; the rules are set by each state's or territory's regulator). They will be based in ${elsewhere}, not ${known.join(", ")}: ask your insurer or the ${elsewhere} regulator which scheme covers them and whether you need cover in ${elsewhere}.`
+    task: based
+      ? `Make sure you have workers compensation insurance that covers them before they start (from an authorised insurer; the rules are set by each state's or territory's regulator). They will be based in ${based} (${bizIn}): ask your insurer or the ${based} regulator which scheme covers them and whether your cover includes ${based}.`
       : "Make sure you have workers compensation insurance that covers them before they start (from an authorised insurer; the rules are set by your state or territory regulator). If they will work in another state, for example from home, ask your insurer or that state's regulator which scheme covers them.",
     why: "Employers must have workers compensation insurance for their employees; the laws vary between states and territories.",
     source: S.workersComp,
   });
-  if (elsewhere) {
+  if (based) {
     items.push(
       {
         when: "before start",
-        task: `They will be based in ${elsewhere} while the business is in ${known.join(", ")}: they get ${elsewhere}'s public holidays (where they are based for work), so roster and pay them for those, not ${known.join(", ")}'s.`,
+        task: `They will be based in ${based} (${bizIn}): they get ${based}'s public holidays (where they are based for work), so roster and pay them for those${outside ? `, not ${known.join(", ")}'s` : ""}.`,
         why: "An employee is entitled to the public holidays where they are based for work.",
         source: S.publicHolidays,
       },
       {
         when: "ongoing",
-        task: `Long service leave comes from state and territory laws, which differ (for example in how long they must work first, and casuals in some states). Ask which state's law covers someone based in ${elsewhere} for a business in ${known.join(", ")}: ${[elsewhere, ...known].filter((s, i, all) => all.indexOf(s) === i && LSL_AGENCIES[s]).map((s) => LSL_AGENCIES[s]).join(" or ")}. Don't state the entitlement until then.`,
+        task: `Long service leave comes from state and territory laws, which differ (for example in how long they must work first, and casuals in some states). Ask which state's law covers someone based in ${based} (${bizIn}): ${[based, ...known].filter((s, i, all) => all.indexOf(s) === i && LSL_AGENCIES[s]).map((s) => LSL_AGENCIES[s]).join(" or ")}. Don't state the entitlement until then.`,
         why: "Most employees' long service leave comes from the long service leave law of a state or territory, and the laws differ.",
         source: S.lsl,
       },
