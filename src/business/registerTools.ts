@@ -5,6 +5,7 @@ import { checkDocuments, checkEmployeeChanges, checkNewEmployee, fixedTermEndCha
 import type { BusinessStore } from "./profile";
 import { isApprenticeRole, leavingText } from "./leaving";
 import { startDateHolidayNote } from "./publicHolidays";
+import { longDate } from "./weekdayGuard";
 import { todayIso } from "../clock";
 
 const dateProp = (description: string) => ({ type: ["string", "null"], description: `${description} (YYYY-MM-DD)` });
@@ -140,8 +141,11 @@ export function registerTools(opts: { register: () => Register; business: () => 
           if (jobs.length) note = `\n\n${saved.name} is also a candidate for: ${jobs.join(", ")}. If they were hired from that job, call record_hire so the job counts the hire.`;
         }
         // A first day still to come that is a public holiday (round 6 evaluation).
-        const holiday = saved.startDate && saved.startDate >= todayIso() ? startDateHolidayNote(saved.startDate, opts.business().get().states) : null;
+        const upcoming = saved.startDate && saved.startDate >= todayIso() ? saved.startDate : null;
+        const holiday = upcoming ? startDateHolidayNote(upcoming, opts.business().get().states) : null;
         if (holiday) note += `\n\n${holiday}`;
+        // The weekday from code (round 6: the model called a Tuesday a Monday).
+        if (upcoming) note += `\n\nFirst day: ${longDate(upcoming)}. Use this weekday as it is.`;
         return { success: true, text: `Added: ${employeeLine(saved)}${note}`, display: `register: added [${saved.id}] ${saved.name}` };
       },
     },

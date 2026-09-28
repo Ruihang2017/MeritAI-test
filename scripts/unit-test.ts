@@ -1360,7 +1360,7 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["5 Oct 2026: King's Birthday in QLD, Labour Day in NSW, nothing in WA", publicHolidaysOn("2026-10-05", ["QLD"])[0]?.name === "King's Birthday" && publicHolidaysOn("2026-10-05", ["NSW"])[0]?.name === "Labour Day" && publicHolidaysOn("2026-10-05", ["WA"]).length === 0],
     ["no states in the profile: every state checked", publicHolidaysOn("2026-10-05", []).length === 4],
     ["a year without data, and Victoria's 2027 AFL Friday not set yet", /public holidays for 2026 and 2027 only/.test(startDateHolidayNote("2028-01-03", ["WA"]) ?? "") && /isn't set yet/.test(startDateHolidayNote("2027-09-24", ["VIC"]) ?? "") && startDateHolidayNote("2027-09-24", ["NSW"]) === null],
-    ["the checklist starts with it, with official links; nothing without a date", onHoliday.startsWith("Start date 2026-10-05 is a public holiday: King's Birthday (QLD)") && /not-working-on-public-holidays/.test(onHoliday) && /2026-public-holidays/.test(onHoliday) && !/public holiday/.test(noDate.split("\n")[0])],
+    ["the checklist starts with it, with official links; nothing without a date", onHoliday.includes("\nStart date 2026-10-05 is a public holiday: King's Birthday (QLD)") && /not-working-on-public-holidays/.test(onHoliday) && /2026-public-holidays/.test(onHoliday) && !/public holiday/.test(noDate.split("\n")[0])],
     ["adding someone who starts on a holiday says so; a past start date doesn't", /Australia Day \(QLD\)/.test(future) && !/public holiday/.test(past)],
   ], JSON.stringify({ onHoliday: onHoliday.slice(0, 300), future: future.slice(-400), past: past.slice(-200) }));
 }
@@ -1416,6 +1416,50 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["employment before 26 Aug 2024 doesn't count; headcount unknown gives both", noticeFrom("2023-01-10", false) === "2025-02-26" && noticeFrom("2023-01-10", true) === "2025-08-26" && /from 2025-02-26 with 15 or more employees \(already reached\), or from 2025-08-26 with fewer than 15/.test(casualPathwayText({ start: "2023-01-10", today: T, small: null }))],
     ["every checklist link is official", CHECKLIST_URLS.every(isOfficialUrl)],
   ], JSON.stringify({ viaTool: viaTool.slice(-400) }));
+}
+
+// ------------------------------------------------------------------ weekdays from code, and the check under a reply (round 6: onb-04)
+{
+  const { longDate, wrongWeekdays, weekdayWarning } = await import("../src/business/weekdayGuard");
+  const T = "2026-09-28";
+  const w = (s: string) => wrongWeekdays(s, T);
+  const onb04 = "Assumption: full-time first-year plumbing apprentice, starting Monday 13 October. Day one: Monday 13 October.";
+  record("weekdays match dates", [
+    ["longDate", longDate("2026-10-13") === "Tuesday 13 October 2026" && longDate("2026-02-31") === null && longDate("next week") === null],
+    ["onb-04: 'Monday 13 October' is a Tuesday (once, however often it's written)", w(onb04).length === 1 && w(onb04)[0].actual === "Tuesday 13 October 2026"],
+    ["right ones pass: Tuesday 13 October, Mon 12 Oct, Friday, 9 October 2026, Monday 2026-10-12", w("Tuesday 13 October; Mon 12 Oct; Friday, 9 October 2026; Monday 2026-10-12; Monday 5th of October").length === 0],
+    ["US order and ordinals: Monday, October 13th", w("Monday, October 13th").length === 1],
+    ["an explicit year is used: Tuesday 13 October 2027 is a Wednesday", w("Tuesday 13 October 2027")[0]?.actual === "Wednesday 13 October 2027"],
+    ["no year near the year's end: Friday 1 January is 2027 (a Friday)", wrongWeekdays("Friday 1 January", "2026-12-20").length === 0 && wrongWeekdays("Thursday 1 January", "2026-12-20").length === 1],
+    ["Chinese: 10月13日（星期一） is wrong, 10月13日 周二 and 2026年10月12日星期一 are right", w("10月13日（星期一）").length === 1 && w("10月13日 周二，2026年10月12日星期一").length === 0],
+    ["no weekday, no check; a weekday alone isn't a date", w("13 October, and on Monday we meet at 9").length === 0],
+    ["the warning names what was written and the real date", /"Monday 13 October" \(Tuesday 13 October 2026\)/.test(weekdayWarning(w(onb04)))],
+  ], JSON.stringify(w(onb04)));
+}
+
+// ------------------------------------------------------------------ an employee based in another state; the first day's weekday from the checklist
+{
+  const { newStarterChecklist: nsc, onboardingTools } = await import("../src/business/onboarding");
+  const vicSydney = nsc({ employmentType: "full-time", mayNeedVisaCheck: false, smallBusiness: true, states: ["VIC"], workState: "NSW" }).map((x) => `${x.task} ${x.source.url}`).join("\n");
+  const same = nsc({ employmentType: "full-time", mayNeedVisaCheck: false, smallBusiness: true, states: ["VIC"], workState: "VIC" }).map((x) => x.task).join("\n");
+  const f = ensureFolders(join(TMP, "ws-files"));
+  const bs = new BusinessStore(f.data);
+  bs.update({ states: ["VIC"] });
+  const tool = onboardingTools(() => bs).find((t) => t.name === "new_starter_checklist")!;
+  const base = { employment_type: "full-time", may_need_visa_check: false, is_apprentice_or_trainee: false, works_on_construction_sites: false, first_employee: false, working_holiday_maker: false };
+  // 5 Oct 2026 is Labour Day in NSW, not in Victoria.
+  const nsw = (await tool.handle({ ...base, start_date: "2026-10-05", work_state: "NSW" })).text;
+  const vic = (await tool.handle({ ...base, start_date: "2026-10-05", work_state: null })).text;
+  const add = (await registerTools({ register: () => new Register(f.data), confirm: async () => true, business: () => bs } as never).find((t) => t.name === "add_employee")!.handle({ name: "Tia Weekday", role: "Developer", employmentType: "full-time", startDate: "2027-01-12" })).text;
+  record("based in another state; weekdays in tool results", [
+    ["NSW-based for a Victorian business: NSW public holidays (Fair Work)", /based in NSW while the business is in VIC: they get NSW's public holidays/.test(vicSydney) && /employment-conditions\/public-holidays/.test(vicSydney)],
+    ["long service leave: ask NSW Industrial Relations or Workforce Inspectorate Victoria, no entitlement stated", /NSW Industrial Relations or Workforce Inspectorate Victoria/.test(vicSydney) && /Don't state the entitlement/.test(vicSydney) && /leave\/long-service-leave/.test(vicSydney)],
+    ["workers compensation names NSW", /They will be based in NSW, not VIC/.test(vicSydney)],
+    ["the same state: none of that", !/based in/.test(same) && !/Long service leave/.test(same)],
+    ["the holiday check follows where they are based: Labour Day for NSW, nothing for VIC", /Labour Day \(NSW\)/.test(nsw) && !/public holiday:/.test(vic)],
+    ["the checklist starts with the first day's weekday", nsw.startsWith("First day: Monday 5 October 2026 (2026-10-05)") && vic.startsWith("First day: Monday 5 October 2026")],
+    ["add_employee gives the weekday of a start date to come", /First day: Tuesday 12 January 2027/.test(add)],
+  ], JSON.stringify({ nsw: nsw.slice(0, 300), add: add.slice(-200) }));
 }
 
 try {

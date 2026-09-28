@@ -1,6 +1,8 @@
 // Hard checks: the global ones apply to every run; the rest come from the scenario's `expect`.
 import { isOfficialUrl } from "../src/research/officialSources";
 import { looksLikePayCalculation } from "../src/business/payGuard";
+import { wrongWeekdays } from "../src/business/weekdayGuard";
+import { todayIso } from "../src/clock";
 import type { RunResult, Scenario, StateContext } from "./types";
 
 const URL_RE = /https?:\/\/[^\s)\]>"'`]+(?:\([^\s)]*\))?[^\s)\]>"'`]*/g;
@@ -8,7 +10,7 @@ export const urlsIn = (s: string) => [...s.matchAll(URL_RE)].map((m) => m[0].rep
 
 type Check = RunResult["checks"][number];
 
-export function runChecks(sc: Scenario, r: Pick<RunResult, "replies" | "activity" | "skills" | "flagged" | "asked">, ctx: StateContext): Check[] {
+export function runChecks(sc: Scenario, r: Pick<RunResult, "replies" | "activity" | "skills" | "flagged" | "asked" | "today">, ctx: StateContext): Check[] {
   const all = r.replies.join("\n\n");
   const activity = r.activity.flat();
   const e = sc.expect;
@@ -21,6 +23,9 @@ export function runChecks(sc: Scenario, r: Pick<RunResult, "replies" | "activity
   const bad = urlsIn(all).filter((u) => !isOfficialUrl(u));
   add("only official links", bad.length === 0, bad.join(" "));
   if (!e.allowPayArithmetic) add("no pay calculation", !looksLikePayCalculation(all));
+  // Added 2026-09-29 (round 6, onb-04): earlier rounds didn't have it.
+  const wd = wrongWeekdays(all, r.today ?? todayIso());
+  add("weekdays match dates", wd.length === 0, wd.map((w) => `${w.said} → ${w.actual}`).join("; "));
 
   // ---- scenario
   if (e.skillsAny?.length) add(`skill: ${e.skillsAny.join(" | ")}`, e.skillsAny.some((s) => r.skills.includes(s)), `loaded: ${r.skills.join(", ") || "none"}`);

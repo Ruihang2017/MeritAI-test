@@ -3,7 +3,7 @@ import { basename, dirname, extname, join } from "node:path";
 import { createAssistant, ROOT, type Assistant } from "../assistant";
 import type { ReplyFormat } from "../basePrompt";
 import { allCodexHomes } from "../engine/codexHome";
-import { now } from "../clock";
+import { now, todayIso } from "../clock";
 import { PendingConfirms } from "./confirms";
 import { launchCommand, openablePath, spawnLauncher, type Launcher, type OpenResult } from "./launch";
 import { stageUploads, type Upload } from "./uploads";
@@ -27,6 +27,7 @@ import { newStarterChecklist, type ChecklistItem, type EmploymentType } from "..
 import { isApprenticeRole, leavingChecklist, LEAVING_REASONS, smallBusinessOf, type LeavingItem, type LeavingReason } from "../business/leaving";
 import { documentTiming, nextKeyDate, remindersFor, todayLocal, type Reminder } from "../business/reminders";
 import { looksLikePayCalculation, PAY_GUARD_WARNING } from "../business/payGuard";
+import { weekdayWarning, wrongWeekdays } from "../business/weekdayGuard";
 import { formatCriteria, ingestJob, jdFromFolder, JD_NAME, proposeCriteria, purgeMissingJobs, screenJob, type IngestSummary, type Progress, type ScreenResult } from "../screening/pipeline";
 import { chatSummary, saveReports } from "../screening/report";
 import { LiveSession, type LiveLike } from "../voice/liveSession";
@@ -76,7 +77,7 @@ export interface AppUI {
 /** Events of one assistant turn: the engine's events plus app-level warnings. */
 export type AppEvent =
   | EngineEvent
-  | { type: "warning"; code: "pay_calculation"; message: string }
+  | { type: "warning"; code: "pay_calculation" | "weekday"; message: string }
   /** The ChatGPT plan's usage ran out (from the engine's error text); `resetAt` when it says, as it said it (e.g. "Sep 27th, 2026 2:43 AM"). */
   | { type: "usage_limit"; resetAt: string | null };
 
@@ -202,6 +203,15 @@ export interface TurnExtras {
 
 /** In a workspace's .assistant/: marks the sample business (synthetic data) and the day it is written for. */
 const SAMPLE_MARKER = "sample.json";
+
+/** Warnings for a finished reply: pay arithmetic, a weekday that doesn't match its date. */
+function replyWarnings(text: string): Extract<AppEvent, { type: "warning" }>[] {
+  const out: Extract<AppEvent, { type: "warning" }>[] = [];
+  if (looksLikePayCalculation(text)) out.push({ type: "warning", code: "pay_calculation", message: PAY_GUARD_WARNING });
+  const wrong = wrongWeekdays(text, todayIso());
+  if (wrong.length) out.push({ type: "warning", code: "weekday", message: weekdayWarning(wrong) });
+  return out;
+}
 
 export class AssistantApp {
   readonly userId: string;
@@ -420,11 +430,11 @@ export class AssistantApp {
     yield* this.withGuards(this.a.engine.send(message, { skill: opts.skill, images }));
   }
 
-  /** Adds app-level checks to a turn's events (the pay calculation backstop). */
+  /** Adds app-level checks to a turn's events (the pay calculation and weekday backstops). */
   private async *withGuards(events: AsyncIterable<EngineEvent>): AsyncIterable<AppEvent> {
     for await (const ev of events) {
       yield ev;
-      if (ev.type === "text_done" && looksLikePayCalculation(ev.text)) yield { type: "warning", code: "pay_calculation", message: PAY_GUARD_WARNING };
+      if (ev.type === "text_done") yield* replyWarnings(ev.text);
       if (ev.type === "error") {
         const limit = usageLimit(ev.message);
         if (limit) yield { type: "usage_limit", resetAt: limit.resetAt };
@@ -1397,7 +1407,7 @@ export class AssistantApp {
       },
       onEvent: (ev) => {
         h.onEvent(ev);
-        if (ev.type === "text_done" && looksLikePayCalculation(ev.text)) h.onEvent({ type: "warning", code: "pay_calculation", message: PAY_GUARD_WARNING });
+        if (ev.type === "text_done") for (const w of replyWarnings(ev.text)) h.onEvent(w);
       },
       onError: (m) => h.onError(m),
     });

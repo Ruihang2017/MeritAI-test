@@ -991,6 +991,8 @@ export const ZH: Record<string, string> = {
  * Tried in order after the dictionary.
  */
 export const ZH_PATTERNS: [RegExp, string][] = [
+  // the weekday check under a reply (src/business/weekdayGuard.ts)
+  [/^This reply has a weekday that doesn't match its date: (.+)\. Check the date before you send or rely on it\.$/, "这条回复里的星期和日期对不上：$1。发送或使用前请核对日期。"],
   // steps, counts
   [/^(\d+) steps? in this answer$/, "本次回答 $1 个步骤"],
   [/^(\d+) steps? so far$/, "目前 $1 个步骤"],

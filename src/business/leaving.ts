@@ -2,6 +2,7 @@ import { todayIso } from "../clock";
 import type { ClientTool } from "../engine/types";
 import type { BusinessStore } from "./profile";
 import type { Register } from "./register";
+import { longDate } from "./weekdayGuard";
 import { authoritiesFor, SOURCES as S, type ChecklistItem } from "./onboarding";
 
 /**
@@ -284,7 +285,10 @@ export function leavingTools(business: () => BusinessStore, register?: () => Reg
         const reason = (LEAVING_REASONS as string[]).includes(String(a.reason)) ? (a.reason as LeavingReason) : "other";
         return {
           success: true,
-          text: leavingText({ reason, apprentice: a.is_apprentice_or_trainee === true || (e ? isApprenticeRole(e.role) : false), casual: e ? e.employmentType === "casual" : a.is_casual === true, sponsored: a.is_sponsored_visa === true, states: business().get().states, smallBusiness: smallBusinessOf(business().get().headcount), startDate: e?.startDate ?? a.start_date ?? undefined, lastDay: a.last_day ?? null, name: e?.name, today: today() }),
+          // The last day's weekday from code (round 6: the model called a Tuesday a Monday).
+          text: (longDate(a.last_day) ? `Last day: ${longDate(a.last_day)}. Use this weekday as it is.
+
+` : "") + leavingText({ reason, apprentice: a.is_apprentice_or_trainee === true || (e ? isApprenticeRole(e.role) : false), casual: e ? e.employmentType === "casual" : a.is_casual === true, sponsored: a.is_sponsored_visa === true, states: business().get().states, smallBusiness: smallBusinessOf(business().get().headcount), startDate: e?.startDate ?? a.start_date ?? undefined, lastDay: a.last_day ?? null, name: e?.name, today: today() }),
           display: `leaving checklist: ${reason}`,
         };
       },

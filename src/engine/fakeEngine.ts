@@ -311,7 +311,7 @@ export class FakeEngine implements Engine {
       yield* this.say(r?.success ? "Okay, I haven't added her." : `I couldn't add them: ${r?.text ?? "unknown error"}`);
       return;
     }
-    yield* this.tool("new_starter_checklist", { employment_type: "full-time", may_need_visa_check: true, is_apprentice_or_trainee: false, works_on_construction_sites: false, first_employee: false, working_holiday_maker: false, start_date: null });
+    yield* this.tool("new_starter_checklist", { employment_type: "full-time", may_need_visa_check: true, is_apprentice_or_trainee: false, works_on_construction_sites: false, first_employee: false, working_holiday_maker: false, start_date: null, work_state: null });
     yield* this.say(`Great news. ${found.name} is on your staff list now, and the ${found.job} job counts the hire. Before day one, give the Fair Work Information Statement and a TFN declaration, and ask for their super choice.\n\n_Demo reply from the fake engine._`);
   }
 

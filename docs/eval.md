@@ -70,6 +70,7 @@ About 20% of the scenarios are in Chinese.
   - no unverified links (a shortened tool link that the engine corrected does not count; the correction is listed in the run activity);
   - only official links;
   - no pay calculation (unless the scenario allows money arithmetic).
+  - weekdays match dates (`src/business/weekdayGuard.ts`; from 2026-09-29, so earlier rounds didn't have it).
 - **Per scenario:**
   - skills loaded, tools used or not used;
   - patterns the reply must or must not contain;

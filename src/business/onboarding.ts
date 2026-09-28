@@ -1,6 +1,7 @@
 import type { ClientTool } from "../engine/types";
 import type { BusinessStore } from "./profile";
 import { startDateHolidayNote } from "./publicHolidays";
+import { longDate } from "./weekdayGuard";
 
 /**
  * The new-starter compliance checklist (plan P1). Code, not the model, decides
@@ -72,7 +73,23 @@ const S = {
   hoursOfWork: { title: "Fair Work: Hours of work", url: "https://www.fairwork.gov.au/employment-conditions/hours-of-work-breaks-and-rosters/hours-of-work" },
   casualPermanent: { title: "Fair Work: Becoming a permanent employee", url: "https://www.fairwork.gov.au/starting-employment/types-of-employees/casual-employees/becoming-a-permanent-employee" },
   workRights: { title: "Home Affairs: Workers rights and visa reporting protections", url: "https://immi.homeaffairs.gov.au/visas/working-in-australia/work-rights-and-exploitation" },
+  // An employee based in another state (checked 2026-09-29).
+  publicHolidays: { title: "Fair Work: Public holidays", url: "https://www.fairwork.gov.au/employment-conditions/public-holidays" },
+  lsl: { title: "Fair Work: Long service leave", url: "https://www.fairwork.gov.au/leave/long-service-leave" },
 };
+
+/** Long service leave agencies by state, as Fair Work's "Long service leave" page lists them (checked 2026-09-29). */
+export const LSL_AGENCIES: Record<string, string> = {
+  ACT: "WorkSafe ACT",
+  NSW: "NSW Industrial Relations",
+  NT: "NT Government",
+  QLD: "Queensland Industrial Relations",
+  SA: "SafeWork SA",
+  TAS: "WorkSafe Tasmania",
+  VIC: "Workforce Inspectorate Victoria",
+  WA: "Department of Local Government, Industry Regulation and Safety (WA)",
+};
+export const STATE_CODES = Object.keys(LSL_AGENCIES);
 export { S as SOURCES };
 
 /**
@@ -115,9 +132,13 @@ export function newStarterChecklist(opts: {
   firstEmployee?: boolean;
   /** On a Working Holiday (417) or Work and Holiday (462) visa. */
   workingHolidayMaker?: boolean;
+  /** The state or territory where they are based for work, when it isn't one of the business's `states`. */
+  workState?: string | null;
 }): ChecklistItem[] {
   const { employmentType: type } = opts;
   const items: ChecklistItem[] = [];
+  const known = opts.states ?? [];
+  const elsewhere = opts.workState && STATE_CODES.includes(opts.workState) && known.length && !known.includes(opts.workState) ? opts.workState : null;
   if (opts.firstEmployee) {
     items.push(
       {
@@ -136,11 +157,28 @@ export function newStarterChecklist(opts: {
   }
   items.push({
     when: "before start",
-    task:
-      "Make sure you have workers compensation insurance that covers them before they start (from an authorised insurer; the rules are set by your state or territory regulator). If they will work in another state, for example from home, ask your insurer or that state's regulator which scheme covers them.",
+    task: elsewhere
+      ? `Make sure you have workers compensation insurance that covers them before they start (from an authorised insurer; the rules are set by each state's or territory's regulator). They will be based in ${elsewhere}, not ${known.join(", ")}: ask your insurer or the ${elsewhere} regulator which scheme covers them and whether you need cover in ${elsewhere}.`
+      : "Make sure you have workers compensation insurance that covers them before they start (from an authorised insurer; the rules are set by your state or territory regulator). If they will work in another state, for example from home, ask your insurer or that state's regulator which scheme covers them.",
     why: "Employers must have workers compensation insurance for their employees; the laws vary between states and territories.",
     source: S.workersComp,
   });
+  if (elsewhere) {
+    items.push(
+      {
+        when: "before start",
+        task: `They will be based in ${elsewhere} while the business is in ${known.join(", ")}: they get ${elsewhere}'s public holidays (where they are based for work), so roster and pay them for those, not ${known.join(", ")}'s.`,
+        why: "An employee is entitled to the public holidays where they are based for work.",
+        source: S.publicHolidays,
+      },
+      {
+        when: "ongoing",
+        task: `Long service leave comes from state and territory laws, which differ (for example in how long they must work first, and casuals in some states). Ask which state's law covers someone based in ${elsewhere} for a business in ${known.join(", ")}: ${[elsewhere, ...known].filter((s, i, all) => all.indexOf(s) === i && LSL_AGENCIES[s]).map((s) => LSL_AGENCIES[s]).join(" or ")}. Don't state the entitlement until then.`,
+        why: "Most employees' long service leave comes from the long service leave law of a state or territory, and the laws differ.",
+        source: S.lsl,
+      },
+    );
+  }
   items.push(
     {
       when: "before start",
@@ -387,13 +425,22 @@ export function onboardingTools(business: () => BusinessStore): ClientTool[] {
           works_on_construction_sites: { type: "boolean", description: "true if they will do construction work on a construction site (building, plumbing, electrical, landscaping construction...)." },
           first_employee: { type: "boolean", description: "true if this is the business's first employee, or the owner hasn't set up payroll (PAYG withholding, STP) yet; false if it already pays employees." },
           working_holiday_maker: { type: "boolean", description: "true if they are on a Working Holiday (417) or Work and Holiday (462) visa, e.g. a backpacker." },
-          start_date: { type: ["string", "null"], description: "Their first day (YYYY-MM-DD) if known, else null: the checklist says if it is a public holiday in the business's states." },
+          start_date: {
+            type: ["string", "null"],
+            description:
+              "Their first day (YYYY-MM-DD) if known, else null. The checklist gives its weekday (use that, don't work it out) and says if it is a public holiday where they are based. If the owner gave only a relative date (\"in 2 weeks\"), pass the date you worked out and say in the reply that it is assumed.",
+          },
+          work_state: {
+            type: ["string", "null"],
+            enum: [...STATE_CODES, null],
+            description: "The state or territory where they will be based for work (e.g. working from home in NSW), if the owner said so; null if it is the business's own state or not said.",
+          },
         },
-        required: ["employment_type", "may_need_visa_check", "is_apprentice_or_trainee", "works_on_construction_sites", "first_employee", "working_holiday_maker", "start_date"],
+        required: ["employment_type", "may_need_visa_check", "is_apprentice_or_trainee", "works_on_construction_sites", "first_employee", "working_holiday_maker", "start_date", "work_state"],
         additionalProperties: false,
       },
       handle: async (args) => {
-        const a = args as { employment_type?: string; may_need_visa_check?: boolean; is_apprentice_or_trainee?: boolean; works_on_construction_sites?: boolean; first_employee?: boolean; working_holiday_maker?: boolean; start_date?: string | null };
+        const a = args as { employment_type?: string; may_need_visa_check?: boolean; is_apprentice_or_trainee?: boolean; works_on_construction_sites?: boolean; first_employee?: boolean; working_holiday_maker?: boolean; start_date?: string | null; work_state?: string | null };
         const type = a.employment_type as EmploymentType;
         if (!["full-time", "part-time", "casual", "fixed-term"].includes(type)) return { success: false, text: "employment_type must be full-time, part-time, casual or fixed-term." };
         const p = business().get();
@@ -406,12 +453,18 @@ export function onboardingTools(business: () => BusinessStore): ClientTool[] {
           firstEmployee: a.first_employee === true,
           workingHolidayMaker: a.working_holiday_maker === true,
           states: p.states,
+          workState: a.work_state ?? null,
         });
-        const holiday = startDateHolidayNote(a.start_date, p.states);
+        // Public holidays where they are based for work: their state if the owner named one.
+        const ws = a.work_state && STATE_CODES.includes(a.work_state) ? a.work_state : null;
+        const holiday = startDateHolidayNote(a.start_date, ws ? [ws] : p.states);
+        const day = longDate(a.start_date);
+        const first = day ? `First day: ${day} (${a.start_date}). Use this weekday as it is; if the owner didn't give the exact date, say it is assumed and ask them to confirm it.\n` : "";
         return {
           success: true,
           text:
-            (holiday ? `${holiday}\n\n` : "") +
+            first +
+            (holiday ? `${holiday}\n\n` : first ? "\n" : "") +
             `New starter checklist (${type}; official sources checked ${CHECKED_ON}):\n${formatChecklist(items)}\n\n` +
             "Present it as a practical checklist in plain language, grouped by timing, keeping every item and its source link. Add the business's own steps from its profile or policies where relevant. " +
             "Pay rates and super percentages are not included on purpose: use search_official_sources or the Pay and Conditions Tool for figures.",
