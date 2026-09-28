@@ -5,6 +5,9 @@ import type { EntityRef } from "../changes";
  * to this interface, so the backend can be swapped (app-server, Responses API, ...).
  */
 
+/** The error message of a sign-in the user cancelled. */
+export const LOGIN_CANCELLED = "sign-in cancelled";
+
 export type EngineEvent =
   | { type: "text_delta"; text: string }
   /** `notesRemoved`: the model's own planning notes cut from the end (leakedNotes.ts); the streamed text still had them. */
@@ -128,6 +131,8 @@ export interface Engine {
   account(): Promise<AccountStatus>;
   /** Interactive login; `onPrompt` shows the user what to do (URL + code). */
   login(onPrompt: (message: string) => void): Promise<void>;
+  /** Cancels a sign-in still waiting for the user (login() then rejects with LOGIN_CANCELLED); false if none is waiting. */
+  cancelLogin(): Promise<boolean>;
   /** Starts a new conversation with freshly built instructions. */
   newSession(): Promise<SessionInfo>;
   /**

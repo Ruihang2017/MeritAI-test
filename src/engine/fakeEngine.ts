@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { correctUrl, extractUrls } from "./appServer";
+import { LOGIN_CANCELLED } from "./types";
 import type {
   AccountStatus,
   ClientTool,
@@ -59,10 +60,19 @@ export class FakeEngine implements Engine {
   async account(): Promise<AccountStatus> {
     return this.loggedIn ? { loggedIn: true, description: "Demo (fake engine: scripted replies, no model)" } : { loggedIn: false, description: "Not signed in (demo)" };
   }
+  private cancelSignIn: (() => void) | null = null;
   async login(onPrompt: (message: string) => void): Promise<void> {
     onPrompt("Open https://auth.openai.com/codex/device and enter code: DEMO-12345");
-    await sleep(this.opts.delayMs === 0 ? 0 : 4000);
+    const cancelled = new Promise<"cancelled">((resolve) => (this.cancelSignIn = () => resolve("cancelled")));
+    const r = await Promise.race([sleep(this.opts.delayMs === 0 ? 0 : 4000), cancelled]);
+    this.cancelSignIn = null;
+    if (r === "cancelled") throw new Error(LOGIN_CANCELLED);
     this.loggedIn = true;
+  }
+  async cancelLogin(): Promise<boolean> {
+    if (!this.cancelSignIn) return false;
+    this.cancelSignIn();
+    return true;
   }
   async newSession(): Promise<SessionInfo> {
     this.threadId = randomUUID();

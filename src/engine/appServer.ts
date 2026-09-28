@@ -32,6 +32,7 @@ import type {
   EphemeralResult,
   WebSearchRecord,
 } from "./types";
+import { LOGIN_CANCELLED } from "./types";
 
 export interface AppServerEngineOptions {
   codexBin: string;
@@ -94,6 +95,8 @@ export class AppServerEngine implements Engine {
   private conn!: AppServerConnection;
   private threadId: string | null = null;
   private active: ActiveTurn | null = null;
+  /** A device-code sign-in waiting for the user (cancelLogin). */
+  private pendingLogin: { loginId: string; stop: (e: Error) => void } | null = null;
   private serviceTier: string | null;
   /** Tier change to send with the next turn/start (applies to that and later turns). */
   private pendingTier: string | null = null;
@@ -158,11 +161,16 @@ export class AppServerEngine implements Engine {
       return;
     }
     // Device-code flow: works from a headless CLI, no local callback server needed.
+    let stop: (e: Error) => void = () => {};
     const completed = new Promise<void>((resolve, reject) => {
       const onN = (n: ServerNotification) => {
         if (n.method !== "account/login/completed") return;
         this.conn.off("notification", onN);
         n.params.success ? resolve() : reject(new Error(n.params.error ?? "login failed"));
+      };
+      stop = (e) => {
+        this.conn.off("notification", onN);
+        reject(e);
       };
       this.conn.on("notification", onN);
     });
@@ -170,8 +178,23 @@ export class AppServerEngine implements Engine {
       type: "chatgptDeviceCode",
     })) as LoginAccountResponse;
     if (res.type !== "chatgptDeviceCode") throw new Error(`unexpected login response: ${res.type}`);
+    this.pendingLogin = { loginId: res.loginId, stop };
     onPrompt(`Open ${res.verificationUrl} and enter code: ${res.userCode}`);
-    await completed;
+    try {
+      await completed;
+    } finally {
+      this.pendingLogin = null;
+    }
+  }
+
+  /** Cancels a device-code sign-in that is waiting for the user; its login() rejects with LOGIN_CANCELLED. False if none is waiting. */
+  async cancelLogin(): Promise<boolean> {
+    const p = this.pendingLogin;
+    if (!p) return false;
+    this.pendingLogin = null;
+    await this.conn.request("account/login/cancel", { loginId: p.loginId }).catch(() => null);
+    p.stop(new Error(LOGIN_CANCELLED));
+    return true;
   }
 
   // ----------------------------------------------------------------- skills

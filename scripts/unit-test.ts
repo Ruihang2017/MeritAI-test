@@ -1365,6 +1365,30 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   ], JSON.stringify({ onHoliday: onHoliday.slice(0, 300), future: future.slice(-400), past: past.slice(-200) }));
 }
 
+// ------------------------------------------------------------------ cancelling a sign-in that waits for the owner (the fake engine; the real one was tried against codex app-server)
+{
+  process.env.FX_FAKE_DELAY_MS = "2";
+  process.env.FX_FAKE_SIGNED_OUT = "1";
+  const f = ensureFolders(join(TMP, "cancel-files"));
+  const session = new UiSession({ engine: "fake" });
+  const app = new AssistantApp({ userId: "unit-cancel", memoryRoot: join(TMP, "cancel-mem"), filesRoot: f.root, format: "markdown", engine: "fake", ui: { confirm: session.confirm } });
+  session.attach(app);
+  await app.start();
+  delete process.env.FX_FAKE_SIGNED_OUT;
+  const nothing = (await session.handle({ id: 1, method: "cancelLogin", params: undefined } as never)) as { cancelled: boolean };
+  const started = Date.now();
+  const login = session.handle({ id: 2, method: "login", params: undefined } as never) as Promise<{ ok: boolean; cancelled?: boolean; error?: string }>;
+  await new Promise((r) => setTimeout(r, 50));
+  const cancel = (await session.handle({ id: 3, method: "cancelLogin", params: undefined } as never)) as { cancelled: boolean };
+  const r = await login;
+  record("cancelling a sign-in", [
+    ["nothing to cancel before a sign-in starts", nothing.cancelled === false],
+    ["cancel works while login holds the session, and login ends at once as cancelled (not an error)", cancel.cancelled === true && r.ok === false && r.cancelled === true && !r.error && Date.now() - started < 2000],
+    ["still signed out", (await app.account()).loggedIn === false],
+  ], JSON.stringify({ nothing, cancel, r }));
+  await app.stop?.();
+}
+
 // ------------------------------------------------------------------ onboarding details (round 6): super choice, written contracts, visas, training pay, casual to permanent
 {
   const { casualPathwayText, casualPathwayTools, noticeFrom } = await import("../src/business/casualPathway");

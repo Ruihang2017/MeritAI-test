@@ -106,7 +106,9 @@ export interface Methods {
   voiceAudio: { params: { pcm: string }; result: null };
   voiceStop: { params: void; result: null };
   /** Starts the ChatGPT sign-in; the code arrives as a `login` event, the result when it finishes. */
-  login: { params: void; result: { ok: boolean; error?: string } };
+  login: { params: void; result: { ok: boolean; error?: string; cancelled?: boolean } };
+  /** Cancels a sign-in that is waiting for the owner: the login call then returns { ok: false, cancelled: true }. */
+  cancelLogin: { params: void; result: { cancelled: boolean } };
   openFile: { params: { path: string }; result: { ok: true } | { ok: false; error: string } };
   revealFile: { params: { path: string }; result: { ok: true } | { ok: false; error: string } };
   /** The current conversation's "What changed" and saved files, by the owner's message (turnKey in src/changes.ts). */

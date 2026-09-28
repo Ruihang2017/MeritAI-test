@@ -20,6 +20,7 @@ export interface UpdatesHook {
 /** Where Send feedback's email goes (package.json "meritai.feedbackTo"; owner, 2026-09-28). */
 const FEEDBACK_TO = (pkg as { meritai?: { feedbackTo?: string } }).meritai?.feedbackTo ?? "";
 import type { Confirm, ConfirmRequest } from "../engine/types";
+import { LOGIN_CANCELLED } from "../engine/types";
 import { DOCUMENTS } from "../business/register";
 import { LEAVING_REASONS } from "../business/leaving";
 import { OFFICIAL_DOMAINS } from "../research/officialSources";
@@ -409,9 +410,12 @@ export class UiSession {
           if ((await this.app.account()).loggedIn) await this.app.openSession();
           return { ok: true };
         } catch (e) {
-          return { ok: false, error: (e as Error).message };
+          const error = (e as Error).message;
+          return error === LOGIN_CANCELLED ? { ok: false, cancelled: true } : { ok: false, error };
         }
       }),
+    // Not exclusive: it runs while login holds the session.
+    cancelLogin: async () => ({ cancelled: await this.app.cancelLogin() }),
     openFile: async (p) => this.app.openFile(str(p?.path, "path", 2000)),
     revealFile: async (p) => this.app.revealFile(str(p?.path, "path", 2000)),
     emailDraft: async (p) => this.app.emailDraft(str(p?.path, "path", 2000)),

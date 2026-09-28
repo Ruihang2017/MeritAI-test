@@ -46,7 +46,8 @@ export function FirstRun({
     setErr(null);
     const r = await api.call("login").catch((e: Error) => ({ ok: false, error: e.message }));
     setSigning(false);
-    if (!r.ok) setErr(`Sign-in didn't finish: ${r.error ?? "unknown error"}. Try again.`);
+    // Cancelled by the owner: back to the button, no error.
+    if (!r.ok && !(r as { cancelled?: boolean }).cancelled) setErr(`Sign-in didn't finish: ${r.error ?? "unknown error"}. Try again.`);
     onRefresh();
   };
   const useFolder = async (p: string | null) => {
@@ -117,6 +118,9 @@ export function FirstRun({
                 <div className="banner n" style={{ alignItems: "center" }}>
                   <span className="spin" />
                   <span className="grow">Waiting for you to finish in the browser. This page moves on by itself.</span>
+                  <button type="button" className="btn g sm" onClick={() => void api.call("cancelLogin").catch(() => null)}>
+                    Cancel
+                  </button>
                 </div>
               </div>
             )}

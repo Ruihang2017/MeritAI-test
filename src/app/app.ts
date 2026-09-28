@@ -284,6 +284,11 @@ export class AssistantApp {
     return this.a.engine.login(onPrompt);
   }
 
+  /** Cancels a sign-in still waiting for the owner (their login() call then fails with LOGIN_CANCELLED). */
+  cancelLogin(): Promise<boolean> {
+    return this.a.engine.cancelLogin();
+  }
+
   account(): Promise<AccountStatus> {
     return this.a.engine.account();
   }
