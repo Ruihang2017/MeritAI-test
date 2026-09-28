@@ -9,7 +9,8 @@ import { AssistantApp, TIERS } from "../app/app";
 import { ROOT } from "../assistant";
 import { ensureFolders } from "../files/folders";
 import { DEMO_TODAY, demoConversationsFile, seedDemo } from "../../scripts/fixtures/demo";
-import { UiSession } from "./session";
+import { UiSession, type UpdatesHook } from "./session";
+import pkg from "../../package.json" with { type: "json" };
 import { startUiServer } from "./server";
 
 const args = process.argv.slice(2);
@@ -71,7 +72,18 @@ const serviceTier = TIERS[tierName.toLowerCase()];
 if (!serviceTier) throw new Error(`unknown tier "${tierName}" (use fast or standard)`);
 
 const demo = fake || demoMode ? await demoWorkspace() : null;
-const session = new UiSession({ engine: fake ? "fake" : "codex", sampleData: demo !== null });
+// --fake-update ready|downloading: a stand-in for the desktop app's updates, to see them in the browser (installing does nothing).
+const fakeUpdate = value("--fake-update");
+const updates: UpdatesHook | undefined =
+  fakeUpdate === "ready" || fakeUpdate === "downloading"
+    ? {
+        state: () => ({ supported: true, version: pkg.version, status: fakeUpdate, available: "0.2.99", percent: fakeUpdate === "ready" ? 100 : 45, notes: ["Voice in the side panel, on every page", "Send feedback puts the file in an email for you"], checkedAt: new Date().toISOString(), error: null }),
+        onChange: () => {},
+        check: () => {},
+        install: async () => console.log("(fake update: would restart and install now)"),
+      }
+    : undefined;
+const session = new UiSession({ engine: fake ? "fake" : "codex", sampleData: demo !== null, updates });
 const app = new AssistantApp({
   userId: demo ? DEMO_USER : userId(),
   ui: { confirm: session.confirm, progress: session.progress },

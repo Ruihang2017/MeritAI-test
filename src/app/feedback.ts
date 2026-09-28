@@ -1,5 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
+import type { EmailDraft } from "../files/email";
 
 /**
  * Testers' feedback (owner, 2026-09-27): "Was this helpful?" on each reply, kept on this computer,
@@ -41,6 +42,23 @@ export class FeedbackLog {
         }
       });
   }
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * The email that takes a feedback file to the MeritAI team (owner, 2026-09-28): a draft the tester
+ * checks and sends from their own email app, with the file attached.
+ */
+export function feedbackEmail(o: { to: string; file: string; data: Buffer; version: string; when: Date; name: string | null }): EmailDraft {
+  const day = `${o.when.getDate()} ${MONTHS[o.when.getMonth()]}`;
+  return {
+    to: [o.to],
+    cc: [],
+    subject: `MeritAI feedback · ${o.version} · ${day}`,
+    body: ["Hi MeritAI team,", "", `My feedback from MeritAI ${o.version} is attached.`, ...(o.name ? ["", o.name] : [])].join("\n"),
+    attachments: [{ name: basename(o.file), data: o.data }],
+  };
 }
 
 /** Writes the feedback file into <workspace>/Feedback/ and returns its path. */

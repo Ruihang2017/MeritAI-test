@@ -52,6 +52,8 @@ export interface UserSettings {
   language?: "en" | "zh";
   /** Voice stops once this month's estimated cost reaches it (US$); absent = no limit. */
   voiceMonthlyLimitUsd?: number;
+  /** The tester's name on feedback files (optional, remembered on this computer). */
+  feedbackName?: string;
 }
 
 export const TASK_TTL_DAYS = 30;

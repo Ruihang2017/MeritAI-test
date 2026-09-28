@@ -17,7 +17,7 @@ Thank you for testing MeritAI. It is an HR adviser for small business owners who
 | A Windows 10 or 11 computer | About 1 GB of free space |
 | A ChatGPT account whose plan includes Codex | You sign in with it once, in a browser. The adviser's usage counts against that account's plan |
 | Optional, for voice: an OpenAI API key | Created at platform.openai.com (API keys), with billing set up. Separate from ChatGPT; voice costs about US$0.05 a minute, billed to that key's account |
-| The installer | `MeritAI Setup 0.2.1.exe`, from [MeritAI test coordinator: name, email] |
+| The installer | `MeritAI Setup 0.2.1.exe`, from the MeritAI test coordinator (Horace, ruihang2017@gmail.com) |
 
 ## 3 Install and first start
 
@@ -71,14 +71,14 @@ Do them in any order. For each, notice: did it tell you what to do, clearly and 
 
 - Under each answer: **Was this helpful?** Thumbs up, or thumbs down and say what went wrong.
 - In **Connections**, press I want this on the connections you'd use: it goes in your feedback file.
-- Any time: your name (bottom left) › **Send feedback**. Write what happened and tick what to include (your ratings, the current conversation, technical details). It saves a file in `C:\Users\<you>\MeritAI\Feedback\` (**Show in folder**). Send that file to [MeritAI test coordinator: name, email].
+- Any time: your name (bottom left) › **Send feedback**. Write what happened and tick what to include (your ratings, the current conversation, technical details). Your name is optional. It saves a file in `C:\Users\<you>\MeritAI\Feedback\`, then **Email it to the MeritAI team** opens an email with the file attached in your email app: check it and press Send. Using Teams instead? **Show in folder** and send the file to Horace (ruihang2017@gmail.com).
 - Screenshots help too.
 
 ## 7 Known limitations
 
 - English or Chinese (Settings › Language). In Chinese the adviser answers in Chinese, but letters, contracts, emails and job descriptions stay in English. Answers follow Australian employment law and official sources; they are not legal advice.
 - MeritAI doesn't send email or post job ads yet: it saves drafts for you to send (Connections shows what's coming).
-- No automatic updates: a new version comes as a new installer.
+- From version 0.2.2, MeritAI updates itself: a new version downloads in the background, **Update ready** appears at the top, and it installs when you press **Restart to update** (or the next time you close MeritAI). Your conversations, settings and files stay. Earlier versions need the new installer once.
 - Voice needs your own API key and costs money (Settings shows an estimate, and a monthly limit stops it). During voice, a change that needs your OK waits on the right of the screen: press Yes, save, or say "yes" (deleting always needs a press).
 - The ChatGPT plan's usage can run out; the app says when, and when it resets.
 

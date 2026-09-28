@@ -9,12 +9,22 @@ import { DEMO_TODAY, seedDemo } from "../../scripts/fixtures/demo";
 import pkg from "../../package.json" with { type: "json" };
 
 const APP_VERSION = pkg.version;
+/** The desktop app's updates, as the session needs them (src/desktop/updates.ts). */
+export interface UpdatesHook {
+  state(): UpdateState;
+  onChange(f: (s: UpdateState) => void): void;
+  check(): void;
+  install(): Promise<void>;
+}
+
+/** Where Send feedback's email goes (package.json "meritai.feedbackTo"; owner, 2026-09-28). */
+const FEEDBACK_TO = (pkg as { meritai?: { feedbackTo?: string } }).meritai?.feedbackTo ?? "";
 import type { Confirm, ConfirmRequest } from "../engine/types";
 import { DOCUMENTS } from "../business/register";
 import { LEAVING_REASONS } from "../business/leaving";
 import { OFFICIAL_DOMAINS } from "../research/officialSources";
 import { todayIso } from "../clock";
-import type { ClientMessage, Method, Methods, ServerEvent, Settings, ShellState } from "./protocol";
+import type { ClientMessage, Method, Methods, ServerEvent, Settings, ShellState, UpdateState } from "./protocol";
 import { RULES_CHECKED_ON } from "../business/reminders";
 import type { SessionFrom } from "../memory/store";
 
@@ -51,7 +61,13 @@ export class UiSession {
   private tier: "fast" | "standard" | null = null;
   private limit: { resetAt: string | null } | null = null;
 
-  constructor(private readonly opts: { engine: "codex" | "fake"; sampleData?: boolean }) {}
+  constructor(private readonly opts: { engine: "codex" | "fake"; sampleData?: boolean; /** The desktop app's updates; none in the browser version. */ updates?: UpdatesHook }) {
+    opts.updates?.onChange((state) => this.emit({ event: "update", state }));
+  }
+
+  private updateState(): UpdateState {
+    return this.opts.updates?.state() ?? { supported: false, version: APP_VERSION, status: "idle", available: null, percent: null, notes: [], checkedAt: null, error: null };
+  }
 
   /** The confirm to give AssistantApp's ui: the question goes to every connected UI. */
   readonly confirm: Confirm = (req, ctx) =>
@@ -288,14 +304,18 @@ export class UiSession {
       await this.app.rateReply({ rating: p.rating, reasons, note: str(p.note ?? "", "note", 2000), question: str(p.question ?? "", "question", 4000).slice(0, 2000), answer: str(p.answer ?? "", "answer", 20_000).slice(0, 4000) });
       return null;
     },
-    feedbackSummary: async () => this.app.feedbackSummary(),
+    feedbackSummary: async () => ({ ...this.app.feedbackSummary(), to: FEEDBACK_TO }),
     exportFeedback: async (p) => {
       const info = this.app.sessionInfo();
       const technical = p?.technical
         ? { app: APP_VERSION, engine: this.opts.engine, model: info?.model ?? null, reasoning: info?.reasoningEffort ?? null, tier: info?.serviceTier ?? null, platform: `${process.platform} ${process.arch}`, node: process.versions.node, electron: process.versions.electron ?? null, today: todayIso(), sampleData: this.app.sampleDay() !== null, recentErrors: this.recentErrors.slice(-20) }
         : null;
-      return { path: await this.app.exportFeedback({ note: str(p?.note ?? "", "note", 10_000), ratings: p?.ratings === true, conversation: p?.conversation === true, technical }) };
+      return { path: await this.app.exportFeedback({ note: str(p?.note ?? "", "note", 10_000), ratings: p?.ratings === true, conversation: p?.conversation === true, technical, version: APP_VERSION, ...(p?.name !== undefined ? { name: str(p.name, "name", 200) } : {}) }) };
     },
+    updateState: async () => this.updateState(),
+    checkForUpdates: async () => (this.opts.updates?.check(), this.updateState()),
+    installUpdate: async () => (await this.opts.updates?.install(), null),
+    emailFeedback: async (p) => this.app.emailFeedback(str(p?.path, "path", 2000), { to: FEEDBACK_TO, version: APP_VERSION }),
     useSampleBusiness: async () =>
       this.exclusive("Preparing the sample business", async () => {
         const root = this.app.sampleRoot();

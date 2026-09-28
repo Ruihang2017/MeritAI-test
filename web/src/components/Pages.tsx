@@ -2,10 +2,10 @@ import type * as React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BusinessProfile } from "../../../src/business/profile";
 import type { Preference, TaskNote } from "../../../src/memory/store";
-import type { FileRow, Settings, WorkspaceFiles } from "../../../src/server/protocol";
+import type { FileRow, Settings, WorkspaceFiles, UpdateState } from "../../../src/server/protocol";
 import type { VoiceUsageSummary } from "../../../src/voice/usage";
 import type { Api } from "../api";
-import { dayLabel, fmtDate, fmtDatesIn, fmtDay, fmtWhen, localDay } from "../format";
+import { dayLabel, fmtDate, fmtDatesIn, fmtDay, fmtTime, fmtWhen, localDay } from "../format";
 import { now } from "../clock";
 import { Icon } from "./Icon";
 import { fromFile, type Ask } from "../ask";
@@ -988,7 +988,88 @@ function VoiceUsageBlock({ api, demo }: { api: Api; demo: boolean }) {
   );
 }
 
-export function SettingsPage({ api, onChanged, login, language }: { api: Api; onChanged: () => void; login: { url: string | null; code: string | null; message: string } | null; /** The owner's language (design: SettingsLanguage). */ language: "en" | "zh" }) {
+/** The version and its updates (design: UpdateSettings): up to date, checking, downloading, ready, couldn't check, or the browser version. */
+function UpdateBox({ api, u, onInstall }: { api: Api; u: UpdateState | null; onInstall?: () => void }) {
+  const [restarting, setRestarting] = useState(false);
+  const check = () => void api.call("checkForUpdates").catch(() => null);
+  if (!u) return null;
+  const at = u.checkedAt ? new Date(u.checkedAt) : null;
+  const checked = at ? `Checked ${dayLabel(at) === "Today" ? "today" : dayLabel(at)} at ${fmtTime(at)}. ` : "";
+  let body: React.ReactNode;
+  let action: React.ReactNode = null;
+  if (!u.supported) body = <span className="meta">The browser version runs from the project: updates come with the desktop app.</span>;
+  else if (u.status === "ready") {
+    body = (
+      <>
+        <b style={{ color: "#14532D" }}>{`MeritAI ${u.available} is ready`}</b>
+        {u.notes.length > 0 && (
+          <ul className="upd-notes">
+            {u.notes.map((n, i) => (
+              <li key={i}>{n}</li>
+            ))}
+          </ul>
+        )}
+        <span className="meta">Your conversation is saved first. Not now? It installs the next time you close MeritAI.</span>
+      </>
+    );
+    action = (
+      <button type="button" className="btn p" disabled={restarting} onClick={() => (setRestarting(true), onInstall?.())}>
+        {restarting ? "Restarting…" : "Restart to update"}
+      </button>
+    );
+  } else if (u.status === "downloading")
+    body = (
+      <>
+        <span>
+          MeritAI {u.available} · {u.percent ?? 0}%
+        </span>
+        <div className="upd-bar" aria-hidden="true">
+          <div style={{ width: `${u.percent ?? 0}%` }} />
+        </div>
+        <span className="meta">Keep working meanwhile.</span>
+      </>
+    );
+  else if (u.status === "checking" || u.status === "idle")
+    body = (
+      <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span className="spin" />
+        Checking for updates…
+      </span>
+    );
+  else if (u.status === "error") {
+    body = <span className="meta">{`Couldn't check for updates (${u.error ?? "no connection"}). MeritAI tries again later.`}</span>;
+    action = (
+      <button type="button" className="btn" onClick={check}>
+        Try again
+      </button>
+    );
+  } else {
+    body = <span className="meta">{checked}New versions download by themselves; they install when you restart MeritAI, never while you're working.</span>;
+    action = (
+      <button type="button" className="btn" onClick={check}>
+        Check for updates
+      </button>
+    );
+  }
+  return (
+    <div className={`upd-box${u.status === "ready" ? " ready" : ""}`}>
+      <div className="grow" style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <b style={{ fontSize: 15 }}>MeritAI {u.version}</b>
+          {u.supported && u.status === "uptodate" && (
+            <span className="pill ok" style={{ height: 22 }}>
+              Up to date
+            </span>
+          )}
+        </span>
+        {body}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+export function SettingsPage({ api, onChanged, login, language, update = null, onInstallUpdate }: { api: Api; onChanged: () => void; login: { url: string | null; code: string | null; message: string } | null; /** The owner's language (design: SettingsLanguage). */ language: "en" | "zh"; /** The desktop app's updates (design: UpdateSettings). */ update?: UpdateState | null; onInstallUpdate?: () => void }) {
   const load = useCallback(() => api.call("settings"), [api]);
   const { data, error, reload } = useLoad<Settings>(load);
   const [s, setS] = useState<Settings | null>(null);
@@ -1143,7 +1224,8 @@ export function SettingsPage({ api, onChanged, login, language }: { api: Api; on
             </section>
             <VoiceCard api={api} onChanged={onChanged} />
             <section className="card set" style={{ gridColumn: "1 / -1" }}>
-              <h2 className="h2">About</h2>
+              <h2 className="h2">About and updates</h2>
+              <UpdateBox api={api} u={update} onInstall={onInstallUpdate} />
               <dl className="dl">
                 <div>
                   <dt>Engine</dt>
@@ -1158,9 +1240,9 @@ export function SettingsPage({ api, onChanged, login, language }: { api: Api; on
                   <dd>Everything stays in the workspace folder on this computer, except what is sent to the model to answer you. The register refuses TFNs, bank details, dates of birth and health information.</dd>
                 </div>
                 <div>
-                  <dt>Plan and updates</dt>
+                  <dt>Plan</dt>
                   <dd>
-                    Alpha tester (free). A new version comes as a new installer. <span className="pill soon">Coming soon</span> a subscription with automatic updates, online backup and connections to your email, job boards and payroll (see Connections).
+                    Alpha tester (free). <span className="pill soon">Coming soon</span> a subscription, online backup and connections to your email, job boards and payroll (see Connections).
                   </dd>
                 </div>
               </dl>

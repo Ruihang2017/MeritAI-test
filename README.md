@@ -139,7 +139,7 @@ Talk as you would on the phone. On Conversations, the right-hand panel becomes *
   - the microphone;
   - **Usage**: today, this month and all time, estimated in US$ (your OpenAI bill has the real amount);
   - a **monthly limit** that stops voice.
-- **Workspace folder**, **Speed**, and **About** (including the plan and updates).
+- **Workspace folder**, **Speed**, and **About and updates**: the version, and **Check for updates** (the desktop app updates itself: see below).
 
 ![Settings: language](docs/images/14-settings-language.png)
 ![Settings: voice usage and a monthly limit](docs/images/15-settings-voice-usage.png)
@@ -187,7 +187,9 @@ Conversations are deleted after 30 days.
 
 **Alpha rule:** it runs on your personal ChatGPT sign-in, so use sample or made-up data only.
 
-**Feedback:** use **Was this helpful?** under a reply, and **Send feedback** (bottom left) for a file you send to the MeritAI team.
+**Feedback:** use **Was this helpful?** under a reply, and **Send feedback** (bottom left): it saves a file and puts it in an email to the MeritAI team for you to send. The team turns the files into one Excel with `npx tsx scripts/feedback-report.ts <folder>`.
+
+**Updates** (the desktop app, from 0.2.2): new versions download in the background; **Update ready** at the top, then **Restart to update**, or it installs the next time you close MeritAI. It never restarts by itself.
 
 *Screenshots and videos: `node_modules/electron/dist/electron.exe scripts/docs-media.cjs <demo url>` (stills and the hire video) or `... <demo url> --clips` (one video per feature, for the product page), each against a freshly reseeded `npm run ui:fake -- --demo-dir shots --reseed --no-open --port 5190` (see the script's header).*
 

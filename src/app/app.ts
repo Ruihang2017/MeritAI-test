@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join } from "node:path";
 import { createAssistant, ROOT, type Assistant } from "../assistant";
 import type { ReplyFormat } from "../basePrompt";
@@ -36,11 +36,11 @@ import { extractText } from "../files/parse";
 import { checkWithOpenAI, keyFormatProblem, VoiceKeyStore, type VoiceKeyStatus } from "../voice/keyStore";
 import { FakeLiveSession } from "../voice/fakeLive";
 import { usdFor, VoiceUsage, type VoiceUsageSummary } from "../voice/usage";
-import { FeedbackLog, RATING_REASONS, writeFeedbackFile } from "./feedback";
+import { FeedbackLog, RATING_REASONS, feedbackEmail, writeFeedbackFile } from "./feedback";
 import { createJobWithJd, linkHire } from "../business/hiring";
 import { INDUSTRIES, industriesFor, JOB_TEMPLATES, type IndustryId, type JobTemplate } from "../business/jobTemplates";
 import { turnKey, type ChangeSink, type EntityChange } from "../changes";
-import { readEml } from "../files/email";
+import { EMAIL_RE, buildEml, readEml } from "../files/email";
 import { LANGUAGE_ZH } from "../assistant";
 
 /**
@@ -795,17 +795,22 @@ export class AssistantApp {
     return next;
   }
 
-  feedbackSummary(): { up: number; down: number } {
+  feedbackSummary(): { up: number; down: number; name: string } {
     const all = this.feedbackLog().all();
-    return { up: all.filter((r) => r.rating === "up").length, down: all.filter((r) => r.rating === "down").length };
+    return { up: all.filter((r) => r.rating === "up").length, down: all.filter((r) => r.rating === "down").length, name: this.a.mem.settings().feedbackName ?? "" };
   }
 
   /** "Send feedback": one file in the workspace's Feedback folder, with what the owner chose to include. */
-  async exportFeedback(opts: { note: string; ratings: boolean; conversation: boolean; technical: Record<string, unknown> | null }): Promise<string> {
+  async exportFeedback(opts: { note: string; ratings: boolean; conversation: boolean; technical: Record<string, unknown> | null; name?: string; version?: string }): Promise<string> {
+    // The tester's name is optional and remembered on this computer (settings, not memory).
+    const name = (opts.name ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+    if (opts.name !== undefined) this.a.mem.updateSettings({ feedbackName: name || undefined });
     const threadId = this.session?.threadId ?? null;
     const title = threadId ? ((await this.history()).find((s) => s.threadId === threadId)?.title ?? null) : null;
     const content = {
       kind: "MeritAI feedback",
+      ...(name ? { from: name } : {}),
+      ...(opts.version ? { version: opts.version } : {}),
       savedAt: new Date().toISOString(),
       note: opts.note,
       ...(opts.ratings ? { ratings: this.feedbackLog().all() } : {}),
@@ -815,6 +820,23 @@ export class AssistantApp {
       ...(opts.technical ? { technical: opts.technical } : {}),
     };
     return writeFeedbackFile(this.folders().root, new Date(), content);
+  }
+
+  /**
+   * "Email it to the MeritAI team": an email draft (.eml beside the file) to the address the app
+   * comes with, the feedback file attached, opened in the tester's email app. Nothing is sent here.
+   */
+  async emailFeedback(path: string, o: { to: string; version: string }): Promise<{ ok: true; path: string } | { ok: false; error: string }> {
+    const p = openablePath(this.folders(), path);
+    if (!p.ok) return p;
+    const dir = join(this.folders().root, "Feedback");
+    if (!existsSync(dir) || dirname(p.path) !== realpathSync(dir) || extname(p.path).toLowerCase() !== ".json") return { ok: false, error: "not a feedback file" };
+    if (!EMAIL_RE.test(o.to)) return { ok: false, error: "this version of MeritAI has no address for the MeritAI team: send the file yourself (Show in folder)" };
+    const eml = p.path.replace(/\.json$/i, ".eml");
+    const name = this.a.mem.settings().feedbackName ?? null;
+    writeFileSync(eml, buildEml(feedbackEmail({ to: o.to, file: p.path, data: readFileSync(p.path), version: o.version, when: new Date(), name })));
+    const opened = await this.openFile(eml);
+    return opened.ok ? { ok: true, path: eml } : opened;
   }
 
   // --- the sample business (first run: "Try it with a sample business")

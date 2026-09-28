@@ -101,7 +101,7 @@ export function ConnectionsPage({ api }: { api: Api }) {
           </span>
           <div className="grow" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             <b style={{ fontSize: 15 }}>Plan and updates</b>
-            <span className="sub">Alpha tester (free). MeritAI will be a subscription that updates itself and keeps your workspace backed up. For now, a new version comes as a new installer.</span>
+            <span className="sub">Alpha tester (free). MeritAI already updates itself; a subscription that keeps your workspace backed up is coming.</span>
           </div>
           <span className="pill soon">Coming soon</span>
         </section>

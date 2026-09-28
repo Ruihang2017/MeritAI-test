@@ -6,15 +6,15 @@ import { userInfo } from "node:os";
 import { AssistantApp, TIERS } from "../app/app";
 import { ROOT } from "../assistant";
 import { codexHomeFor, CODEX_HOME_DIRS, syncCodexHome } from "../engine/codexHome";
-import { UiSession } from "./session";
+import { UiSession, type UpdatesHook } from "./session";
 import { startUiServer } from "./server";
 
-export async function startDesktopServer(): Promise<{ url: string; close(): Promise<void> }> {
+export async function startDesktopServer(o: { updates?: UpdatesHook } = {}): Promise<{ url: string; close(): Promise<void> }> {
   // Our config.toml and skills go into the user's engine folder on every start (updates apply; the sign-in stays).
   const home = codexHomeFor(ROOT);
   if (home !== resolve(ROOT, CODEX_HOME_DIRS.product)) syncCodexHome(resolve(ROOT, CODEX_HOME_DIRS.product), home);
   const userId = userInfo().username.toLowerCase().replace(/[^a-z0-9._-]/g, "") || "owner";
-  const session = new UiSession({ engine: "codex", sampleData: false });
+  const session = new UiSession({ engine: "codex", sampleData: false, updates: o.updates });
   const app = new AssistantApp({ userId, ui: { confirm: session.confirm, progress: session.progress }, format: "markdown", serviceTier: TIERS.fast, engine: "codex" });
   session.attach(app);
   const status = await app.start();

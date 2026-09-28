@@ -1,5 +1,5 @@
 import type { Reminder } from "../../../src/business/reminders";
-import type { ShellState } from "../../../src/server/protocol";
+import type { ShellState, UpdateState } from "../../../src/server/protocol";
 import type { Connection } from "../api";
 import { useEffect, useState } from "react";
 import { now } from "../clock";
@@ -19,7 +19,17 @@ export type Page = "conversations" | "all" | "staff" | "hiring" | "profile" | "f
 /** "voice": the side panel is closed while voice is on (design: DockVoiceClosed). */
 export type AskButton = "none" | "closed" | "open" | "working" | "waiting" | "voice";
 
-export function AppBar({ state, connection, onAttention, showAttention, ask, voiceSince = null, onAskToggle, onLeaveSample }: { state: ShellState | null; connection: Connection; onAttention: () => void; showAttention: boolean; ask: AskButton; voiceSince?: number | null; onAskToggle: () => void; onLeaveSample: () => void }) {
+export function AppBar({ state, connection, onAttention, showAttention, ask, voiceSince = null, update = null, onInstallUpdate, onAskToggle, onLeaveSample }: { state: ShellState | null; connection: Connection; onAttention: () => void; showAttention: boolean; ask: AskButton; voiceSince?: number | null; update?: UpdateState | null; onInstallUpdate?: () => void; onAskToggle: () => void; onLeaveSample: () => void }) {
+  const [updOpen, setUpdOpen] = useState(false);
+  const [restarting, setRestarting] = useState(false);
+  const upd = update?.supported && (update.status === "downloading" || update.status === "ready") ? update : null;
+  // The popup closes on a click anywhere else.
+  useEffect(() => {
+    if (!updOpen) return;
+    const off = (e: MouseEvent) => !(e.target as HTMLElement).closest?.(".upd-wrap") && setUpdOpen(false);
+    document.addEventListener("mousedown", off);
+    return () => document.removeEventListener("mousedown", off);
+  }, [updOpen]);
   const [sampleOpen, setSampleOpen] = useState(false);
   // The call's length on the button while voice is on with the side panel closed.
   const [, setTick] = useState(0);
@@ -96,6 +106,15 @@ export function AppBar({ state, connection, onAttention, showAttention, ask, voi
           Workspace <b>{state.workspace}</b>
         </span>
       )}
+      {upd && (
+        <span className="upd-wrap">
+          <button type="button" className={`upd-btn ${upd.status}`} aria-expanded={updOpen} onClick={() => setUpdOpen(!updOpen)}>
+            <Icon name="download" size={15} stroke={2} />
+            {upd.status === "ready" ? "Update ready" : `Downloading update · ${upd.percent ?? 0}%`}
+          </button>
+          {updOpen && <UpdatePopup u={upd} restarting={restarting} onInstall={() => (setRestarting(true), onInstallUpdate?.())} onClose={() => setUpdOpen(false)} />}
+        </span>
+      )}
       {ask !== "none" && (
         <>
           <div className="vr" />
@@ -107,6 +126,54 @@ export function AppBar({ state, connection, onAttention, showAttention, ask, voi
         </>
       )}
     </header>
+  );
+}
+
+/** Under "Update ready" (design: UpdateReady): what's new, restart now or later. */
+function UpdatePopup({ u, restarting, onInstall, onClose }: { u: UpdateState; restarting: boolean; onInstall: () => void; onClose: () => void }) {
+  return (
+    <div className="upd-pop" role="dialog" aria-label={u.status === "ready" ? "Update ready" : "Downloading update"}>
+      {u.status === "ready" ? (
+        <>
+          <div className="cap" style={{ color: "#1E6B3E" }}>
+            Update ready
+          </div>
+          <b style={{ fontSize: 16 }}>{`MeritAI ${u.available} is ready to install`}</b>
+          {u.notes.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span className="cap">What's new</span>
+              <ul className="upd-notes">
+                {u.notes.map((n, i) => (
+                  <li key={i}>{n}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <span className="meta" style={{ lineHeight: 1.45 }}>
+            Restarting takes a few seconds. Your conversation is saved first. Not now? It installs the next time you close MeritAI.
+          </span>
+          <div className="row-wrap">
+            <button type="button" className="btn p sm" disabled={restarting} onClick={onInstall}>
+              {restarting ? "Restarting…" : "Restart to update"}
+            </button>
+            <button type="button" className="btn g sm" onClick={onClose}>
+              Later
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="cap">Downloading update</div>
+          <b style={{ fontSize: 15 }}>
+            MeritAI {u.available} · {u.percent ?? 0}%
+          </b>
+          <div className="upd-bar" aria-hidden="true">
+            <div style={{ width: `${u.percent ?? 0}%` }} />
+          </div>
+          <span className="meta">Keep working meanwhile. It installs when you restart MeritAI, never while you're working.</span>
+        </>
+      )}
+    </div>
   );
 }
 

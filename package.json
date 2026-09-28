@@ -3,6 +3,9 @@
   "version": "0.2.1",
   "private": true,
   "description": "Office chatbot CLI on top of a locally hosted codex app-server",
+  "meritai": {
+    "feedbackTo": "ruihang2017@gmail.com"
+  },
   "type": "module",
   "scripts": {
     "start": "tsx src/cli.ts",
@@ -37,7 +40,7 @@
     "ui:dev": "tsx src/server/main.ts --dev --fake",
     "desktop:build": "vite build web && node scripts/build-desktop.mjs",
     "desktop": "npm run desktop:build && electron .",
-    "desktop:dist": "npm run desktop:build && electron-builder --win nsis"
+    "desktop:dist": "npm run desktop:build && electron-builder --win nsis --publish never"
   },
   "engines": {
     "node": ">=22"
@@ -59,6 +62,7 @@
   },
   "dependencies": {
     "docx": "^9.7.2",
+    "electron-updater": "^6.8.9",
     "exceljs": "^4.4.0",
     "mammoth": "^1.12.3",
     "marked": "^18.0.14",
@@ -100,7 +104,15 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "shortcutName": "MeritAI"
-    }
+      "shortcutName": "MeritAI",
+      "artifactName": "MeritAI-Setup-${version}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Ruihang2017",
+        "repo": "MeritAI-test"
+      }
+    ]
   }
 }

@@ -78,29 +78,38 @@ export function ReplyFeedback({ turn, api }: { turn: Turn; api: Api }) {
   );
 }
 
-/** "Send feedback" from the account menu: one file to send to the MeritAI team. */
+/** "Send feedback" from the account menu: one file, then an email to the MeritAI team to send (design: FeedbackSend, FeedbackEmail). */
 export function FeedbackDialog({ api, state, onClose }: { api: Api; state: ShellState | null; onClose: () => void }) {
   const [note, setNote] = useState("");
   const [ratings, setRatings] = useState(true);
   const [conversation, setConversation] = useState(true);
   const [technical, setTechnical] = useState(true);
-  const [summary, setSummary] = useState<{ up: number; down: number } | null>(null);
+  const [summary, setSummary] = useState<{ up: number; down: number; name: string; to: string } | null>(null);
+  const [name, setName] = useState<string | null>(null);
+  const [mailed, setMailed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [path, setPath] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
-    api.call("feedbackSummary").then(setSummary, () => null);
+    api.call("feedbackSummary").then((s) => (setSummary(s), setName((n) => n ?? s.name)), () => null);
   }, [api]);
   const save = async () => {
     setSaving(true);
     setErr(null);
     try {
-      setPath((await api.call("exportFeedback", { note, ratings, conversation, technical })).path);
+      setPath((await api.call("exportFeedback", { note, ratings, conversation, technical, ...(name !== null ? { name } : {}) })).path);
     } catch (e) {
       setErr((e as Error).message);
     } finally {
       setSaving(false);
     }
+  };
+  const email = async () => {
+    if (!path) return;
+    setErr(null);
+    const r = await api.call("emailFeedback", { path }).catch((e: Error) => ({ ok: false as const, error: e.message }));
+    if (r.ok) setMailed(true);
+    else setErr(`The email didn't open: ${r.error}. Show in folder, then send the file yourself.`);
   };
   const box = (label: string, hint: string, on: boolean, set: (v: boolean) => void, disabled = false) => (
     <label className="fb-box">
@@ -119,8 +128,14 @@ export function FeedbackDialog({ api, state, onClose }: { api: Api; state: Shell
           Send feedback
         </h2>
         <p className="sub" style={{ margin: 0 }}>
-          MeritAI runs only on this computer, so feedback goes in a file you send to the MeritAI team (email or Teams).
+          MeritAI runs only on this computer. Your feedback is saved as a file, then put in an email to the MeritAI team for you to send.
         </p>
+        <label className="field">
+          <span>
+            Your name <span className="hint">Optional, so the team knows who it's from. Remembered on this computer.</span>
+          </span>
+          <input className="input" value={name ?? ""} onChange={(e) => setName(e.target.value)} maxLength={80} disabled={!!path} />
+        </label>
         <label className="field">
           What happened, or what would make it better?
           <textarea className="input" rows={4} style={{ height: "auto", padding: "10px 12px", resize: "vertical" }} placeholder="For example: I asked about a resignation and it didn't mention the final pay date." value={note} onChange={(e) => setNote(e.target.value)} autoFocus />
@@ -133,32 +148,46 @@ export function FeedbackDialog({ api, state, onClose }: { api: Api; state: Shell
         {state?.sampleData ? null : <div className="banner warn" style={{ fontSize: 13, padding: "10px 12px" }}>Sample data only: don't include real people's details while testing.</div>}
         {err && <div className="banner bad">{err}</div>}
         {path ? (
-          <div className="receipt" style={{ fontSize: 13.5 }}>
-            <Icon name="check" size={16} stroke={2.2} />
-            <span className="grow" style={{ overflowWrap: "anywhere" }}>
-              <b>Saved</b> · Feedback/{path.split(/[\\/]/).pop()}
+          <>
+            <div className="receipt" style={{ fontSize: 13.5 }}>
+              <Icon name="check" size={16} stroke={2.2} />
+              <span className="grow" style={{ overflowWrap: "anywhere" }}>
+                <b>Saved</b> · Feedback/{path.split(/[\\/]/).pop()}
+              </span>
+            </div>
+            <div className="row-wrap" style={{ alignItems: "center" }}>
+              {summary?.to ? (
+                <button type="button" className="btn p" onClick={() => void email()}>
+                  <Icon name="mail" size={16} />
+                  {mailed ? "Open the email again" : "Email it to the MeritAI team"}
+                </button>
+              ) : null}
+              <button type="button" className="btn" onClick={() => void api.call("revealFile", { path })}>
+                Show in folder
+              </button>
+              <span className="grow" />
+              <button type="button" className={summary?.to ? "btn g" : "btn p"} onClick={onClose}>
+                Done
+              </button>
+            </div>
+            <span className="meta" style={{ lineHeight: 1.45 }}>
+              {mailed
+                ? "The draft is open in your email app: check it and press Send."
+                : summary?.to
+                  ? `Opens a draft in your email app to ${summary.to}, with the file attached: check it and press Send. Using Teams? Show in folder, then send the file there.`
+                  : "Send the file to the MeritAI team by email or Teams (Show in folder)."}
             </span>
-            <button type="button" className="btn g sm" style={{ color: "#14532D" }} onClick={() => void api.call("revealFile", { path })}>
-              Show in folder
+          </>
+        ) : (
+          <div className="row-wrap">
+            <button type="button" className="btn p" disabled={saving || (!note.trim() && !ratings && !conversation)} onClick={() => void save()}>
+              {saving ? "Saving…" : "Save the feedback file"}
+            </button>
+            <button type="button" className="btn" onClick={onClose}>
+              Cancel
             </button>
           </div>
-        ) : null}
-        <div className="row-wrap">
-          {path ? (
-            <button type="button" className="btn p" onClick={onClose}>
-              Done
-            </button>
-          ) : (
-            <>
-              <button type="button" className="btn p" disabled={saving || (!note.trim() && !ratings && !conversation)} onClick={() => void save()}>
-                {saving ? "Saving…" : "Save the feedback file"}
-              </button>
-              <button type="button" className="btn" onClick={onClose}>
-                Cancel
-              </button>
-            </>
-          )}
-        </div>
+        )}
       </div>
     </>
   );

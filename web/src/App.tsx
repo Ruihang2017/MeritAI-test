@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Reminder } from "../../src/business/reminders";
 import type { SessionFrom, SessionRecord } from "../../src/memory/store";
-import type { ShellState } from "../../src/server/protocol";
+import type { ShellState, UpdateState } from "../../src/server/protocol";
 import type { ConfirmRequest } from "../../src/engine/types";
 import { fmtDatesIn } from "./format";
 import { Api, type Connection } from "./api";
@@ -268,6 +268,12 @@ function Shell({ api }: { api: Api }) {
 
   refreshShell.current = refresh;
   useEffect(() => api.onConnection((c) => (setConnection(c), c === "open" && void refresh())), [api, refresh]);
+  // The desktop app's updates (design: UpdateReady, UpdateSettings); none in the browser version.
+  const [update, setUpdate] = useState<UpdateState | null>(null);
+  useEffect(() => {
+    if (connection === "open") api.call("updateState").then(setUpdate, () => null);
+  }, [api, connection]);
+  const installUpdate = () => void api.call("installUpdate").catch((e: Error) => setError(`The update didn't start: ${e.message}`));
   useEffect(() => {
     if (api.connection === "open") void refresh();
     const t = setInterval(() => void refresh(), 60_000);
@@ -283,6 +289,9 @@ function Shell({ api }: { api: Api }) {
     () =>
       api.onEvent((m) => {
         switch (m.event) {
+          case "update":
+            setUpdate(m.state);
+            break;
           case "turn":
             setTurns((ts) => ts.map((t) => (t.id === m.turnId ? applyEvent(t, m.ev) : t)));
             break;
@@ -600,6 +609,8 @@ function Shell({ api }: { api: Api }) {
         showAttention={!showPanel}
         onAttention={() => setAttentionOpen(true)}
         ask={askButton}
+        update={update}
+        onInstallUpdate={installUpdate}
         voiceSince={voiceUi?.started ? voiceUi.startedAt : null}
         onAskToggle={() => setDockOpen(!dockOpen)}
         onLeaveSample={() =>
@@ -673,7 +684,7 @@ function Shell({ api }: { api: Api }) {
         {page === "profile" && <ProfilePage api={api} onAsk={() => ask({ text: "Set up my business profile", mode: "setup", from: FROM_PROFILE })} onChanged={() => void refresh()} refreshKey={refreshKey} arrival={arrivalNote("profile")} />}
         {page === "connections" && <ConnectionsPage api={api} />}
         {page === "memory" && <MemoryPage api={api} onProfile={() => setPage("profile")} />}
-        {page === "settings" && <SettingsPage api={api} login={login} language={state?.language ?? "en"} onChanged={() => void refresh()} />}
+        {page === "settings" && <SettingsPage api={api} login={login} language={state?.language ?? "en"} onChanged={() => void refresh()} update={update} onInstallUpdate={installUpdate} />}
         {page === "hiring" && <HiringPage api={api} progress={lastProgress} onAsk={ask} asking={{ running: turns.find((t) => t.status === "running")?.user.text ?? null, queued: queue.map((q) => q.text) }} openJob={hiringJob} refreshKey={refreshKey} arrival={arrivalNote("hiring")} onHire={(c, job) => (setStaffOpen(null), setStaffAdd({ name: c?.name ?? "", role: job, ...(c ? { hireFrom: { job, file: c.file } } : {}) }), setPage("staff"))} onOpenEmployee={(id) => openEmployee(id)} />}
         {/* Kept while closed on a page (a half-typed message survives closing it); hidden, not removed. */}
         {dockable && (

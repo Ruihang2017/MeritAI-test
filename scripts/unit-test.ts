@@ -3,6 +3,7 @@
 // wording, small business status and adviser referral.
 import { join } from "node:path";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { readEml } from "../src/files/email";
 import { tmpdir } from "node:os";
 import { ensureFolders, validateFilesRoot } from "../src/files/folders";
 import { allCodexHomes, codexHomeFor } from "../src/engine/codexHome";
@@ -26,7 +27,7 @@ import { correctUrl, transcriptOf } from "../src/engine/appServer";
 import { WebSocket } from "ws";
 import { UiSession } from "../src/server/session";
 import { startUiServer, staticFile } from "../src/server/server";
-import type { Method, Methods, ServerEvent, ShellState } from "../src/server/protocol";
+import type { Method, Methods, ServerEvent, ShellState, UpdateState } from "../src/server/protocol";
 import { parentalChecklist, serviceEligible, PARENTAL_URLS } from "../src/business/parentalLeave";
 import { confirmText, type Confirm, type ConfirmContext, type ConfirmRequest } from "../src/engine/types";
 import { VoiceKeyStore } from "../src/voice/keyStore";
@@ -803,7 +804,8 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   process.env.FX_FAKE_DELAY_MS = "2";
   const f = ensureFolders(join(TMP, "fb-files"));
   const session = new UiSession({ engine: "fake" });
-  const app = new AssistantApp({ userId: "unit-fb", memoryRoot: join(TMP, "fb-mem"), filesRoot: f.root, format: "markdown", engine: "fake", ui: { confirm: session.confirm } });
+  const opened: string[] = [];
+  const app = new AssistantApp({ userId: "unit-fb", memoryRoot: join(TMP, "fb-mem"), filesRoot: f.root, format: "markdown", engine: "fake", ui: { confirm: session.confirm }, launcher: async (c) => void opened.push(c.args.join(" ")) });
   session.attach(app);
   await app.start();
   await app.openSession();
@@ -815,16 +817,27 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   await session.handle({ id: 3, method: "rateReply", params: { rating: "up", reasons: [], note: "", question: "q", answer: "a" } });
   const summary = (await session.handle({ id: 4, method: "feedbackSummary", params: undefined })) as { up: number; down: number };
   const badRating = await session.handle({ id: 5, method: "rateReply", params: { rating: "meh", reasons: [], note: "", question: "", answer: "" } } as never).then(() => false, () => true);
-  const out = (await session.handle({ id: 6, method: "exportFeedback", params: { note: "Liked the checklist", ratings: true, conversation: true, technical: true } })) as { path: string };
+  const out = (await session.handle({ id: 6, method: "exportFeedback", params: { note: "Liked the checklist", ratings: true, conversation: true, technical: true, name: "  Jo   Kim " } })) as { path: string };
   const file = JSON.parse(readFileSync(out.path, "utf8"));
   const lean = JSON.parse(readFileSync(((await session.handle({ id: 7, method: "exportFeedback", params: { note: "just a note", ratings: false, conversation: false, technical: false } })) as { path: string }).path, "utf8"));
+  // "Email it to the MeritAI team" (owner, 2026-09-28): a draft to the address the app comes with, the file attached.
+  const mail = (await session.handle({ id: 8, method: "emailFeedback", params: { path: out.path } })) as { ok: boolean; path?: string };
+  const eml = mail.ok && mail.path ? readEml(readFileSync(mail.path, "utf8")) : null;
+  const again = (await session.handle({ id: 9, method: "feedbackSummary", params: undefined })) as { name: string; to: string };
+  writeFileSync(join(f.outbox, "letter.json"), "{}");
+  const notFeedback = (await session.handle({ id: 10, method: "emailFeedback", params: { path: join(f.outbox, "letter.json") } })) as { ok: boolean };
+  const outside = await session.handle({ id: 11, method: "emailFeedback", params: { path: join(TMP, "elsewhere.json") } }).then((r) => (r as { ok: boolean }).ok, () => false);
   await app.close();
   record("testers' feedback", [
+    ["the name: tidied, in the file and remembered", file.from === "Jo Kim" && again.name === "Jo Kim" && !lean.from],
+    ["every file says which version", typeof file.version === "string" && file.version.length > 0 && lean.version === file.version],
+    ["email: a draft to the team, the file attached, opened", !!eml && eml.to.join() === again.to && again.to === "ruihang2017@gmail.com" && eml.subject.startsWith(`MeritAI feedback · ${file.version} · `) && eml.attachments.length === 1 && /MeritAI feedback .*.json$/.test(eml.attachments[0]) && opened.some((o) => o.includes(".eml"))],
+    ["email: only feedback files", !notFeedback.ok && !outside],
     ["ratings kept; unknown reasons dropped; bad rating refused", summary.up === 1 && summary.down === 1 && badRating && file.ratings?.[0]?.reasons.join() === "Missed something"],
     ["feedback file in the workspace's Feedback folder", out.path.startsWith(join(f.root, "Feedback")) && file.note === "Liked the checklist"],
     ["with the conversation and technical details (no key)", file.conversation?.messages?.length >= 2 && file.technical?.app && !JSON.stringify(file).includes("sk-")],
     ["only what was chosen", lean.note === "just a note" && !lean.ratings && !lean.conversation && !lean.technical],
-  ], JSON.stringify({ summary, keys: Object.keys(file) }).slice(0, 300));
+  ], JSON.stringify({ summary, keys: Object.keys(file), mail, eml }).slice(0, 600));
 }
 
 // ------------------------------------------------------------------ the sample business (first run)
@@ -1192,6 +1205,58 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["the hire's changes come back as cards", !!hire?.changes?.some((c) => c.ref.kind === "employee") && !!hire?.changes?.some((c) => c.ref.kind === "candidate")],
     ["the email draft comes back as a file (its card)", !!mail?.files?.some((f) => f.endsWith(".eml"))],
   ], JSON.stringify({ keys: Object.keys(extras), hire: hire?.changes?.length, mail: mail?.files }).slice(0, 500));
+}
+
+// ------------------------------------------------------------------ updates (the desktop app): the session's side, and release notes
+{
+  const { notesOf } = await import("../src/desktop/notes");
+  let changed: ((s: UpdateState) => void) | null = null;
+  let checks = 0;
+  let installs = 0;
+  const ready: UpdateState = { supported: true, version: "0.2.2", status: "ready", available: "0.2.3", percent: 100, notes: ["Voice in the side panel"], checkedAt: null, error: null };
+  const withHook = new UiSession({ engine: "fake", updates: { state: () => ready, onChange: (f) => (changed = f), check: () => void checks++, install: async () => void installs++ } });
+  const seen: ServerEvent[] = [];
+  withHook.subscribe((e) => seen.push(e));
+  changed!({ ...ready, status: "downloading", percent: 40 });
+  const st = (await withHook.handle({ id: 1, method: "checkForUpdates", params: undefined })) as UpdateState;
+  await withHook.handle({ id: 2, method: "installUpdate", params: undefined });
+  const browser = (await new UiSession({ engine: "fake" }).handle({ id: 3, method: "updateState", params: undefined })) as UpdateState;
+  record("updates", [
+    ["an update's state reaches the page as an event", seen.some((e) => e.event === "update" && e.state.status === "downloading" && e.state.percent === 40)],
+    ["check and install go to the desktop app", checks === 1 && installs === 1 && st.status === "ready"],
+    ["the browser version has none", browser.supported === false && browser.status === "idle" && /^\d+\.\d+\.\d+/.test(browser.version)],
+    ["release notes: HTML, markdown or text, a few plain lines", notesOf("<h2>What's new</h2><ul><li>Voice in the side panel</li><li>Feedback &amp; email</li></ul>").join("|") === "What's new|Voice in the side panel|Feedback & email" && notesOf("- one\n* two\n\n3").join("|") === "one|two|3" && notesOf(null).length === 0 && notesOf(Array.from({ length: 9 }, (_, i) => `line ${i}`).join("\n")).length === 6],
+  ], JSON.stringify({ seen: seen.map((e) => e.event), st, browser }).slice(0, 400));
+}
+
+// ------------------------------------------------------------------ the feedback report (the team's side): a file sent twice, ratings repeated in later files
+{
+  const { readFeedbackFolder, summarise, workbook } = await import("./feedback-report");
+  const dir = join(TMP, "fb-report");
+  mkdirSync(join(dir, "from-email"), { recursive: true });
+  const r = (at: string, rating: "up" | "down", question: string, reasons: string[] = []) => ({ at, rating, reasons, note: "", conversation: null, question, answer: "a reply" });
+  const err = { at: "2026-09-28T01:00:00Z", message: "Demo error:  the engine\nstopped" };
+  const a = { kind: "MeritAI feedback", from: "Jo Kim", version: "0.2.2", savedAt: "2026-09-28T02:00:00Z", note: "Loved the checklist", ratings: [r("2026-09-28T01:10:00Z", "down", "When is final pay due?", ["Missed something"]), r("2026-09-28T01:20:00Z", "up", "Hire Hannah")], technical: { app: "0.2.2", recentErrors: [err] } };
+  const b = { ...a, savedAt: "2026-09-29T02:00:00Z", note: "", wantedConnections: ["Xero, MYOB and Employment Hero"], ratings: [...a.ratings, r("2026-09-29T01:00:00Z", "down", "Leo's probation", ["Wrong or out of date"])], technical: { app: "0.2.2", recentErrors: [err] } };
+  const c = { kind: "MeritAI feedback", savedAt: "2026-09-29T03:00:00Z", note: "No name here", technical: { app: "0.2.1" } };
+  writeFileSync(join(dir, "a.json"), JSON.stringify(a));
+  writeFileSync(join(dir, "from-email", "a copy.json"), JSON.stringify(a));
+  writeFileSync(join(dir, "b.json"), JSON.stringify(b));
+  writeFileSync(join(dir, "c.json"), JSON.stringify(c));
+  writeFileSync(join(dir, "other.json"), JSON.stringify({ kind: "something else" }));
+  const read = readFeedbackFolder(dir);
+  const rep = summarise(read.files);
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load((await workbook(rep, read.files.length)) as never);
+  record("the feedback report", [
+    ["a file sent twice counts once; other .json skipped", read.files.length === 3 && read.duplicates === 1 && read.skipped.length === 1],
+    ["ratings once per tester, time and question", rep.up === 1 && rep.down === 2 && rep.notDown.map((x) => x.question).join("|") === "When is final pay due?|Leo's probation"],
+    ["no name, version from the technical details", rep.testers.includes("(no name)") && rep.versions.join() === "0.2.2,0.2.1"],
+    ["the same error once per tester and time", rep.errors.length === 1 && rep.errors[0].count === 1 && rep.errors[0].message === "Demo error: the engine stopped"],
+    ["notes and wanted connections", rep.notes.length === 3 && rep.notes.some((n) => n.wanted.includes("Xero"))],
+    ["an Excel with the four sheets", wb.worksheets.map((w) => w.name).join() === "Overview,Not helpful,Notes,Errors" && wb.getWorksheet("Not helpful")!.rowCount === 3],
+  ], JSON.stringify({ n: read.files.length, dup: read.duplicates, up: rep.up, down: rep.down, errors: rep.errors }).slice(0, 500));
 }
 
 // ------------------------------------------------------------------ voice in the side panel: a question says what it is about (the page highlights it)

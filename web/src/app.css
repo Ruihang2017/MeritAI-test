@@ -2993,3 +2993,75 @@ button.sample {
 .tbl tr.talk td {
   background: #eef3fc;
 }
+
+/* Updates (owner, 2026-09-28; design: UpdateReady, UpdateSettings). */
+.upd-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.upd-btn {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid #b4c0d2;
+  background: #fff;
+  color: #4a5363;
+  font: 700 13px "Public Sans", sans-serif;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.upd-btn.ready {
+  background: #e3f3e8;
+  border-color: #9fd3b0;
+  color: #14532d;
+}
+.upd-pop {
+  position: absolute;
+  top: 42px;
+  right: 0;
+  z-index: 30;
+  width: 360px;
+  background: #fff;
+  border: 1px solid #d9dee7;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(27, 31, 39, 0.18);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: #1b1f27;
+  white-space: normal;
+}
+.upd-notes {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.upd-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: #ebeef3;
+  overflow: hidden;
+}
+.upd-bar > div {
+  height: 6px;
+  background: #1a57cc;
+}
+.upd-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #f8f9fb;
+  border: 1px solid #e7eaf0;
+  margin-bottom: 8px;
+}
+.upd-box.ready {
+  background: #e3f3e8;
+  border-color: #9fd3b0;
+}

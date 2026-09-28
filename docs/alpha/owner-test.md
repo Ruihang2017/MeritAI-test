@@ -172,7 +172,7 @@
 | O1 | 左侧导航 **Connections**（标着 Soon） | 邮件和日历、招聘网站、发薪/任务/备份三组，每张卡片都是"Coming soon"；最下面是"套餐与更新" |
 | O2 | 点几个 **I want this**，再 Send feedback | 反馈文件里有 `wantedConnections` |
 | O3 | Hiring › 某职位 › **Advertise** | "Write the job ad"可用；Post to SEEK / LinkedIn Jobs / Indeed 是灰的"Coming soon" |
-| O4 | Settings › About | "Plan and updates"一行，说明将来是订阅制、自动更新 |
+| O4 | Settings › About and updates | 最上面是版本和更新状态；"Plan"一行说明订阅制、在线备份等即将推出 |
 
 ## P 中文
 
@@ -182,6 +182,26 @@
 | P2 | 用中文问："Priya 辞职了，最后一天是 10 月 9 日，帮我起草确认信" | AI 用中文回答；保存的信是**英文**；Priya 标为离职 |
 | P3 | 切回 English | 页面重新加载，恢复英文；AI 从下一条消息起用英文 |
 | P4 | 语音用中文说话 | GPT-Live 本来就会跟着你说的语言回答（这一项没改过） |
+
+## Q 反馈回收
+
+| # | 做什么 | 预期 |
+|---|---|---|
+| Q1 | 你的名字（左下）› Send feedback | 多了可选的 "Your name"；说明是"保存成文件，再放进一封发给 MeritAI 团队的邮件" |
+| Q2 | 填名字和一句话，Save the feedback file | 回执下面是 **Email it to the MeritAI team**、Show in folder、Done，并写明收件地址 ruihang2017@gmail.com |
+| Q3 | 点 Email it to the MeritAI team | Outlook（或默认邮件程序）打开一封新邮件：收件人 ruihang2017@gmail.com，标题 "MeritAI feedback · 版本 · 日期"，附件是那个 json 文件。**不会自动发送**，你看一眼关掉即可 |
+| Q4 | 再开一次 Send feedback | 名字已经记住 |
+| Q5 | 把几个反馈文件放进一个文件夹，运行 `npx tsx scripts/feedback-report.ts <文件夹>` | 终端里一段摘要；文件夹里出现 "MeritAI feedback report <日期>.xlsx"：Overview、Not helpful、Notes、Errors 四张表 |
+
+## R 自动更新（桌面版）
+
+| # | 做什么 | 预期 |
+|---|---|---|
+| R1 | `npm run ui:fake -- --fake-update ready` | 顶栏出现绿色 **Update ready**；点开：版本、What's new、Restart to update / Later；点别处关闭 |
+| R2 | 同上 › Settings › About and updates | 绿色一栏 "MeritAI 0.2.99 is ready" 和 Restart to update（演示里点了不会真的重启，终端打出一行 fake update） |
+| R3 | `--fake-update downloading` | 顶栏 "Downloading update · 45%"，Settings 里是进度条 |
+| R4 | 浏览器版（不加这个参数） | Settings 里写着"浏览器版从项目运行，更新只随桌面版提供" |
+| R5 | 真正的更新：发 0.2.2 之后的下一版时 | 按 `docs/alpha/distribution.md` 先发草稿、本机试装，再正式发布；装着 0.2.2 的电脑几分钟内出现 Update ready |
 
 ## I 清理
 

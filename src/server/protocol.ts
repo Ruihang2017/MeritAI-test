@@ -86,8 +86,15 @@ export interface Methods {
   /** Voice in the browser: the page sends its microphone (PCM16 mono 24 kHz, base64, about 100 ms a message) and plays the `voiceAudio` events. Only the page that started it. */
   /** Testers' feedback: "Was this helpful?" on a reply (kept on this computer), and "Send feedback" (a file in the workspace's Feedback folder). */
   rateReply: { params: { rating: "up" | "down"; reasons: string[]; note: string; question: string; answer: string }; result: null };
-  feedbackSummary: { params: void; result: { up: number; down: number } };
-  exportFeedback: { params: { note: string; ratings: boolean; conversation: boolean; technical: boolean }; result: { path: string } };
+  /** `name`: the tester's, remembered on this computer; `to`: where "Email it to the MeritAI team" goes (built into the app). */
+  feedbackSummary: { params: void; result: { up: number; down: number; name: string; to: string } };
+  exportFeedback: { params: { note: string; ratings: boolean; conversation: boolean; technical: boolean; name?: string }; result: { path: string } };
+  /** Updates (the desktop app only; design: UpdateReady, UpdateSettings): the state, check now, restart to install a downloaded one. */
+  updateState: { params: void; result: UpdateState };
+  checkForUpdates: { params: void; result: UpdateState };
+  installUpdate: { params: void; result: null };
+  /** An email draft to the MeritAI team with the feedback file attached, opened in the tester's email app (never sent here). */
+  emailFeedback: { params: { path: string }; result: { ok: true; path: string } | { ok: false; error: string } };
   /** First run: the sample business (synthetic Wattle Lane Cleaning) in its own folder, seeded once, as the workspace. */
   useSampleBusiness: { params: void; result: Settings };
   /** The owner's language (the app and the adviser's replies; documents stay in English). */
@@ -206,8 +213,24 @@ export type StaffRow = StaffOverviewRow;
 
 export type ClientMessage ={ [M in Method]: { id: number; method: M; params: Methods[M]["params"] } }[Method];
 
+/** The desktop app's updates (src/desktop/updates.ts); the browser version has none (`supported: false`). */
+export interface UpdateState {
+  supported: boolean;
+  /** This app's version. */
+  version: string;
+  status: "idle" | "checking" | "uptodate" | "downloading" | "ready" | "error";
+  /** The new version, while it downloads and once it is ready. */
+  available: string | null;
+  percent: number | null;
+  /** Its release notes, a few plain lines. */
+  notes: string[];
+  checkedAt: string | null;
+  error: string | null;
+}
+
 export type ServerEvent =
   | { event: "turn"; turnId: string; ev: AppEvent }
+  | { event: "update"; state: UpdateState }
   /** The reply ended (after its turn_end), or failed before it started. */
   | { event: "turnDone"; turnId: string; error?: string }
   | { event: "confirm"; id: string; req: ConfirmRequest; turnId: string | null }

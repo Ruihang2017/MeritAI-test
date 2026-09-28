@@ -28,6 +28,7 @@ const MIME: Record<string, string> = {
   ".md": "text/markdown",
   ".txt": "text/plain",
   ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".json": "application/json",
 };
 const mimeOf = (name: string) => MIME[/\.[^.]+$/.exec(name.toLowerCase())?.[0] ?? ""] ?? "application/octet-stream";
 
