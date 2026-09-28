@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="784" viewBox="0 0 1200 784" font-family="Segoe UI, Arial, sans-serif">
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#8A94A6"/></marker>
+  <style>.t{font-size:15px;font-weight:700;fill:#1B1F27}.w{font-size:13px;fill:#1B1F27}.h{font-size:13px;font-weight:700;letter-spacing:.04em;fill:#5F6878}</style></defs>
+  <rect width="1200" height="784" fill="#FFFFFF"/>
+  <text x="36" y="48" class="h">WHAT</text>
+  <text x="250" y="48" class="h">TODAY (ALPHA, SYNTHETIC DATA)</text>
+  <text x="660" y="48" class="h">WITH COMPANY APPROVAL (PROPOSED)</text>
+  <text x="36" y="72" font-size="12" fill="#5F6878">Flow numbers refer to the data flow diagram.</text>
+  
+  <rect x="20" y="92" width="1160" height="86" rx="10" fill="#F8F9FB" stroke="#E1E6EE"/>
+  <text x="36" y="122" class="t">The model (flows 1-4)</text>
+  <rect x="36" y="136" width="130" height="18" rx="9" fill="#DCE6FA"/><text x="101" y="149" text-anchor="middle" font-size="11" font-weight="700" fill="#1446A6">Small code change</text><rect x="36" y="158" width="130" height="18" rx="9" fill="#FCEFC7"/><text x="101" y="171" text-anchor="middle" font-size="11" font-weight="700" fill="#6B4E00">Company decision</text>
+  <text x="250" y="120" class="w">The tester's personal ChatGPT account</text><text x="250" y="139" class="w">(device-code sign-in).</text>
+  <path d="M598 135 H636" stroke="#8A94A6" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+  <text x="660" y="120" class="w">The company's OpenAI organisation (API-key sign-in:</text><text x="660" y="139" class="w">the engine supports it, the app needs a setting);</text><text x="660" y="158" class="w">data use and retention as agreed with OpenAI.</text>
+  <rect x="20" y="188" width="1160" height="86" rx="10" fill="#FFFFFF" stroke="#E1E6EE"/>
+  <text x="36" y="218" class="t">Voice (flow 5)</text>
+  <rect x="36" y="232" width="130" height="18" rx="9" fill="#E3F3E8"/><text x="101" y="245" text-anchor="middle" font-size="11" font-weight="700" fill="#1E6B3E">Supported now</text><rect x="36" y="254" width="130" height="18" rx="9" fill="#FCEFC7"/><text x="101" y="267" text-anchor="middle" font-size="11" font-weight="700" fill="#6B4E00">Company decision</text>
+  <text x="250" y="216" class="w">The tester's own OpenAI API key.</text>
+  <path d="M598 231 H636" stroke="#8A94A6" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+  <text x="660" y="216" class="w">A key from the company's OpenAI organisation</text><text x="660" y="235" class="w">(pasted in Settings, as today).</text>
+  <rect x="20" y="284" width="1160" height="86" rx="10" fill="#F8F9FB" stroke="#E1E6EE"/>
+  <text x="36" y="314" class="t">Feedback (flow 7)</text>
+  <rect x="36" y="328" width="130" height="18" rx="9" fill="#DCE6FA"/><text x="101" y="341" text-anchor="middle" font-size="11" font-weight="700" fill="#1446A6">Small code change</text><rect x="36" y="350" width="130" height="18" rx="9" fill="#FCEFC7"/><text x="101" y="363" text-anchor="middle" font-size="11" font-weight="700" fill="#6B4E00">Company decision</text>
+  <text x="250" y="312" class="w">Ratings with question and answer text and the</text><text x="250" y="331" class="w">current conversation, by default, to a personal</text><text x="250" y="350" class="w">Gmail address.</text>
+  <path d="M598 327 H636" stroke="#8A94A6" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+  <text x="660" y="312" class="w">A company mailbox or folder; the conversation</text><text x="660" y="331" class="w">and answer text off by default.</text>
+  <rect x="20" y="380" width="1160" height="86" rx="10" fill="#FFFFFF" stroke="#E1E6EE"/>
+  <text x="36" y="410" class="t">Updates (flow 6)</text>
+  <rect x="36" y="424" width="130" height="18" rx="9" fill="#DCE6FA"/><text x="101" y="437" text-anchor="middle" font-size="11" font-weight="700" fill="#1446A6">Small code change</text><rect x="36" y="446" width="130" height="18" rx="9" fill="#FCEFC7"/><text x="101" y="459" text-anchor="middle" font-size="11" font-weight="700" fill="#6B4E00">Company decision</text>
+  <text x="250" y="408" class="w">Public GitHub releases; the installer is</text><text x="250" y="427" class="w">not code-signed.</text>
+  <path d="M598 423 H636" stroke="#8A94A6" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+  <text x="660" y="408" class="w">A code-signed installer; releases from a</text><text x="660" y="427" class="w">place the company controls.</text>
+  <rect x="20" y="476" width="1160" height="86" rx="10" fill="#F8F9FB" stroke="#E1E6EE"/>
+  <text x="36" y="506" class="t">Fonts (flow 8)</text>
+  <rect x="36" y="520" width="130" height="18" rx="9" fill="#DCE6FA"/><text x="101" y="533" text-anchor="middle" font-size="11" font-weight="700" fill="#1446A6">Small code change</text>
+  <text x="250" y="504" class="w">Loaded from Google Fonts.</text>
+  <path d="M598 519 H636" stroke="#8A94A6" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+  <text x="660" y="504" class="w">Packed with the app: no request.</text>
+  <rect x="20" y="572" width="1160" height="86" rx="10" fill="#FFFFFF" stroke="#E1E6EE"/>
+  <text x="36" y="602" class="t">Files on the computer</text>
+  <rect x="36" y="616" width="130" height="18" rx="9" fill="#FCEFC7"/><text x="101" y="629" text-anchor="middle" font-size="11" font-weight="700" fill="#6B4E00">Company decision</text><rect x="36" y="638" width="130" height="18" rx="9" fill="#DCE6FA"/><text x="101" y="651" text-anchor="middle" font-size="11" font-weight="700" fill="#1446A6">Small code change</text>
+  <text x="250" y="600" class="w">Plain files (register, screening catalog,</text><text x="250" y="619" class="w">workspace, Codex's conversations and logs);</text><text x="250" y="638" class="w">only the voice key is encrypted.</text>
+  <path d="M598 615 H636" stroke="#8A94A6" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+  <text x="660" y="600" class="w">Disk encryption on managed devices, or</text><text x="660" y="619" class="w">encryption in the app; retention rules for</text><text x="660" y="638" class="w">ratings, logs and the screening catalog.</text>
+  <rect x="20" y="668" width="1160" height="86" rx="10" fill="#F8F9FB" stroke="#E1E6EE"/>
+  <text x="36" y="698" class="t">Real people's data</text>
+  <rect x="36" y="712" width="130" height="18" rx="9" fill="#FCEFC7"/><text x="101" y="725" text-anchor="middle" font-size="11" font-weight="700" fill="#6B4E00">Company decision</text>
+  <text x="250" y="696" class="w">Not allowed: synthetic data only.</text>
+  <path d="M598 711 H636" stroke="#8A94A6" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+  <text x="660" y="696" class="w">Allowed once the rows above are agreed and</text><text x="660" y="715" class="w">a privacy review is done.</text>
+</svg>

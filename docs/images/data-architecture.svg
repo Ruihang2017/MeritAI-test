@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="780" viewBox="0 0 1200 780" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#4A5363"/></marker>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1A57CC"/></marker>
+    <style>
+      .t{font-size:15px;font-weight:700;fill:#1B1F27}
+      .s{font-size:12.5px;fill:#4A5363}
+      .h{font-size:13px;font-weight:700;letter-spacing:.04em;fill:#5F6878}
+      .box{fill:#FFFFFF;stroke:#B8C2D3;stroke-width:1.2}
+      .core{fill:#EEF3FC;stroke:#1A57CC;stroke-width:1.4}
+      .store{fill:#F4F8F1;stroke:#6E9A63;stroke-width:1.2}
+      .ext{fill:#FFFFFF;stroke:#1A57CC;stroke-width:1.4}
+      .ext2{fill:#FFFFFF;stroke:#8A94A6;stroke-width:1.2}
+      .ln{stroke:#4A5363;stroke-width:1.5;fill:none}
+      .net{stroke:#1A57CC;stroke-width:1.8;fill:none}
+      .dash{stroke:#1A57CC;stroke-width:1.5;fill:none;stroke-dasharray:6 5}
+      .lbl{font-size:11.5px;fill:#1446A6;font-weight:600}
+    </style>
+  </defs>
+  <rect width="1200" height="780" fill="#FFFFFF"/>
+
+  <!-- The computer -->
+  <rect x="20" y="20" width="800" height="740" rx="16" fill="#F7F9FC" stroke="#1B1F27" stroke-width="1.6"/>
+  <text x="40" y="46" class="h">TESTER'S WINDOWS COMPUTER (ONE WINDOWS USER)</text>
+
+  <!-- The app -->
+  <rect x="40" y="62" width="760" height="316" rx="12" fill="#FFFFFF" stroke="#1A57CC" stroke-width="1.4" stroke-dasharray="4 3"/>
+  <text x="56" y="86" class="h">MERITAI DESKTOP APP (ELECTRON)</text>
+
+  <rect x="60" y="100" width="340" height="100" rx="10" class="box"/>
+  <text x="76" y="126" class="t">Window: the page (React)</text>
+  <text x="76" y="148" class="s">Sandboxed; no access to Node or files.</text>
+  <text x="76" y="166" class="s">Links open in the owner's browser.</text>
+  <text x="76" y="184" class="s">Microphone allowed for this page only.</text>
+
+  <rect x="440" y="100" width="340" height="100" rx="10" class="box"/>
+  <text x="456" y="126" class="t">Local server (127.0.0.1 only)</text>
+  <text x="456" y="148" class="s">One-time token; Origin and Host checks.</text>
+  <text x="456" y="166" class="s">A fixed list of 66 methods; inputs checked.</text>
+  <text x="456" y="184" class="s">Not reachable from other computers.</text>
+
+  <rect x="60" y="230" width="340" height="130" rx="10" class="core"/>
+  <text x="76" y="256" class="t">AssistantApp (MeritAI's core)</text>
+  <text x="76" y="278" class="s">Business profile, employee register,</text>
+  <text x="76" y="296" class="s">reminders, checklists, screening, files,</text>
+  <text x="76" y="314" class="s">email drafts, voice bridge.</text>
+  <text x="76" y="336" class="s">Changes to records ask the owner first.</text>
+
+  <rect x="440" y="230" width="340" height="130" rx="10" class="core"/>
+  <text x="456" y="256" class="t">Codex engine (codex app-server)</text>
+  <text x="456" y="278" class="s">Runs the model conversation (stdio).</text>
+  <text x="456" y="296" class="s">Read-only sandbox, approvals "never";</text>
+  <text x="456" y="314" class="s">no shell, plugins, apps or web search.</text>
+  <text x="456" y="336" class="s">Only MeritAI's 34 tools.</text>
+
+  <path d="M400 150 H436" class="ln" marker-end="url(#a)"/>
+  <path d="M610 200 V215 H230 V226" class="ln" marker-end="url(#a)"/>
+  <path d="M400 295 H436" class="ln" marker-end="url(#a)" marker-start="url(#a)"/>
+
+  <!-- Storage -->
+  <rect x="40" y="420" width="370" height="230" rx="10" class="store"/>
+  <text x="56" y="446" class="t">Workspace folder</text>
+  <text x="56" y="466" class="s" font-family="Consolas, monospace">%USERPROFILE%\MeritAI</text>
+  <text x="56" y="492" class="s">Inbox: files the owner attaches</text>
+  <text x="56" y="510" class="s">Outbox: documents, email drafts (.eml), reports</text>
+  <text x="56" y="528" class="s">Jobs: job descriptions and applications</text>
+  <text x="56" y="546" class="s">Policies: the business's own policies</text>
+  <text x="56" y="564" class="s">Feedback: feedback files</text>
+  <text x="56" y="582" class="s">.assistant: business profile, employee</text>
+  <text x="56" y="600" class="s">register and screening catalog (SQLite)</text>
+  <text x="56" y="628" class="s" font-weight="700">Plain files: not encrypted by MeritAI</text>
+
+  <rect x="430" y="420" width="370" height="230" rx="10" class="store"/>
+  <text x="446" y="446" class="t">App data folder</text>
+  <text x="446" y="466" class="s" font-family="Consolas, monospace">%APPDATA%\MeritAI</text>
+  <text x="446" y="492" class="s">codex_home (written by Codex): the sign-in</text>
+  <text x="446" y="510" class="s">(auth.json), conversations, Codex's logs</text>
+  <text x="446" y="528" class="s">memory: settings, preferences, work notes</text>
+  <text x="446" y="546" class="s">(30 days), conversation list, ratings</text>
+  <text x="446" y="564" class="s">Voice API key: encrypted for the Windows</text>
+  <text x="446" y="582" class="s">user (DPAPI)</text>
+  <text x="446" y="600" class="s">Browser storage of the window</text>
+  <text x="446" y="628" class="s" font-weight="700">Plain files, except the voice key</text>
+
+  <path d="M150 360 V416" class="ln" marker-end="url(#a)"/>
+  <path d="M610 360 V416" class="ln" marker-end="url(#a)"/>
+  <path d="M300 360 V372 H540 V416" class="ln" marker-end="url(#a)"/>
+
+  <rect x="40" y="672" width="370" height="72" rx="10" class="box"/>
+  <text x="56" y="698" class="t">Microphone and speaker</text>
+  <text x="56" y="720" class="s">For voice only. No audio is saved.</text>
+
+  <rect x="430" y="672" width="370" height="72" rx="10" class="box"/>
+  <text x="446" y="698" class="t">Owner's email app</text>
+  <text x="446" y="720" class="s">Opens .eml drafts; the owner sends them.</text>
+
+  <!-- Outside -->
+  <text x="860" y="46" class="h">OUTSIDE THE COMPUTER</text>
+
+  <rect x="860" y="60" width="320" height="110" rx="10" class="ext"/>
+  <text x="876" y="86" class="t">OpenAI: the model</text>
+  <text x="876" y="108" class="s">Through Codex, signed in with a ChatGPT</text>
+  <text x="876" y="126" class="s">account (device code). Today: the tester's</text>
+  <text x="876" y="144" class="s">personal account.</text>
+
+  <rect x="860" y="190" width="320" height="100" rx="10" class="ext"/>
+  <text x="876" y="216" class="t">Official Australian websites</text>
+  <text x="876" y="238" class="s">Searched by OpenAI's web search, for</text>
+  <text x="876" y="256" class="s">legal research only: 23 allowed domains</text>
+  <text x="876" y="274" class="s">(fairwork.gov.au, ato.gov.au, ...).</text>
+
+  <rect x="860" y="310" width="320" height="100" rx="10" class="ext"/>
+  <text x="876" y="336" class="t">OpenAI: Live API (voice)</text>
+  <text x="876" y="358" class="s">api.openai.com, with the tester's own</text>
+  <text x="876" y="376" class="s">OpenAI API key (billed to it).</text>
+
+  <rect x="860" y="430" width="320" height="90" rx="10" class="ext2"/>
+  <text x="876" y="456" class="t">GitHub releases</text>
+  <text x="876" y="478" class="s">Update checks and downloads</text>
+  <text x="876" y="496" class="s">(Ruihang2017/MeritAI-test).</text>
+
+  <rect x="860" y="540" width="320" height="80" rx="10" class="ext2"/>
+  <text x="876" y="566" class="t">Google Fonts</text>
+  <text x="876" y="588" class="s">The page's fonts, when the window opens.</text>
+
+  <rect x="860" y="640" width="320" height="104" rx="10" class="ext2"/>
+  <text x="876" y="666" class="t">Feedback coordinator's mailbox</text>
+  <text x="876" y="688" class="s">Only when the tester sends a feedback</text>
+  <text x="876" y="706" class="s">email from their own email app.</text>
+
+  <!-- Network lines -->
+  <path d="M780 262 H830 V115 H856" class="net" marker-end="url(#b)"/>
+  <path d="M1020 170 V186" class="dash" marker-end="url(#b)"/>
+  <path d="M380 360 V392 H840 V360 H856" class="net" marker-end="url(#b)"/>
+  <path d="M800 370 H812 V475 H856" class="net" marker-end="url(#b)"/>
+  <path d="M360 100 V54 H850 V580 H856" class="ln" stroke-dasharray="2 3" marker-end="url(#a)"/>
+  <path d="M800 708 H856" class="ln" marker-end="url(#a)"/>
+</svg>

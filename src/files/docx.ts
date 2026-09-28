@@ -3,6 +3,7 @@ import {
   BorderStyle,
   Document,
   HeadingLevel,
+  ImageRun,
   LevelFormat,
   Packer,
   Paragraph,
@@ -17,8 +18,13 @@ import { marked, type Token, type Tokens } from "marked";
 /**
  * Markdown → .docx for documents the assistant saves. Supports what our
  * outputs use: headings, paragraphs, bold/italic/code, bullet and numbered
- * lists (nested), tables, block quotes, code blocks and rules.
+ * lists (nested), tables, block quotes, code blocks and rules. A paragraph that is only an image
+ * (`![caption](file.png)`) becomes the picture with its caption, but only when the caller passes
+ * `images` (our own docs builds); documents the assistant saves never embed files.
  */
+
+/** A PNG for an image path, with its size in the document (px at 96 dpi), or null to keep the text. */
+export type ImageSource = (src: string) => { data: Buffer; width: number; height: number } | null;
 
 const HEADINGS = [
   HeadingLevel.HEADING_1,
@@ -85,6 +91,7 @@ type Block = Paragraph | Table;
 
 class Converter {
   private listInstance = 0;
+  constructor(private readonly images?: ImageSource) {}
 
   blocks(tokens: Token[]): Block[] {
     const out: Block[] = [];
@@ -98,8 +105,17 @@ class Converter {
         const h = t as Tokens.Heading;
         return [new Paragraph({ heading: HEADINGS[Math.min(h.depth, 6) - 1], children: inlineRuns(h.tokens) })];
       }
-      case "paragraph":
-        return [new Paragraph({ children: inlineRuns((t as Tokens.Paragraph).tokens), spacing: { after: 120 } })];
+      case "paragraph": {
+        const inner = (t as Tokens.Paragraph).tokens;
+        const img = inner.length === 1 && inner[0].type === "image" ? (inner[0] as Tokens.Image) : null;
+        const pic = img && this.images ? this.images(img.href) : null;
+        if (img && pic)
+          return [
+            new Paragraph({ children: [new ImageRun({ type: "png", data: pic.data, transformation: { width: pic.width, height: pic.height } })], spacing: { before: 120 } }),
+            new Paragraph({ children: [run(img.text, { italics: true })], spacing: { after: 200 } }),
+          ];
+        return [new Paragraph({ children: inlineRuns(inner), spacing: { after: 120 } })];
+      }
       case "list":
         return this.list(t as Tokens.List, 0);
       case "table":
@@ -170,9 +186,9 @@ class Converter {
   }
 }
 
-export async function markdownToDocx(markdown: string, title?: string): Promise<Buffer> {
+export async function markdownToDocx(markdown: string, title?: string, opts: { images?: ImageSource } = {}): Promise<Buffer> {
   const tokens = marked.lexer(markdown);
-  const children = new Converter().blocks(tokens);
+  const children = new Converter(opts.images).blocks(tokens);
   const doc = new Document({
     title,
     creator: "HR Assistant",
