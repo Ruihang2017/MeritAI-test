@@ -433,7 +433,8 @@ export function onboardingTools(business: () => BusinessStore): ClientTool[] {
           work_state: {
             type: ["string", "null"],
             enum: [...STATE_CODES, null],
-            description: "The state or territory where they will be based for work (e.g. working from home in NSW), if the owner said so; null if it is the business's own state or not said.",
+            description:
+              "The state or territory where they will be based for work, from any place the owner mentions: \"working remotely from Sydney\" → NSW, \"based in Brisbane\" → QLD, \"from home in Geelong\" → VIC. Fill it whenever a place is mentioned, even the business's own state; null only if no place was said. It sets their public holidays, long service leave and workers compensation.",
           },
         },
         required: ["employment_type", "may_need_visa_check", "is_apprentice_or_trainee", "works_on_construction_sites", "first_employee", "working_holiday_maker", "start_date", "work_state"],

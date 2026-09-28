@@ -300,7 +300,9 @@ export function startDateHolidayNote(date: string | null | undefined, states: st
     for (const h of hits) byName.set(h.name, [...(byName.get(h.name) ?? []), h.state]);
     const names = [...byName].map(([n, s]) => `${n} (${s.join(", ")})`).join("; ");
     lines.push(
-      `Start date ${date} is a public holiday: ${names}. Say so near the top of the answer and suggest another first day. ` +
+      `Start date ${date} is a public holiday: ${names}. Say so near the top of the answer. ` +
+        "If the start date isn't agreed yet, suggest another first day; if it is already agreed (an offer or contract), moving it needs the employee's agreement. " +
+        "How pay works when employment starts on a public holiday depends on the award and the contract: say to check with the Fair Work Infoline (13 13 94), don't state it. " +
         "If they do start that day: the employer can only ask them to work a public holiday if the request is reasonable, the employee can refuse on reasonable grounds, and work that day is paid at the award's public holiday rate (check it in the Pay and Conditions Tool; don't state a rate). " +
         `Sources: ${src.title} ${src.url}; ${HOLIDAY_SOURCES.notWorking.title} ${HOLIDAY_SOURCES.notWorking.url}.`,
     );
