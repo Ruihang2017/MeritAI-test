@@ -1,4 +1,5 @@
 import type { ClientTool } from "../engine/types";
+import { noticeFrom } from "./casualPathway";
 import type { BusinessStore } from "./profile";
 import { DOCUMENTS, outstandingDocuments, type DocumentId, type Employee, type Register } from "./register";
 import { isApprenticeRole } from "./leaving";
@@ -164,12 +165,12 @@ export function computeReminders(opts: {
           });
         }
       }
-      const choice = addMonths(e.startDate, small ? 12 : 6);
+      const choice = noticeFrom(e.startDate, small);
       if (inWindow(choice, 14)) {
         push({
           due: choice,
           title: `${who} can ask to become permanent from ${choice}`,
-          detail: `After ${small ? "12" : "6"} months a casual can give written notice to change to full-time or part-time (employee choice pathway). If they do, you must respond in writing within 21 days, and can refuse only for set reasons.`,
+          detail: `After ${small ? "12" : "6"} months (employment before 26 August 2024 doesn't count) a casual can give written notice to change to full-time or part-time if they believe they no longer meet the casual definition (employee choice pathway). If they do, you must respond in writing within 21 days, and can refuse only for set reasons.`,
           employeeId: e.id,
           source: SRC.choice,
         });

@@ -20,6 +20,7 @@ import { Register } from "./business/register";
 import { registerTools } from "./business/registerTools";
 import { reminderTools, todayLocal } from "./business/reminders";
 import { leavingTools } from "./business/leaving";
+import { casualPathwayTools } from "./business/casualPathway";
 import { parentalLeaveTools } from "./business/parentalLeave";
 import { basePrompt, type ReplyFormat } from "./basePrompt";
 import { FakeEngine } from "./engine/fakeEngine";
@@ -151,6 +152,7 @@ export function createAssistant(opts: {
       },
     }),
     ...leavingTools(business, register, todayLocal),
+    ...casualPathwayTools(business, register, todayLocal),
     ...parentalLeaveTools(todayLocal),
     ...reminderTools({ register, business }),
     officialSourcesTool(() => engine),

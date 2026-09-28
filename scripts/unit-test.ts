@@ -1365,6 +1365,35 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   ], JSON.stringify({ onHoliday: onHoliday.slice(0, 300), future: future.slice(-400), past: past.slice(-200) }));
 }
 
+// ------------------------------------------------------------------ onboarding details (round 6): super choice, written contracts, visas, training pay, casual to permanent
+{
+  const { casualPathwayText, casualPathwayTools, noticeFrom } = await import("../src/business/casualPathway");
+  const T = "2026-09-28";
+  const casual = newStarterChecklist({ employmentType: "casual", mayNeedVisaCheck: true, smallBusiness: true });
+  const text = casual.map((x) => `${x.task} ${x.why} ${x.source.url}`).join("\n");
+  const ft = newStarterChecklist({ employmentType: "full-time", mayNeedVisaCheck: false, smallBusiness: false }).map((x) => x.task).join("\n");
+  const f = ensureFolders(join(TMP, "perm-files"));
+  const bs = new BusinessStore(f.data);
+  bs.update({ headcount: 9 });
+  const reg = new Register(f.data);
+  const ana = reg.add(normaliseEmployee({ name: "Ana Perm", role: "Barista", employmentType: "casual", startDate: "2026-09-23" }, true));
+  const tool = casualPathwayTools(() => bs, () => reg, () => T)[0];
+  const viaTool = (await tool.handle({ employee_id: ana.id, start_date: null })).text;
+  const general = casualPathwayText({ today: T, small: null });
+  record("onboarding details (round 6)", [
+    ["super: the 28 days is the employer's deadline to give the form; stapled, then default fund", /not theirs to choose/.test(text) && /Section C/.test(text) && /first contribution is due, pay to their stapled/.test(text) && /can't recommend a fund/.test(text)],
+    ["Payday Super: 20 business days after the first payday, then 7", /20 business days after the first payday/.test(text)],
+    ["a written contract is good practice, not a general legal requirement (with Fair Work's page)", /not a general legal requirement/.test(ft) && /about-employment-contracts/.test(ft)],
+    ["VEVO is for visa holders; same rights whatever the visa; the passport", /VEVO is for visa holders/.test(text) && /Special Category visa/.test(text) && /same minimum pay/.test(text) && /never take it/.test(text)],
+    ["induction and training are paid (every type); a casual's minimum engagement from the award, no number", /Pay them for the induction and any training/.test(ft) && /minimum engagement/.test(text) && !/minimum engagement[^.]*\d+ hours/.test(text)],
+    ["casual checklist: the pathway after 12 months for a small business", /written notice after 12 months \(small business employer\)/.test(text) && /casual_to_permanent/.test(text)],
+    ["the pathway: belief, consult, 21 days, the only grounds, advice", /believe they no longer meet the casual employee definition/.test(general) && /consult/.test(general) && /within 21 days/.test(general) && /can refuse only if/.test(general) && /recruitment or selection process/.test(general) && /13 13 94/.test(general)],
+    ["the earliest date from the register (small business: 12 months)", /Ana Perm \(started 2026-09-23\): the earliest they can give notice under the pathway is from 2027-09-23/.test(viaTool)],
+    ["employment before 26 Aug 2024 doesn't count; headcount unknown gives both", noticeFrom("2023-01-10", false) === "2025-02-26" && noticeFrom("2023-01-10", true) === "2025-08-26" && /from 2025-02-26 with 15 or more employees \(already reached\), or from 2025-08-26 with fewer than 15/.test(casualPathwayText({ start: "2023-01-10", today: T, small: null }))],
+    ["every checklist link is official", CHECKLIST_URLS.every(isOfficialUrl)],
+  ], JSON.stringify({ viaTool: viaTool.slice(-400) }));
+}
+
 try {
   rmSync(TMP, { recursive: true, force: true });
 } catch {

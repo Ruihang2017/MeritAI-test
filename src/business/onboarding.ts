@@ -66,6 +66,12 @@ const S = {
   whm: { title: "ATO: Working holiday makers", url: "https://www.ato.gov.au/individuals-and-families/coming-to-australia-or-going-overseas/coming-to-australia/working-holiday-makers" },
   // Round 6 evaluation fix (Home Affairs, checked 2026-09-28): condition 8547.
   whm6: { title: "Home Affairs: Permission to work longer than 6 months with one employer (condition 8547)", url: "https://immi.homeaffairs.gov.au/visas/already-have-a-visa/check-visa-details-and-conditions/waivers-and-permissions/work-longer-than-6-months" },
+  // Round 6 onboarding details (checked 2026-09-28): contracts can be verbal, training is paid, minimum hours per award, casual to permanent, visa holders' rights.
+  aboutContracts: { title: "Fair Work: About employment contracts", url: "https://www.fairwork.gov.au/employment-conditions/employment-contracts/about-employment-contracts" },
+  unpaidWork: { title: "Fair Work: Unpaid work (training)", url: "https://www.fairwork.gov.au/starting-employment/unpaid-work" },
+  hoursOfWork: { title: "Fair Work: Hours of work", url: "https://www.fairwork.gov.au/employment-conditions/hours-of-work-breaks-and-rosters/hours-of-work" },
+  casualPermanent: { title: "Fair Work: Becoming a permanent employee", url: "https://www.fairwork.gov.au/starting-employment/types-of-employees/casual-employees/becoming-a-permanent-employee" },
+  workRights: { title: "Home Affairs: Workers rights and visa reporting protections", url: "https://immi.homeaffairs.gov.au/visas/working-in-australia/work-rights-and-exploitation" },
 };
 export { S as SOURCES };
 
@@ -151,8 +157,8 @@ export function newStarterChecklist(opts: {
     {
       when: "before start",
       task:
-        "Put the offer in writing and have a written employment contract signed. For award-covered employees paid hourly or weekly, the government's free Employment Contract Tool builds a compliant contract.",
-      why: "A contract cannot give less than the award or NES; a written contract avoids disputes about what was agreed.",
+        `Put the offer in writing and have a written employment contract signed. This is good practice, not a general legal requirement: a contract can be written or verbal (${S.aboutContracts.title} ${S.aboutContracts.url}), but writing avoids disputes, and some things must be in writing, such as a part-time employee's agreed hours under many awards. For award-covered employees paid hourly or weekly, the government's free Employment Contract Tool builds a compliant contract.`,
+      why: "A contract cannot give less than the award or NES; a written contract shows what was agreed.",
       source: S.contractTool,
     },
   );
@@ -211,9 +217,14 @@ export function newStarterChecklist(opts: {
   if (opts.mayNeedVisaCheck) {
     items.push({
       when: "before start",
-      task: "Check the person's right to work and any visa conditions (e.g. work hour limits) in VEVO, with their permission, and save the VEVO result (PDF) as your record. Roster them within their visa conditions.",
+      task: "Ask whether they are an Australian citizen or permanent resident; VEVO is for visa holders (a New Zealand citizen usually holds a Special Category visa, checked in VEVO too). For a visa holder, check their right to work and any visa conditions (e.g. work hour limits) in VEVO, with their permission, and save the VEVO result (PDF) as your record. Roster them within their visa conditions.",
       why: "Employing someone without work rights, or in breach of their visa conditions, is an offence.",
       source: S.vevo,
+    }, {
+      when: "before start",
+      task: "Pay and treat a visa holder like anyone else: the same minimum pay and workplace rights, whatever their citizenship or visa. You may check their passport, but never take it from them.",
+      why: "Workers have the same basic workplace rights regardless of citizenship or visa; it is illegal for an employer to take a worker's passport.",
+      source: S.workRights,
     });
   }
   if (opts.workingHolidayMaker) {
@@ -253,6 +264,16 @@ export function newStarterChecklist(opts: {
       task: "Know what casuals get: a casual loading instead of paid annual and personal leave, but under the NES they still get 10 days' paid family and domestic violence leave a year, 2 days' unpaid carer's leave and 2 days' unpaid compassionate leave per occasion, and unpaid community service leave; long service leave depends on state law. Contracts and leave decisions must not leave these out.",
       why: "These NES entitlements apply to casual employees too.",
       source: S.casual,
+    }, {
+      when: "on or before day one",
+      task: "Check the award's minimum hours for each shift (the minimum engagement): many awards pay a casual for at least a set number of hours each time they work, so a short induction or training shift may still be paid for that minimum. Don't state the number; the award or the Pay and Conditions Tool gives it.",
+      why: "Minimum hours of work differ between awards.",
+      source: S.hoursOfWork,
+    }, {
+      when: "ongoing",
+      task: `Casual to permanent: you can offer permanent work at any time. Under the NES employee choice pathway, a casual can give written notice after ${opts.smallBusiness === true ? "12 months (small business employer)" : opts.smallBusiness === false ? "6 months" : "6 months (12 with a small business employer)"} if they believe they no longer meet the casual definition; you must consult them and answer in writing within 21 days, and can refuse only on the grounds the law sets (casual_to_permanent has the details).`,
+      why: "The pathway is part of the NES; a refusal outside the set grounds can lead to a dispute.",
+      source: S.casualPermanent,
     });
   }
   if (type === "fixed-term") {
@@ -274,13 +295,13 @@ export function newStarterChecklist(opts: {
     {
       when: "first weeks",
       task:
-        "Give the Superannuation standard choice form (with your default fund filled in) within 28 days of the start date. If they do not choose a fund, request their stapled super fund details from the ATO before paying any super.",
-      why: "Choice of fund is a legal requirement; paying into the wrong fund does not count.",
+        "Give the Superannuation standard choice form, with your default fund's details in Section C, within 28 days of their start date. The 28 days is your deadline to give the form, not theirs to choose. Give them information only: you can't recommend a fund unless you are licensed to give financial advice. Keep the completed form or their ATO online summary for 5 years. (For an employee on a temporary visa the form is optional, but they can still choose a fund.)",
+      why: "Offering a choice of fund is a legal requirement; not offering it, or not paying to their chosen fund, can mean the super guarantee charge with a choice loading.",
       source: S.superChoice,
     },
     {
       when: "first weeks",
-      task: "If needed, request the employee's stapled super fund through ATO online services (you can do this once they accept the offer).",
+      task: "If they haven't chosen a fund by the time their first contribution is due, pay to their stapled super fund: request it through ATO online services (you can once they accept the offer). Only if the ATO says they have none, pay to your default fund.",
       why: "Without a chosen fund, super must go to the stapled fund, or to your default fund only if the ATO says there is none.",
       source: S.stapled,
     },
@@ -291,6 +312,12 @@ export function newStarterChecklist(opts: {
       source: S.fwHiring,
     },
     {
+      when: "on or before day one",
+      task: "Pay them for the induction and any training, like any other hours of work.",
+      why: "Training an employee does as part of their job is time worked and must be paid.",
+      source: S.unpaidWork,
+    },
+    {
       when: "ongoing",
       task: "Keep time and wages records, and give a pay slip within one working day of each payday.",
       why: "Both are legal requirements for every employee.",
@@ -298,7 +325,7 @@ export function newStarterChecklist(opts: {
     },
     {
       when: "ongoing",
-      task: "Pay super so it reaches the fund within 7 business days after each payday (20 business days for the first contribution for a new employee).",
+      task: "Pay super so it reaches the fund within 7 business days after each payday. For a new employee the first contribution has longer: it must reach the fund within 20 business days after the first payday you pay them on (then 7 business days for the next paydays).",
       why: "Payday Super applies from 1 July 2026; the old quarterly due dates no longer apply.",
       source: S.paydaySuper,
     },

@@ -161,7 +161,7 @@ export function leavingChecklist(opts: { reason: LeavingReason; apprentice: bool
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 /** start + n months (the month's last day when it is shorter). */
-function addMonths(iso: string, n: number): string {
+export function addMonths(iso: string, n: number): string {
   const [y, m, d] = iso.split("-").map(Number);
   const last = new Date(Date.UTC(y, m - 1 + n + 1, 0)).getUTCDate();
   return new Date(Date.UTC(y, m - 1 + n, Math.min(d, last))).toISOString().slice(0, 10);
