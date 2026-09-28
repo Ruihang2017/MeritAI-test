@@ -43,6 +43,10 @@ export function casualPathwayText(o: { start?: string | null; today: string; sma
     const before = o.start < PATHWAY_START ? " Employment before 26 August 2024 doesn't count." : "";
     lines.push(`- ${who}: the earliest they can give notice under the pathway is ${dates.join(", or ")}, if they then believe they no longer meet the casual definition.${before} Worked out from the dates: use it as it is.`);
   }
+  // Round 6 (round6-fix7): replies called the tool but dropped the belief condition and the refusal grounds.
+  lines.push(
+    "In the answer keep all of these, however short: both conditions for a notice (the time employed AND their belief that they no longer meet the casual definition); it isn't automatic; the employer consults and answers in writing within 21 days; refusal only on the grounds above; the owner can offer permanent work at any time.",
+  );
   return lines.join("\n");
 }
 
