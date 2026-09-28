@@ -1,5 +1,6 @@
 import type { ClientTool } from "../engine/types";
 import type { BusinessStore } from "./profile";
+import { startDateHolidayNote } from "./publicHolidays";
 
 /**
  * The new-starter compliance checklist (plan P1). Code, not the model, decides
@@ -359,12 +360,13 @@ export function onboardingTools(business: () => BusinessStore): ClientTool[] {
           works_on_construction_sites: { type: "boolean", description: "true if they will do construction work on a construction site (building, plumbing, electrical, landscaping construction...)." },
           first_employee: { type: "boolean", description: "true if this is the business's first employee, or the owner hasn't set up payroll (PAYG withholding, STP) yet; false if it already pays employees." },
           working_holiday_maker: { type: "boolean", description: "true if they are on a Working Holiday (417) or Work and Holiday (462) visa, e.g. a backpacker." },
+          start_date: { type: ["string", "null"], description: "Their first day (YYYY-MM-DD) if known, else null: the checklist says if it is a public holiday in the business's states." },
         },
-        required: ["employment_type", "may_need_visa_check", "is_apprentice_or_trainee", "works_on_construction_sites", "first_employee", "working_holiday_maker"],
+        required: ["employment_type", "may_need_visa_check", "is_apprentice_or_trainee", "works_on_construction_sites", "first_employee", "working_holiday_maker", "start_date"],
         additionalProperties: false,
       },
       handle: async (args) => {
-        const a = args as { employment_type?: string; may_need_visa_check?: boolean; is_apprentice_or_trainee?: boolean; works_on_construction_sites?: boolean; first_employee?: boolean; working_holiday_maker?: boolean };
+        const a = args as { employment_type?: string; may_need_visa_check?: boolean; is_apprentice_or_trainee?: boolean; works_on_construction_sites?: boolean; first_employee?: boolean; working_holiday_maker?: boolean; start_date?: string | null };
         const type = a.employment_type as EmploymentType;
         if (!["full-time", "part-time", "casual", "fixed-term"].includes(type)) return { success: false, text: "employment_type must be full-time, part-time, casual or fixed-term." };
         const p = business().get();
@@ -378,9 +380,11 @@ export function onboardingTools(business: () => BusinessStore): ClientTool[] {
           workingHolidayMaker: a.working_holiday_maker === true,
           states: p.states,
         });
+        const holiday = startDateHolidayNote(a.start_date, p.states);
         return {
           success: true,
           text:
+            (holiday ? `${holiday}\n\n` : "") +
             `New starter checklist (${type}; official sources checked ${CHECKED_ON}):\n${formatChecklist(items)}\n\n` +
             "Present it as a practical checklist in plain language, grouped by timing, keeping every item and its source link. Add the business's own steps from its profile or policies where relevant. " +
             "Pay rates and super percentages are not included on purpose: use search_official_sources or the Pay and Conditions Tool for figures.",

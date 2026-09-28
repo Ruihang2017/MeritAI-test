@@ -1334,6 +1334,37 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   ], JSON.stringify(r));
 }
 
+// ------------------------------------------------------------------ a first day on a public holiday (round 6: 5 October 2026)
+{
+  const { publicHolidaysOn, startDateHolidayNote, HOLIDAY_YEARS } = await import("../src/business/publicHolidays");
+  const { onboardingTools } = await import("../src/business/onboarding");
+  const { todayIso } = await import("../src/clock");
+  const STATES = ["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"];
+  const everywhere = (date: string) => STATES.every((s) => publicHolidaysOn(date, [s]).length > 0);
+  const f = ensureFolders(join(TMP, "ph-files"));
+  const bs = new BusinessStore(f.data);
+  bs.update({ states: ["QLD"] });
+  const checklist = onboardingTools(() => bs).find((t) => t.name === "new_starter_checklist")!;
+  const base = { employment_type: "casual", may_need_visa_check: false, is_apprentice_or_trainee: false, works_on_construction_sites: false, first_employee: false, working_holiday_maker: false };
+  const onHoliday = (await checklist.handle({ ...base, start_date: "2026-10-05" })).text;
+  const noDate = (await checklist.handle({ ...base, start_date: null })).text;
+  const reg = new Register(f.data);
+  const tools = registerTools({ register: () => reg, confirm: async () => true, business: () => bs } as never);
+  const add = (name: string, startDate: string) => tools.find((t) => t.name === "add_employee")!.handle({ name, role: "Cleaner", employmentType: "casual", startDate });
+  const future = (await add("Ana Holiday", "2027-01-26")).text;
+  const past = (await add("Ben Past", "2026-01-26")).text;
+  const nextYear = Number(todayIso().slice(0, 4)) + 1;
+  record("public holidays on a first day", [
+    ["the data covers next year too (add Fair Work's next list in the second half of each year)", HOLIDAY_YEARS.includes(nextYear)],
+    ["Christmas and Good Friday everywhere, both years", everywhere("2026-12-25") && everywhere("2027-12-25") && everywhere("2026-04-03") && everywhere("2027-03-26")],
+    ["5 Oct 2026: King's Birthday in QLD, Labour Day in NSW, nothing in WA", publicHolidaysOn("2026-10-05", ["QLD"])[0]?.name === "King's Birthday" && publicHolidaysOn("2026-10-05", ["NSW"])[0]?.name === "Labour Day" && publicHolidaysOn("2026-10-05", ["WA"]).length === 0],
+    ["no states in the profile: every state checked", publicHolidaysOn("2026-10-05", []).length === 4],
+    ["a year without data, and Victoria's 2027 AFL Friday not set yet", /public holidays for 2026 and 2027 only/.test(startDateHolidayNote("2028-01-03", ["WA"]) ?? "") && /isn't set yet/.test(startDateHolidayNote("2027-09-24", ["VIC"]) ?? "") && startDateHolidayNote("2027-09-24", ["NSW"]) === null],
+    ["the checklist starts with it, with official links; nothing without a date", onHoliday.startsWith("Start date 2026-10-05 is a public holiday: King's Birthday (QLD)") && /not-working-on-public-holidays/.test(onHoliday) && /2026-public-holidays/.test(onHoliday) && !/public holiday/.test(noDate.split("\n")[0])],
+    ["adding someone who starts on a holiday says so; a past start date doesn't", /Australia Day \(QLD\)/.test(future) && !/public holiday/.test(past)],
+  ], JSON.stringify({ onHoliday: onHoliday.slice(0, 300), future: future.slice(-400), past: past.slice(-200) }));
+}
+
 try {
   rmSync(TMP, { recursive: true, force: true });
 } catch {

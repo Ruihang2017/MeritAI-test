@@ -4,6 +4,8 @@ import { documentTiming } from "./reminders";
 import { checkDocuments, checkEmployeeChanges, checkNewEmployee, fixedTermEndChanged } from "./registerOps";
 import type { BusinessStore } from "./profile";
 import { isApprenticeRole, leavingText } from "./leaving";
+import { startDateHolidayNote } from "./publicHolidays";
+import { todayIso } from "../clock";
 
 const dateProp = (description: string) => ({ type: ["string", "null"], description: `${description} (YYYY-MM-DD)` });
 
@@ -137,6 +139,9 @@ export function registerTools(opts: { register: () => Register; business: () => 
           const jobs = opts.hires.jobsWith(saved.name);
           if (jobs.length) note = `\n\n${saved.name} is also a candidate for: ${jobs.join(", ")}. If they were hired from that job, call record_hire so the job counts the hire.`;
         }
+        // A first day still to come that is a public holiday (round 6 evaluation).
+        const holiday = saved.startDate && saved.startDate >= todayIso() ? startDateHolidayNote(saved.startDate, opts.business().get().states) : null;
+        if (holiday) note += `\n\n${holiday}`;
         return { success: true, text: `Added: ${employeeLine(saved)}${note}`, display: `register: added [${saved.id}] ${saved.name}` };
       },
     },
