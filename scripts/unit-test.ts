@@ -1539,6 +1539,41 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   await app.stop();
 }
 
+// ------------------------------------------------------------------ applications sent in the chat: the adviser adds them to a job (moved from the Inbox)
+{
+  const { moveInboxToJob } = await import("../src/business/hiring");
+  const { hiringTools } = await import("../src/screening/hiringTools");
+  const { Catalog } = await import("../src/screening/catalog");
+  const { applyEvent, addConfirm, setConfirm } = await import("../web/src/conversation");
+  const f = ensureFolders(join(TMP, "apps-files"));
+  const cat = new Catalog(f.data);
+  mkdirSync(join(f.jobs, "Carpenter"), { recursive: true });
+  writeFileSync(join(f.jobs, "Carpenter", "Carpenter JD.md"), "# Carpenter\n\nBuilds and fixes to plan.");
+  writeFileSync(join(f.jobs, "Carpenter", "Ana Lee resume.txt"), "Ana Lee\nCarpenter, 5 years.");
+  const put = (n: string, t: string) => writeFileSync(join(f.inbox, n), t);
+  put("Sam Park resume.txt", "Sam Park\nCarpenter, 3 years.");
+  put("Ana Lee resume.txt", "Ana Lee\nA different CV with the same name.");
+  put("Ana Lee copy.txt", "Ana Lee\nCarpenter, 5 years.");
+  put("photo.png", "not a resume");
+  const r = await moveInboxToJob(f, cat, "Carpenter", ["Sam Park resume.txt", "Ana Lee resume.txt", "Ana Lee copy.txt", "photo.png", "missing.pdf"]);
+  const inboxLeft = readdirSync(f.inbox);
+  const asked: ConfirmRequest[] = [];
+  put("Kai Wong resume.txt", "Kai Wong\nCarpenter, 8 years.");
+  const tool = hiringTools({ folders: () => f, catalog: () => cat, register: () => new Register(f.data), confirm: async (q: ConfirmRequest) => (asked.push(q), true) } as never).find((t) => t.name === "add_applications")!;
+  const viaTool = await tool.handle({ job: "Carpenter", files: ["Kai Wong resume.txt"] });
+  const turn0 = { id: "t", at: new Date(), user: { text: "", attachments: [] }, steps: [], blocks: [] } as never;
+  const t = applyEvent(setConfirm(addConfirm(turn0, "c", asked[0]), "c", "yes"), { type: "tool_activity", summary: viaTool.display ?? "" });
+  record("applications sent in the chat go into the job", [
+    ["moved (not copied) into the job; the Inbox copies are gone", r.moved.includes("Sam Park resume.txt") && existsSync(join(f.jobs, "Carpenter", "Sam Park resume.txt")) && !inboxLeft.includes("Sam Park resume.txt")],
+    ["the same name with other content gets (2); an identical file isn't added twice", r.moved.includes("Ana Lee resume (2).txt") && r.already.includes("Ana Lee copy.txt") && !inboxLeft.includes("Ana Lee copy.txt")],
+    ["not a resume type or not in the Inbox: refused, left alone", r.refused.some((x) => x.name === "photo.png") && r.refused.some((x) => x.name === "missing.pdf") && inboxLeft.includes("photo.png")],
+    ["the job is catalogued: 3 applications", r.summary.applications === 3],
+    ["the tool asks first, about the job, then says the next step", asked[0]?.title === "Add 1 application to Carpenter?" && asked[0]?.about?.kind === "job" && /Added to Carpenter: Kai Wong resume\.txt/.test(viaTool.text) && /draft the screening criteria/.test(viaTool.text)],
+    ["its receipt reaches the question", (t as { blocks: { kind: string; receipt?: string }[] }).blocks.find((b) => b.kind === "confirm")?.receipt === "hiring: 1 application(s) added to Carpenter"],
+  ], JSON.stringify({ r: { ...r, summary: r.summary.applications }, inboxLeft, text: viaTool.text }));
+  cat.close?.();
+}
+
 try {
   rmSync(TMP, { recursive: true, force: true });
 } catch {

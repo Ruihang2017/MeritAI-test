@@ -2,7 +2,7 @@ import { join } from "node:path";
 import type { ClientTool, Confirm, ToolOutcome } from "../engine/types";
 import { checkJobId, jobDir, listJobs, type Folders } from "../files/folders";
 import type { Register } from "../business/register";
-import { candidates, createJobWithJd, findCandidate, hireCount, linkHire } from "../business/hiring";
+import { candidates, createJobWithJd, findCandidate, hireCount, linkHire, moveInboxToJob } from "../business/hiring";
 import { writeJd } from "../business/jobDescription";
 import type { Catalog, Decision } from "./catalog";
 import { ingestJob, JD_NAME } from "./pipeline";
@@ -186,6 +186,45 @@ export function hiringTools(opts: { folders: () => Folders; catalog: () => Catal
         opts.catalog().notify({ ref: { kind: "job", job }, action: "updated", summary: `${job}: job description saved` });
         const drafted = opts.catalog().latestRubric(job);
         return { success: true, text: `Saved "${name}" into the job.${drafted ? " Screening criteria were drafted from the earlier version: offer to draft them again from this one (propose_criteria)." : " Next: draft the screening criteria from it (propose_criteria) when the owner wants to screen."}`, display: `hiring: JD saved for ${job}`, files: [p] };
+      },
+    },
+    {
+      name: "add_applications",
+      description:
+        "Add application files (resumes, CVs, cover letters) the owner attached in this conversation to a job, so they can be screened. Attachments are in the Inbox (their names are in the [attached: ...] notes); this moves them into the job's folder after the owner's OK. " +
+        "Call it whenever the owner sends applications for a job, or asks to add them; never tell the owner to move files themselves. If the job isn't clear, ask which job (list_jobs), or offer to create one.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          job: jobProp,
+          files: { type: "array", items: { type: "string" }, description: "Inbox file names, exactly as in the [attached: ...] notes or list_files." },
+        },
+        required: ["job", "files"],
+        additionalProperties: false,
+      },
+      handle: async (args) => {
+        const a = args as { job?: string; files?: unknown };
+        const job = String(a.job ?? "");
+        const missing = existing(job);
+        if (missing) return fail(missing);
+        if (closed(job)) return fail(`"${job}" is closed. Reopen it first (update_job with open: true), if the owner wants that.`);
+        const files = Array.isArray(a.files) ? [...new Set(a.files.map(String).filter(Boolean))] : [];
+        if (!files.length) return fail("Name the Inbox files to add.");
+        if (files.length > 50) return fail("At most 50 files at a time.");
+        if (!(await confirm({ kind: "hiring", title: `Add ${files.length} application${files.length === 1 ? "" : "s"} to ${job}?`, items: [...files.map((f) => `${f} (moved from the Inbox)`)], about: { kind: "job", job } }))) {
+          return { success: true, text: "The owner did not confirm; nothing was moved.", display: "hiring: not saved" };
+        }
+        const r = await moveInboxToJob(opts.folders(), opts.catalog(), job, files);
+        const rubric = opts.catalog().latestRubric(job);
+        const next = !rubric ? "Next: draft the screening criteria (propose_criteria), then screen." : !rubric.confirmed ? "Next: the owner confirms the criteria (on the Hiring page or confirm_criteria), then screen." : "Next: offer to screen them (screen_candidates).";
+        const lines = [
+          r.moved.length ? `Added to ${job}: ${r.moved.join(", ")}.` : "Nothing new was added.",
+          r.already.length ? `Already in the job (identical, not added twice): ${r.already.join(", ")}.` : "",
+          r.refused.length ? `Not added: ${r.refused.map((x) => `${x.name} (${x.reason})`).join("; ")}.` : "",
+          `The job now has ${r.summary.applications} application(s)${r.summary.unreadable.length ? `, ${r.summary.unreadable.length} unreadable` : ""}.`,
+          next,
+        ].filter(Boolean);
+        return { success: true, text: lines.join("\n"), display: `hiring: ${r.moved.length} application(s) added to ${job}` };
       },
     },
     {
