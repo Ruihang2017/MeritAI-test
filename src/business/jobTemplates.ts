@@ -280,13 +280,53 @@ export function searchTemplates(q: string, industry?: IndustryId | null): JobTem
     .map((r) => r.x);
 }
 
+/**
+ * What the job description says about pay (owner, 2026-09-29; design: NewJobEdit, NewJobPay). MeritAI never
+ * works out pay: "award" names the template's likely award without a figure; "above" and "salary" copy what the
+ * owner typed; "none" leaves pay out.
+ */
+export type PayMode = "award" | "above" | "salary" | "none";
+export const PAY_MODES: { id: PayMode; label: string }[] = [
+  { id: "award", label: "Award rate" },
+  { id: "above", label: "Above award" },
+  { id: "salary", label: "Salary" },
+  { id: "none", label: "Don't show" },
+];
+
+/** Examples under the Hours field, by employment type (a click fills the field). No pay figures. */
+export const HOURS_EXAMPLES: Record<string, string[]> = {
+  "full-time": ["Mon to Fri, 38 hours a week", "Mon to Fri, 7 am to 3.30 pm"],
+  "part-time": ["About 20 hours a week, days to agree", "Tue to Thu, 9 am to 3 pm"],
+  casual: ["Weekend shifts as rostered", "Sat and Sun, 6 am to 10 am", "Evenings, about 15 hours a week"],
+  "fixed-term": ["Mon to Fri, 38 hours a week, for 6 months", "Mon to Fri, 7 am to 3.30 pm, until [end date]"],
+};
+
+/** The pay line for a mode (null: no line). Without a mode, the older placeholder. */
+export function payLine(t: JobTemplate, mode: PayMode | undefined, typed: string): string | null {
+  const text = typed.trim();
+  switch (mode) {
+    case "award":
+      return t.award ? `Award rate for the level (${t.award.name})` : "Award rate for the role and level";
+    case "above":
+      return text || "[Your hourly rate]";
+    case "salary":
+      return text || "[Your salary]";
+    case "none":
+      return null;
+    default:
+      return text || "[Rate under the award for the level, or your above-award rate]";
+  }
+}
+
 export interface JdOptions {
   jobName: string;
   business: string | null;
   employmentType: string;
   hours: string;
   location: string;
+  /** The owner's own figure, for "above" and "salary". */
   pay: string;
+  payMode?: PayMode;
   start: string;
   duties: string[];
   essential: string[];
@@ -297,6 +337,7 @@ export interface JdOptions {
 export function jobDescription(t: JobTemplate, o: JdOptions): string {
   const biz = o.business ?? "[Business name]";
   const bullet = (xs: string[]) => xs.map((x) => `- ${x}`).join("\n");
+  const pay = payLine(t, o.payMode, o.pay);
   return [
     `# ${o.jobName}`,
     "",
@@ -319,10 +360,10 @@ export function jobDescription(t: JobTemplate, o: JdOptions): string {
     bullet(o.essential),
     ...(o.desirable.length ? ["", "## Nice to have", "", bullet(o.desirable)] : []),
     "",
-    "## Hours and pay",
+    pay === null ? "## Hours" : "## Hours and pay",
     "",
     `- Hours: ${o.hours || "[Days and hours]"}`,
-    `- Pay: ${o.pay || "[Rate under the award for the level, or your above-award rate]"}`,
+    ...(pay === null ? [] : [`- Pay: ${pay}`]),
     ...(o.start ? [`- Start: ${o.start}`] : []),
     "",
     "## How to apply",

@@ -2893,6 +2893,16 @@ button.sample {
   flex-direction: column;
   gap: 10px;
 }
+/* Hours examples (design: NewJobEdit): the one in the field is marked. */
+.newjob-form button.chip {
+  cursor: pointer;
+  font: 400 13px "Public Sans", sans-serif;
+}
+.newjob-form button.chip.on {
+  border-color: #1a57cc;
+  color: #1446a6;
+  background: #eef3fc;
+}
 .duty {
   display: flex;
   gap: 10px;

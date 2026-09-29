@@ -1,7 +1,7 @@
 import type * as React from "react";
 import { useEffect, useMemo, useState } from "react";
-import type { IndustryId, JobTemplate } from "../../../src/business/jobTemplates";
-import { jobDescription, searchTemplates } from "../../../src/business/jobTemplates";
+import type { IndustryId, JobTemplate, PayMode } from "../../../src/business/jobTemplates";
+import { HOURS_EXAMPLES, jobDescription, PAY_MODES, payLine, searchTemplates } from "../../../src/business/jobTemplates";
 import type { Api } from "../api";
 import { Icon } from "./Icon";
 
@@ -148,21 +148,27 @@ function Picker({ data, onPick, onAdviser }: { data: Data; onPick: (t: JobTempla
   );
 }
 
+const EXAMPLES_LABEL: Record<string, string> = { "full-time": "Full-time examples", "part-time": "Part-time examples", casual: "Casual examples", "fixed-term": "Fixed-term examples" };
+
 function Editor({ api, data, t, existing, onCreated, onTailor }: { api: Api; data: Data; t: JobTemplate; existing: string[]; onCreated: (job: string, note: React.ReactNode) => void; onTailor: (job: string) => void }) {
   const [name, setName] = useState(t.title);
   const [openings, setOpenings] = useState("1");
   const [type, setType] = useState<string>(t.types[0] ?? "full-time");
   const [hours, setHours] = useState("");
   const [location, setLocation] = useState(data.location ?? "");
-  const [pay, setPay] = useState("");
+  // The owner's own figure, kept per option: an hourly rate typed under Above award isn't a salary.
+  const [hourly, setHourly] = useState("");
+  const [salary, setSalary] = useState("");
+  const [payMode, setPayMode] = useState<PayMode>("award");
+  const pay = payMode === "above" ? hourly : payMode === "salary" ? salary : "";
   const [duties, setDuties] = useState(t.duties.map((d) => ({ text: d, on: true })));
   const [extra, setExtra] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const exists = existing.some((j) => j.toLowerCase() === name.trim().toLowerCase());
   const md = useMemo(
-    () => jobDescription(t, { jobName: name.trim() || t.title, business: data.business, employmentType: cap(type), hours, location, pay, start: "", duties: duties.filter((d) => d.on).map((d) => d.text), essential: t.essential, desirable: t.desirable }),
-    [t, name, data.business, type, hours, location, pay, duties],
+    () => jobDescription(t, { jobName: name.trim() || t.title, business: data.business, employmentType: cap(type), hours, location, pay, payMode, start: "", duties: duties.filter((d) => d.on).map((d) => d.text), essential: t.essential, desirable: t.desirable }),
+    [t, name, data.business, type, hours, location, pay, payMode, duties],
   );
   const create = async (tailor: boolean) => {
     setSaving(true);
@@ -207,17 +213,59 @@ function Editor({ api, data, t, existing, onCreated, onTailor }: { api: Api; dat
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <label className="field">
               Hours
-              <input className="input" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="e.g. Sat and Sun, 6 am to 10 am" />
+              <input className="input" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="Days, times, hours a week" />
             </label>
             <label className="field">
               Location
               <input className="input" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Suburb and state" />
             </label>
           </div>
-          <label className="field">
-            Pay <span className="hint">Leave empty to use the award rate; MeritAI never works out pay.</span>
-            <input className="input" value={pay} onChange={(e) => setPay(e.target.value)} placeholder="Award rate for the level (check the Pay and Conditions Tool)" />
-          </label>
+          {/* Design: NewJobEdit, NewJobPay (hours examples by employment type; a click fills the field). */}
+          <div className="row-wrap" style={{ alignItems: "center", gap: 6, marginTop: -4 }}>
+            <span className="meta" style={{ width: "100%" }}>
+              For the job description: the days and times, about how many hours a week. {EXAMPLES_LABEL[type] ?? "Examples"}:
+            </span>
+            {(HOURS_EXAMPLES[type] ?? []).map((x) => (
+              <button key={x} type="button" className={`chip${hours === x ? " on" : ""}`} aria-pressed={hours === x} onClick={() => setHours(x)}>
+                {x}
+              </button>
+            ))}
+          </div>
+          <fieldset style={{ margin: 0, padding: 0, border: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+            <legend className="field" style={{ padding: 0, marginBottom: 6 }}>
+              Pay in the job description
+              <span className="hint">You choose what it says. MeritAI never works out pay.</span>
+            </legend>
+            <div className="seg" role="radiogroup" aria-label="Pay in the job description" style={{ alignSelf: "flex-start" }}>
+              {PAY_MODES.map((m) => (
+                <button key={m.id} type="button" role="radio" aria-checked={payMode === m.id} className={payMode === m.id ? "on" : ""} onClick={() => setPayMode(m.id)}>
+                  {m.label}
+                </button>
+              ))}
+            </div>
+            {payMode === "award" && <span className="meta">It says: “{payLine(t, "award", "")}”. Check the level and rate in the Pay and Conditions Tool before you advertise.</span>}
+            {payMode === "above" && (
+              <label className="field" style={{ fontWeight: 400 }}>
+                Your hourly rate
+                <input className="input" value={hourly} onChange={(e) => setHourly(e.target.value)} placeholder={type === "casual" ? "e.g. $__ an hour, including casual loading" : "e.g. $__ an hour"} />
+                <span className="hint">Typed by you, copied as written.{type === "casual" ? " Say whether it includes the casual loading." : ""}</span>
+              </label>
+            )}
+            {payMode === "salary" && (
+              <label className="field" style={{ fontWeight: 400 }}>
+                Your salary
+                <input className="input" value={salary} onChange={(e) => setSalary(e.target.value)} placeholder="e.g. $__ a year plus super" />
+                <span className="hint">
+                  Typed by you. Some awards allow an annualised salary only with conditions:{" "}
+                  <a href="https://www.fairwork.gov.au/pay-and-wages/minimum-wages/annualised-salaries" target="_blank" rel="noreferrer noopener">
+                    Fair Work: Annualised wage arrangements
+                  </a>
+                  .
+                </span>
+              </label>
+            )}
+            {payMode === "none" && <span className="meta">No pay line in the job description. You can tell candidates later, for example in the interview or the offer.</span>}
+          </fieldset>
           <div className="field" style={{ gap: 2 }}>
             What you'll do
             {duties.map((d, i) => (

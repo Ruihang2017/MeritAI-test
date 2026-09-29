@@ -1464,6 +1464,27 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   ], JSON.stringify({ nsw: nsw.slice(0, 300), add: add.slice(-200) }));
 }
 
+// ------------------------------------------------------------------ pay and hours in a new job's description (design: NewJobEdit, NewJobPay)
+{
+  const { jobDescription: jd, payLine, HOURS_EXAMPLES, PAY_MODES, JOB_TEMPLATES: T } = await import("../src/business/jobTemplates");
+  const cleaner = T.find((x) => x.id === "cleaner")!;
+  const noAward = T.find((x) => !x.award)!;
+  const base = { jobName: "Weekend cleaner", business: "Test (synthetic)", employmentType: "Casual", hours: "Sat and Sun, 6 am to 10 am", location: "Parramatta NSW", start: "", duties: cleaner.duties.slice(0, 1), essential: cleaner.essential, desirable: [] };
+  const award = jd(cleaner, { ...base, pay: "", payMode: "award" });
+  const above = jd(cleaner, { ...base, pay: "$__ an hour, including casual loading", payMode: "above" });
+  const salaryEmpty = jd(cleaner, { ...base, pay: "", payMode: "salary" });
+  const none = jd(cleaner, { ...base, pay: "ignored", payMode: "none" });
+  record("pay and hours in a new job", [
+    ["four modes, Award rate first", PAY_MODES.map((m) => m.id).join() === "award,above,salary,none"],
+    ["award: the template's award named, no figure", /- Pay: Award rate for the level \(Cleaning Services Award\)/.test(award) && !/\$/.test(award)],
+    ["no likely award: the role and level", payLine(noAward, "award", "") === "Award rate for the role and level"],
+    ["above award and salary: the owner's words as written, a placeholder when empty", /- Pay: \$__ an hour, including casual loading/.test(above) && /- Pay: \[Your salary\]/.test(salaryEmpty)],
+    ["don't show: no pay line, the section is Hours", !/Pay:/.test(none) && /## Hours\n/.test(none) && !/## Hours and pay/.test(none) && /- Hours: Sat and Sun/.test(none)],
+    ["no mode (older callers): the old placeholder", payLine(cleaner, undefined, "") === "[Rate under the award for the level, or your above-award rate]"],
+    ["hours examples for every employment type, no pay figures", ["full-time", "part-time", "casual", "fixed-term"].every((k) => (HOURS_EXAMPLES[k] ?? []).length >= 2) && !/\$/.test(JSON.stringify(HOURS_EXAMPLES))],
+  ], JSON.stringify({ award: award.slice(-300) }));
+}
+
 try {
   rmSync(TMP, { recursive: true, force: true });
 } catch {
