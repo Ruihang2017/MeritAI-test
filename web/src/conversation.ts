@@ -50,6 +50,9 @@ const RECEIPT: Partial<Record<ConfirmRequest["kind"], RegExp>> = {
   profile: /^profile saved/,
   setup: /^profile saved/,
   memory: /^memory saved/,
+  // The Hiring actions' saves (src/screening/hiringTools.ts); missing until 2026-09-29, so a "yes" showed "no receipt".
+  hiring: /^hiring: (\d+ decision\(s\) saved for |.+ hired for |.+ updated$|JD saved for |job .+ created$)/,
+  criteria: /^criteria confirmed for /,
 };
 /** Receipt value for a "yes" whose save was never reported. */
 export const UNREPORTED = "\u0000unreported";

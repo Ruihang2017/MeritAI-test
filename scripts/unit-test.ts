@@ -1485,6 +1485,60 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   ], JSON.stringify({ award: award.slice(-300) }));
 }
 
+// ------------------------------------------------------------------ the job description on the Hiring page: read, edit, undo, replace; criteria made from another version; receipts for Hiring actions
+{
+  const { readJd, writeJd, undoJd, replaceJdFile, findJd, cleanMammoth, PREVIOUS } = await import("../src/business/jobDescription");
+  const { applyEvent, addConfirm, setConfirm } = await import("../web/src/conversation");
+  const { walk } = await import("../src/files/folders");
+  const f = ensureFolders(join(TMP, "jd-files"));
+  const app = new AssistantApp({ userId: "unit-jd", memoryRoot: join(TMP, "jd-mem"), filesRoot: f.root, format: "markdown", engine: "fake", ui: { confirm: async () => true } });
+  await app.start();
+  await app.createJobFromText("Weekend cleaner", 2, "# Weekend cleaner\n\n## What you'll do\n\n- Vacuum and mop\n- **Empty** bins\n\n## Hours and pay\n\n- Hours: Sat and Sun, 6 am to 10 am");
+  const first = await app.jobJd("Weekend cleaner");
+  const saved = await app.saveJobJd("Weekend cleaner", first!.markdown.replace("- Vacuum and mop", "- Vacuum and mop\n- Own transport"));
+  const dir = join(f.jobs, "Weekend cleaner");
+  const kept = readdirSync(join(dir, PREVIOUS));
+  const undone = await app.undoJobJd("Weekend cleaner");
+  const redone = await app.undoJobJd("Weekend cleaner");
+  // A PDF JD replaced by an edit: the Word file takes its place, the PDF is kept.
+  replaceJdFile(f, "Weekend cleaner", "old.txt", Buffer.from("Weekend cleaner\n\nClean offices."));
+  const asTxt = findJd(f, "Weekend cleaner");
+  await writeJd(f, "Weekend cleaner", "# Weekend cleaner\n\nClean offices and kitchens.");
+  const afterTxt = findJd(f, "Weekend cleaner");
+  // Criteria made from one version, then the JD changes: stale until the owner keeps them.
+  const cat = (app as unknown as { a: { catalog(): import("../src/screening/catalog").Catalog } }).a.catalog();
+  const v = await readJd(f, "Weekend cleaner");
+  const r = cat.saveRubric("Weekend cleaner", "Cleaner", [{ id: "c1", text: "Weekend availability", type: "essential" } as never], v!.hash);
+  cat.confirmRubric("Weekend cleaner", r.version);
+  const fresh = await app.jobJd("Weekend cleaner");
+  await app.saveJobJd("Weekend cleaner", "# Weekend cleaner\n\nClean offices, kitchens and washrooms.");
+  const stale = await app.jobJd("Weekend cleaner");
+  await app.keepCriteria("Weekend cleaner");
+  const kept2 = await app.jobJd("Weekend cleaner");
+  // Receipts: a "yes" to a Hiring question gets the tool's saved line.
+  const turn0 = { id: "t", at: new Date(), user: { text: "", attachments: [] }, steps: [], blocks: [] } as never;
+  const asked = setConfirm(addConfirm(turn0, "c", { kind: "hiring", title: "Save this job description into Office admin?", items: [] }), "c", "yes");
+  const receipt = applyEvent(asked, { type: "tool_activity", summary: "hiring: JD saved for Office admin" });
+  const confirmBlock = (receipt as { blocks: { kind: string; receipt?: string }[] }).blocks.find((b) => b.kind === "confirm");
+  const hires = ["hiring: 2 decision(s) saved for Team leader", "hiring: Hannah Cole hired for Team leader", "hiring: Team leader updated", "hiring: job Carpenter created"].every((s) => {
+    const t = applyEvent(setConfirm(addConfirm(turn0, "c", { kind: "hiring", title: "x", items: [] }), "c", "yes"), { type: "tool_activity", summary: s });
+    return (t as { blocks: { kind: string; receipt?: string }[] }).blocks.find((b) => b.kind === "confirm")?.receipt === s;
+  });
+  const notSaved = applyEvent(setConfirm(addConfirm(turn0, "c", { kind: "hiring", title: "x", items: [] }), "c", "yes"), { type: "tool_activity", summary: "hiring: not saved" });
+  record("the job description on the Hiring page", [
+    ["read as markdown with headings, bullets and bold", !!first && /## What you'll do/.test(first.markdown) && /- Vacuum and mop/.test(first.markdown) && /\*\*Empty\*\* bins/.test(first.markdown) && !/\\-/.test(first.markdown) && first.format === "docx" && !first.canUndo],
+    ["mammoth's escapes and __bold__ cleaned", cleanMammoth("Full\\-time \\[Days\\] __Pay__") === "Full-time [Days] **Pay**"],
+    ["a save keeps the name, the old version goes to .previous, Undo possible", saved.file === "Weekend cleaner JD.docx" && /Own transport/.test(saved.markdown) && kept.length === 1 && kept[0].endsWith(" Weekend cleaner JD.docx") && saved.canUndo],
+    ["Undo brings it back; Undo again redoes", !/Own transport/.test(undone.markdown) && /Own transport/.test(redone.markdown)],
+    ["another format replaced by an edit becomes Word; one JD file at a time", asTxt === "Weekend cleaner JD.txt" && afterTxt === "Weekend cleaner JD.docx" && walk(dir).files.filter((x) => !x.rel.includes("/") && /JD/.test(x.rel)).length === 1],
+    ["criteria from this version: not stale; after an edit: stale, with when they were confirmed", fresh!.criteriaStale === false && stale!.criteriaStale === true && !!stale!.criteriaConfirmedAt],
+    ["They still fit: not stale any more", kept2!.criteriaStale === false],
+    ["a JD save's receipt reaches its question (was: no receipt)", confirmBlock?.receipt === "hiring: JD saved for Office admin"],
+    ["decisions, hires, job changes and new jobs too; 'not saved' is no receipt", hires && (notSaved as { blocks: { kind: string; receipt?: string }[] }).blocks.find((b) => b.kind === "confirm")?.receipt === undefined],
+  ], JSON.stringify({ kept, asTxt, afterTxt, stale: stale?.criteriaStale }));
+  await app.stop();
+}
+
 try {
   rmSync(TMP, { recursive: true, force: true });
 } catch {

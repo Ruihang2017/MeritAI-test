@@ -39,6 +39,7 @@ import { FakeLiveSession } from "../voice/fakeLive";
 import { usdFor, VoiceUsage, type VoiceUsageSummary } from "../voice/usage";
 import { FeedbackLog, RATING_REASONS, feedbackEmail, writeFeedbackFile } from "./feedback";
 import { createJobWithJd, linkHire } from "../business/hiring";
+import { readJd, replaceJdFile, undoJd, writeJd, type JdView } from "../business/jobDescription";
 import { INDUSTRIES, industriesFor, JOB_TEMPLATES, type IndustryId, type JobTemplate } from "../business/jobTemplates";
 import { turnKey, type ChangeSink, type EntityChange } from "../changes";
 import { EMAIL_RE, buildEml, readEml } from "../files/email";
@@ -1046,6 +1047,57 @@ export class AssistantApp {
   async createJobFromText(job: string, openings: number, jd: string): Promise<{ job: string }> {
     const r = await createJobWithJd(this.folders(), this.a.catalog(), job, openings, jd);
     return { job: r.job };
+  }
+
+  /**
+   * The job description card (design: HiringJD, HiringJDOpen, HiringJDEdit, HiringJDChanged): the JD for the page,
+   * and whether the latest criteria came from another version of it (`criteriaStale`, with when they were confirmed).
+   */
+  async jobJd(job: string): Promise<(JdView & { path: string; criteriaStale: boolean; criteriaConfirmedAt: string | null }) | null> {
+    const folders = this.folders();
+    const v = await readJd(folders, job);
+    if (!v) return null;
+    const rubric = this.a.catalog().latestRubric(job);
+    // "demo": criteria seeded by a sample business before 0.2.2, with no record of their JD: not called out of date.
+    const stale = !!rubric && rubric.jdHash !== "demo" && rubric.jdHash !== v.hash;
+    return { ...v, path: join(jobDir(folders, job), v.file), criteriaStale: stale, criteriaConfirmedAt: rubric?.confirmedAt ?? null };
+  }
+
+  /** The owner's own edit of the job description, saved as Word; the previous version is kept (Undo). */
+  async saveJobJd(job: string, markdown: string): Promise<NonNullable<Awaited<ReturnType<AssistantApp["jobJd"]>>>> {
+    this.openJob(job);
+    await writeJd(this.folders(), job, markdown);
+    this.a.catalog().notify({ ref: { kind: "job", job }, action: "updated", summary: `${job}: job description saved` });
+    return (await this.jobJd(job))!;
+  }
+
+  /** Brings the previous version of the job description back (the current one is kept, so Undo again redoes). */
+  async undoJobJd(job: string): Promise<NonNullable<Awaited<ReturnType<AssistantApp["jobJd"]>>>> {
+    this.openJob(job);
+    undoJd(this.folders(), job);
+    this.a.catalog().notify({ ref: { kind: "job", job }, action: "updated", summary: `${job}: job description restored` });
+    return (await this.jobJd(job))!;
+  }
+
+  /** Replaces the job description with an uploaded file (the current one is kept). */
+  async replaceJobJd(job: string, name: string, data: Buffer): Promise<NonNullable<Awaited<ReturnType<AssistantApp["jobJd"]>>>> {
+    this.openJob(job);
+    replaceJdFile(this.folders(), job, name, data);
+    this.a.catalog().notify({ ref: { kind: "job", job }, action: "updated", summary: `${job}: job description replaced` });
+    return (await this.jobJd(job))!;
+  }
+
+  /** "They still fit": the latest criteria now count as made from the current job description. */
+  async keepCriteria(job: string): Promise<void> {
+    const v = await readJd(this.folders(), job);
+    const r = this.a.catalog().latestRubric(job);
+    if (!v || !r) throw new Error("no job description or criteria to keep");
+    this.a.catalog().setRubricJdHash(job, r.version, v.hash);
+  }
+
+  /** A closed job is read-only (Hiring decision, 2026-09-27). */
+  private openJob(job: string): void {
+    if (this.a.catalog().jobSettings(job).closedAt !== null) throw new Error(`"${job}" is closed: reopen it to change it`);
   }
 
   /** Hires whose employee is still in the register (deleting the employee undoes the hire). */

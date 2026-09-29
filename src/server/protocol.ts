@@ -56,6 +56,14 @@ export interface Methods {
   jobTemplates: { params: void; result: { industries: { id: IndustryId; name: string }[]; templates: JobTemplate[]; suggested: IndustryId[]; business: string | null; location: string | null } };
   /** Creates the job with the job description built from a template (markdown, saved as "<job> JD.docx"). */
   createJobFromText: { params: { job: string; openings: number; jd: string }; result: { job: string } };
+  /** The job description card (design: HiringJD, HiringJDOpen, HiringJDEdit, HiringJDChanged). */
+  jobJd: { params: { job: string }; result: JobJd | null };
+  /** The owner's own edit (markdown), saved as Word; the previous version is kept. */
+  saveJobJd: { params: { job: string; markdown: string }; result: JobJd };
+  undoJobJd: { params: { job: string }; result: JobJd };
+  replaceJobJd: { params: { job: string; file: UploadFile }; result: JobJd };
+  /** "They still fit": the criteria count as made from the current job description. */
+  keepCriteria: { params: { job: string }; result: void };
   /** Every screened candidate without a decision → Not this time. */
   decideRest: { params: { job: string }; result: { marked: number } };
   /** How many people the job is for (1 to 99). */
@@ -216,6 +224,19 @@ export type StaffRow = StaffOverviewRow;
 export type ClientMessage ={ [M in Method]: { id: number; method: M; params: Methods[M]["params"] } }[Method];
 
 /** The desktop app's updates (src/desktop/updates.ts); the browser version has none (`supported: false`). */
+export interface JobJd {
+  file: string;
+  path: string;
+  format: "docx" | "pdf" | "txt" | "md";
+  markdown: string;
+  hash: string;
+  updatedAt: string;
+  canUndo: boolean;
+  /** The latest criteria came from another version of the job description. */
+  criteriaStale: boolean;
+  criteriaConfirmedAt: string | null;
+}
+
 export interface UpdateState {
   supported: boolean;
   /** This app's version. */

@@ -5,6 +5,7 @@
 // runs with its clock on that day (FX_TODAY, src/clock.ts), so it reads like the design on any day.
 // Nothing here calls the model: screening results are written straight into the catalog.
 import { copyFileSync, mkdirSync, utimesSync, writeFileSync } from "node:fs";
+import { readJd } from "../../src/business/jobDescription";
 import { join } from "node:path";
 import { ensureFolders, type Folders } from "../../src/files/folders";
 import { markdownToDocx } from "../../src/files/docx";
@@ -15,6 +16,12 @@ import { ingestJob, screenJob } from "../../src/screening/pipeline";
 import { saveReports } from "../../src/screening/report";
 import { UserMemory } from "../../src/memory/store";
 import type { Engine } from "../../src/engine/types";
+
+
+/** The criteria came from this JD (as screening records it), so the Hiring page doesn't call them out of date. */
+async function jdHash(f: Folders, job: string): Promise<string> {
+  return (await readJd(f, job))?.hash ?? "demo";
+}
 
 export const DEMO_TODAY = "2026-09-26";
 const SYNTHETIC = "Synthetic demo data for MeritAI testing: not a real business or person.";
@@ -273,7 +280,7 @@ async function seedHiring(f: Folders): Promise<void> {
   copyFileSync(join(tl, "Daniel Ortiz resume.docx"), join(tl, "Daniel Ortiz resume (1).docx"));
   touch(join(tl, "Daniel Ortiz resume (1).docx"), at(2026, 9, 23)); // a later copy: the duplicate
   await ingestJob(cat, f, "Team leader");
-  const r = cat.saveRubric("Team leader", "Team leader", TEAM_LEADER, "demo");
+  const r = cat.saveRubric("Team leader", "Team leader", TEAM_LEADER, await jdHash(f, "Team leader"));
   cat.confirmRubric("Team leader", r.version);
   const byFile = new Map(cat.applications("Team leader").map((a) => [a.sourceRef, a.hash]));
   for (const c of CANDIDATES) {
@@ -309,7 +316,7 @@ async function seedHiring(f: Folders): Promise<void> {
   copyFileSync(join(wc, "Aroha Ngata CV.pdf"), join(wc, "Aroha Ngata CV (1).pdf"));
   touch(join(wc, "Aroha Ngata CV (1).pdf"), at(2026, 9, 25, 10, 5));
   await ingestJob(cat, f, "Weekend cleaner");
-  cat.saveRubric("Weekend cleaner", "Weekend cleaner", WEEKEND_CLEANER, "demo");
+  cat.saveRubric("Weekend cleaner", "Weekend cleaner", WEEKEND_CLEANER, await jdHash(f, "Weekend cleaner"));
   cat.setOpenings("Weekend cleaner", 3);
 
   // Office admin: no job description yet.
@@ -343,7 +350,7 @@ async function seedHiring(f: Folders): Promise<void> {
   ];
   for (const [name, summary] of ccPeople) await writeFile(cc, `${name} resume.docx`, resume(name, "Application: casual cleaner", [summary + "."]), at(2026, 8, 24));
   await ingestJob(cat, f, "Casual cleaner");
-  const ccRubric = cat.saveRubric("Casual cleaner", "Casual cleaner", ccCriteria, "demo");
+  const ccRubric = cat.saveRubric("Casual cleaner", "Casual cleaner", ccCriteria, await jdHash(f, "Casual cleaner"));
   cat.confirmRubric("Casual cleaner", ccRubric.version);
   const ccFile = new Map(cat.applications("Casual cleaner").map((a) => [a.sourceRef, a.hash]));
   for (const [name, summary, status] of ccPeople) {

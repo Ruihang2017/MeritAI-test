@@ -1,10 +1,9 @@
-import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ClientTool, Confirm, ToolOutcome } from "../engine/types";
 import { checkJobId, jobDir, listJobs, type Folders } from "../files/folders";
-import { markdownToDocx } from "../files/docx";
 import type { Register } from "../business/register";
 import { candidates, createJobWithJd, findCandidate, hireCount, linkHire } from "../business/hiring";
+import { writeJd } from "../business/jobDescription";
 import type { Catalog, Decision } from "./catalog";
 import { ingestJob, JD_NAME } from "./pipeline";
 import { walk } from "../files/folders";
@@ -173,13 +172,17 @@ export function hiringTools(opts: { folders: () => Folders; catalog: () => Catal
         const dir = jobDir(opts.folders(), job);
         const current = walk(dir).files.find((x) => !x.rel.includes("/") && JD_NAME.test(x.rel));
         if (current && !a.replace) return fail(`"${job}" already has a job description file (${current.rel}). If the owner wants the new version to replace it, call again with replace: true; otherwise save it to the Outbox with save_document.`);
-        if (current && !/\.docx$/i.test(current.rel)) return fail(`"${job}"'s job description is ${current.rel}, not a Word file. Save the new version to the Outbox with save_document and tell the owner to swap the file in the job's folder.`);
-        const name = current ? current.rel : `${job} JD.docx`;
+        // A Word JD keeps its name; another format (PDF, text) becomes "<job> JD.docx". Either way the replaced version is kept (Undo on the Hiring page).
+        const name = current && /\.docx$/i.test(current.rel) ? current.rel : `${job} JD.docx`;
         if (!(await confirm({ kind: "hiring", title: current ? `Replace the job description of ${job}?` : `Save this job description into ${job}?`, items: [current ? `${name} is replaced by the new version` : `Saved as "${name}" in the job's folder`, `${jd.split("\n")[0].replace(/^#+\s*/, "").slice(0, 80)}`], about: { kind: "job", job } }))) {
           return { success: true, text: "The owner did not confirm; nothing was saved.", display: "hiring: not saved" };
         }
-        const p = join(dir, name);
-        writeFileSync(p, await markdownToDocx(jd, `${job} JD`));
+        let p: string;
+        try {
+          p = join(dir, await writeJd(opts.folders(), job, jd));
+        } catch (e) {
+          return fail(`Not saved: ${(e as Error).message}.`);
+        }
         opts.catalog().notify({ ref: { kind: "job", job }, action: "updated", summary: `${job}: job description saved` });
         const drafted = opts.catalog().latestRubric(job);
         return { success: true, text: `Saved "${name}" into the job.${drafted ? " Screening criteria were drafted from the earlier version: offer to draft them again from this one (propose_criteria)." : " Next: draft the screening criteria from it (propose_criteria) when the owner wants to screen."}`, display: `hiring: JD saved for ${job}`, files: [p] };

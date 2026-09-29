@@ -246,6 +246,24 @@ export class UiSession {
       const jd = str(p?.jd, "jd", 60_000);
       return this.exclusive("Creating the job", () => this.app.createJobFromText(job, int(p?.openings), jd));
     },
+    jobJd: async (p) => this.app.jobJd(this.jobName(p?.job)),
+    saveJobJd: async (p) => {
+      const job = this.jobName(p?.job);
+      const md = str(p?.markdown, "markdown", 40_000);
+      return this.exclusive(`Saving the job description of "${job}"`, () => this.app.saveJobJd(job, md));
+    },
+    undoJobJd: async (p) => {
+      const job = this.jobName(p?.job);
+      return this.exclusive(`Restoring the job description of "${job}"`, () => this.app.undoJobJd(job));
+    },
+    replaceJobJd: async (p) => {
+      const job = this.jobName(p?.job);
+      const x = obj(p?.file, "file");
+      const name = str(x.name, "name", 300);
+      const data = Buffer.from(str(x.base64, "base64", 70_000_000), "base64");
+      return this.exclusive(`Replacing the job description of "${job}"`, () => this.app.replaceJobJd(job, name, data));
+    },
+    keepCriteria: async (p) => this.app.keepCriteria(this.jobName(p?.job)),
     draftCriteria: async (p) => {
       const job = this.jobName(p?.job);
       return this.exclusive(`Drafting criteria for "${job}"`, () => this.app.draftCriteria(job));

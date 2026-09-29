@@ -279,6 +279,12 @@ export class Catalog {
     this.onChange({ ref: { kind: "job", job }, action: "criteria-confirmed", summary: `${job}: criteria confirmed` });
   }
 
+  /** The owner says the criteria still fit a changed job description ("They still fit"): they now match it. */
+  setRubricJdHash(job: string, version: number, jdHash: string): void {
+    this.db.prepare("UPDATE rubrics SET jd_hash = ? WHERE job = ? AND version = ?").run(jdHash, job, version);
+    this.onChange({ ref: { kind: "job", job }, action: "updated", summary: `${job}: criteria kept for the new job description` });
+  }
+
   // ------------------------------------------------------------ evaluations
 
   getEvaluation(hash: string, job: string, version: number): Evaluation | undefined {

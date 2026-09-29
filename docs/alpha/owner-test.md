@@ -218,6 +218,9 @@
 | S5 | "Write a welcome email for Sam, who starts on Monday 13 October." | 2026 年 10 月 13 日是**星期二**：回答要么写对成 Tuesday，要么照抄了 Monday，这时回答下面出现黄色提醒 "This reply has a weekday that doesn't match its date…"（中文界面是"这条回复里的星期和日期对不上…"） |
 | S6 | 名字 › Settings › About and updates | 版本 MeritAI 0.2.2 |
 | S7 | Hiring › New job › Cleaner 模板，雇佣类型选 Casual | 工作时间下面有一行说明和 3 个示例，点一个就填进输入框；薪酬是四选一（Award 工资 / 高于 Award / 年薪 / 不写），默认 Award 工资，右边职位描述写 "Award rate for the level (Cleaning Services Award)"，没有数字；选"高于 Award"填一个时薪，再切到"年薪"，年薪那格是空的；选"不写"，右边小标题变成 "Hours"，没有 Pay 这一行 |
+| S8 | Hiring › Team leader | 步骤条下面有"职位描述"卡片，默认收起（标准已确认），Show all 展开；点 **Edit**，在列表里加一条，**Save**：绿色回执 "Saved…" 和 Undo，下面黄色提醒"标准确认后职位描述改过"；点 Undo，新加的那条消失，提醒也消失；再改一次，点 **They still fit**，提醒消失 |
+| S9 | Hiring › Weekend cleaner（标准待确认） | 职位描述卡片默认展开；这个 JD 是 PDF，Edit 时提示保存后会变成 Word 文件、PDF 保留为上一版 |
+| S10 | 在对话里让 MeritAI 保存或修改一个职位的 JD，点"是" | 确认卡片下面是绿色回执（以前显示"未收到保存回执"）；记录录用决定、录用、新建职位也一样 |
 
 ## I 清理
 

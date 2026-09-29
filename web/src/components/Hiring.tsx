@@ -7,6 +7,7 @@ import { Icon } from "./Icon";
 import { fromJob, type Ask, type Asking } from "../ask";
 import { markLabel, marks, useLive } from "../live";
 import { NewJobDialog } from "./NewJob";
+import { JobDescriptionCard } from "./JobDescription";
 
 // The Hiring page as on the design canvas (Hiring*, artboards): jobs on the left, the selected
 // job's steps, criteria, applications and ranked candidates on the right.
@@ -280,6 +281,7 @@ export function HiringPage({
             onDraft={draft}
             onReport={report}
             onAsk={(t, draft) => onAsk(job.job, t, draft)}
+            onRefresh={() => void refresh()}
             asking={asking}
             reviewing={reviewing}
             onReview={setReviewing}
@@ -399,6 +401,8 @@ function JobPane(p: {
   onDuplicate: () => void;
   /** Resumes chosen or dropped for this job (added to its folder, then screened when the owner says). */
   onAddApps: (files: File[]) => void;
+  /** Reload the job list and this job (after the job description card saved something). */
+  onRefresh: () => void;
 }) {
   const { job, result: r } = p;
   const { recent } = useLive();
@@ -571,6 +575,11 @@ function JobPane(p: {
               <b>{p.busy}…</b> {p.progress ?? ""}
             </span>
           </div>
+        )}
+
+        {/* The job description (HiringJD, HiringJDOpen, HiringJDEdit, HiringJDChanged): open until the criteria are confirmed. */}
+        {job.jd && (
+          <JobDescriptionCard api={p.api} job={job.job} closed={false} defaultOpen={!confirmed} version={r} onReviewCriteria={p.onDraft} onAsk={p.onAsk} onChanged={p.onRefresh} />
         )}
 
         {/* No job description yet (HiringJobs). */}
@@ -1164,6 +1173,7 @@ function ClosedPane({ p, sub, hires, steps }: { p: Parameters<typeof JobPane>[0]
             </li>
           ))}
         </ol>
+        {p.job.jd && <JobDescriptionCard api={p.api} job={p.job.job} closed defaultOpen={false} version={p.result} onReviewCriteria={p.onDraft} onAsk={p.onAsk} onChanged={p.onRefresh} />}
         {p.error && (
           <div className="banner bad" role="alert">
             <span className="grow">{p.error}</span>
