@@ -301,7 +301,7 @@ export function startDateHolidayNote(date: string | null | undefined, states: st
     const names = [...byName].map(([n, s]) => `${n} (${s.join(", ")})`).join("; ");
     lines.push(
       `Start date ${date} is a public holiday: ${names}. Say so near the top of the answer, without telling the owner to move it. ` +
-        "The start date can stay. How a first day on a public holiday is paid (worked or not) depends on the NES, the award and the contract: say to check with the Fair Work Infoline (13 13 94), don't state it. " +
+        "The start date can stay. If they don't work that day: under the NES an employee (except a casual) who normally works on the day a public holiday falls is paid their base pay rate for the ordinary hours they would have worked; someone who doesn't normally work that day isn't paid for it. For a first day that is a public holiday, say to confirm the details with the Fair Work Infoline (13 13 94); don't state an amount. " +
         "If the owner wants a different first day and the date is already agreed (an offer or contract), changing it needs the employee's agreement. " +
         "If they do start that day: the employer can only ask them to work a public holiday if the request is reasonable, the employee can refuse on reasonable grounds, and work that day is paid at the award's public holiday rate (check it in the Pay and Conditions Tool; don't state a rate). " +
         `Sources: ${src.title} ${src.url}; ${HOLIDAY_SOURCES.notWorking.title} ${HOLIDAY_SOURCES.notWorking.url}.`,
