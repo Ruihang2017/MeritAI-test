@@ -2,7 +2,7 @@
 // contracts and onboarding against the real model. Synthetic data only.
 import "./testHome"; // tests use codex_home_test/, not the user's codex_home/
 import { join } from "node:path";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import type { Engine } from "../src/engine/types";
 import { createAssistant } from "../src/assistant";
@@ -42,7 +42,7 @@ const tasks = (xs: { task: string }[]) => xs.map((x) => x.task).join(" | ");
 
 // ------------------------------------------------------------ live
 const TMP = mkdtempSync(join(tmpdir(), "fx-hiring-test-"));
-const { engine, mem } = createAssistant({ userId: "hiring-test", memoryRoot: TMP, confirm: async () => false, serviceTier: "priority", clientVersion: "hiring-test" });
+const { engine, mem, catalog } = createAssistant({ userId: "hiring-test", memoryRoot: TMP, confirm: async () => false, serviceTier: "priority", clientVersion: "hiring-test" });
 seedBusiness(mem); // Wattle Lane Cleaning, NSW, 24 staff (not a small business employer), signer Alex Morgan, lawyer Jordan Lee
 await engine.start();
 
@@ -101,8 +101,39 @@ record("onboarding plan includes compliance items", [
   ["FWIS + TFN + super", /Fair Work Information Statement|FWIS/.test(r.reply) && /TFN/.test(r.reply) && /super/i.test(r.reply)],
 ], `${r.activity.join(" | ")} || ${r.reply.slice(0, 400)}`);
 
+// Candidate emails (Hiring › Draft the emails, the page's own request): one draft per candidate,
+// linked to them with the right kind, so Review and send can list them. In a temporary workspace.
+{
+  const { ensureFolders } = await import("../src/files/folders");
+  const { ingestJob } = await import("../src/screening/pipeline");
+  const { jobEmails } = await import("../src/email/outbox");
+  const f = ensureFolders(join(TMP, "files"));
+  mem.updateSettings({ filesRoot: f.root });
+  const job = join(f.jobs, "Team leader");
+  mkdirSync(job, { recursive: true });
+  writeFileSync(join(job, "Team leader JD.md"), "# Team leader\n\n(Synthetic test data.)\n\nLeads a cleaning crew across office sites; early starts; driver licence.");
+  for (const [name, email] of [["Ana Park", "ana.park@example.com"], ["Ben Cho", "ben.cho@example.com"], ["Cara Diaz", "cara.diaz@example.com"]])
+    writeFileSync(join(job, `${name} resume.md`), `# ${name}\n\nEmail: ${email}\n\nCleaning supervisor, 3 years. (Synthetic test data.)`);
+  await ingestJob(catalog(), f, "Team leader");
+  r = await turn(engine, `Draft the candidate emails for the "Team leader" role, one draft per candidate, linked to them: interview invitations for Ana Park; respectful "not this time" emails for Ben Cho, Cara Diaz.`);
+  const items = jobEmails(f, catalog(), "Team leader");
+  const kind = (n: string) => items.find((e) => e.candidate?.name === n)?.kind;
+  const drafts = readdirSync(f.outbox).filter((x) => x.endsWith(".eml"));
+  record(`candidate emails: linked drafts (${(r.ms / 1000).toFixed(0)}s)`, [
+    ["one draft per candidate, all linked", items.length === 3 && drafts.length === 3],
+    ["the invitation and the “not this time”s", kind("Ana Park") === "invite" && kind("Ben Cho") === "not" && kind("Cara Diaz") === "not"],
+    ["each address comes from the application", items.every((e) => e.options.length === 1 && e.options[0].address.startsWith(e.candidate!.name.split(" ")[0].toLowerCase()))],
+    ["doesn't say it sent them", !/\b(I('ve| have)?|were|been) sent\b/i.test(r.reply)],
+  ], `${r.activity.join(" | ")} || ${JSON.stringify(items.map((e) => [e.candidate?.name, e.kind, e.options.map((o) => o.address)]))} || drafts=${drafts.join("; ")} || ${r.reply.slice(0, 400)}`);
+}
+
 await engine.close();
-rmSync(TMP, { recursive: true, force: true });
+catalog().close();
+try {
+  rmSync(TMP, { recursive: true, force: true });
+} catch {
+  /* SQLite files may still be open on Windows; the OS temp cleaner removes them */
+}
 
 console.log();
 let fail = 0;
