@@ -217,6 +217,7 @@
 | S4 | 同样问 Marco Silva | 最早日期是 **2027-09-06** |
 | S5 | "Write a welcome email for Sam, who starts on Monday 13 October." | 2026 年 10 月 13 日是**星期二**：回答要么写对成 Tuesday，要么照抄了 Monday，这时回答下面出现黄色提醒 "This reply has a weekday that doesn't match its date…"（中文界面是"这条回复里的星期和日期对不上…"） |
 | S6 | 名字 › Settings › About and updates | 版本 MeritAI 0.2.2 |
+| S7 | Hiring › New job › Cleaner 模板，雇佣类型选 Casual | 工作时间下面有一行说明和 3 个示例，点一个就填进输入框；薪酬是四选一（Award 工资 / 高于 Award / 年薪 / 不写），默认 Award 工资，右边职位描述写 "Award rate for the level (Cleaning Services Award)"，没有数字；选"高于 Award"填一个时薪，再切到"年薪"，年薪那格是空的；选"不写"，右边小标题变成 "Hours"，没有 Pay 这一行 |
 
 ## I 清理
 
