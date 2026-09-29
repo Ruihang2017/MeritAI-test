@@ -148,11 +148,11 @@
 | L1 | Settings › Voice › Usage | 今天 / 本月 / 累计的估算美元和分钟（ui:fake 下显示"演示引擎不计入"） |
 | L2 | Monthly limit 填 1，Save limit | 显示"US$x of US$1.00 used this month"；达到上限后语音无法开始，通话中会自动停 |
 
-## M 邮件草稿（MeritAI 不发邮件）
+## M 邮件草稿（没连 Gmail 时）
 
 | # | 做什么 | 预期 |
 |---|---|---|
-| M1 | 说 "Email Priya the resignation acknowledgement, priya.nair@example.com" | 回答里有邮件卡片：收件人、主题、附件（那封确认信）、正文开头；**Open in email app**；旁边"Send from MeritAI · Coming soon"是灰的 |
+| M1 | 说 "Email Priya the resignation acknowledgement, priya.nair@example.com" | 回答里有邮件卡片：收件人、主题、附件（那封确认信）、正文开头；**Open in email app**；右边"Connect Gmail to send from MeritAI"（连上 Gmail 后是 **Send from Gmail**，见 S13–S18） |
 | M2 | 点 Open in email app | Outlook（或默认邮件应用）打开一封**新邮件草稿**，收件人、主题、附件都在；你自己点发送（这一步我没法验证，因为会在你电脑上打开 Outlook） |
 | M3 | Files › Outbox | 有一个 .eml 文件 |
 
@@ -171,7 +171,7 @@
 
 | # | 做什么 | 预期 |
 |---|---|---|
-| O1 | 左侧导航 **Connections**（标着 Soon） | 邮件和日历、招聘网站、发薪/任务/备份三组，每张卡片都是"Coming soon"；最下面是"套餐与更新" |
+| O1 | 左侧导航 **Connections**（标着 Soon） | 第一张是 **Gmail**（可以连接，见 S13）；其余邮件和日历、招聘网站、发薪/任务/备份都是"Coming soon"；最下面是"套餐与更新" |
 | O2 | 点几个 **I want this**，再 Send feedback | 反馈文件里有 `wantedConnections` |
 | O3 | Hiring › 某职位 › **Advertise** | "Write the job ad"可用；Post to SEEK / LinkedIn Jobs / Indeed 是灰的"Coming soon" |
 | O4 | Settings › About and updates | 最上面是版本和更新状态；"Plan"一行说明订阅制、在线备份等即将推出 |
@@ -223,6 +223,19 @@
 | S10 | 在对话里让 MeritAI 保存或修改一个职位的 JD，点"是" | 确认卡片下面是绿色回执（以前显示"未收到保存回执"）；记录录用决定、录用、新建职位也一样 |
 | S11 | 在一个没有申请的职位（比如新建的 Carpenter）里 | JD 卡片下面有蓝色虚线框"还没有申请"，点"选择文件"加两份简历：框消失，显示 2 份申请；把简历文件直接拖到职位页上也能加；没有申请时确认标准的按钮是"是，使用这些标准"，点了只确认、不筛选 |
 | S12 | 在右栏对话里发几份简历，说"加到 Carpenter" | 确认卡片"Add N applications to Carpenter?"，点"是"后绿色回执，职位里多了这些申请，Inbox 里没有了；MeritAI 不再叫你自己挪文件 |
+
+### 从 Gmail 发邮件（S13–S17）
+
+先重新开一个示例企业：示例简历现在带虚构的 @example.com 邮箱，旧的示例企业里没有（删掉 `C:\Users\<你>\MeritAI (sample)`，再"Start with the sample business"）。测试模式默认开着，所有邮件都会发到你自己的 Gmail。
+
+| # | 做什么 | 预期 |
+|---|---|---|
+| S13 | Connections › Gmail › **Connect Gmail** | 浏览器打开 Google 登录页；选你的 Gmail；出现"Google hasn't verified this app"时点 Advanced › Go to MeritAI-Test；勾上"Send email on your behalf"，点 Continue；浏览器显示"MeritAI is connected to Gmail"；回到 MeritAI，卡片显示"Sending as <你的地址>"，测试模式是开的 |
+| S14 | Hiring › Team leader › Mark the rest "Not this time" › Next steps › **Draft the emails** | 右栏里 MeritAI 为每位候选人起草一封（2 封面试邀请、11 封暂不考虑），回答下面是一张"13 email drafts"卡片；Next steps 第 2 步变成"13 drafts ready" 和 **Review and send** |
+| S15 | 点 **Review and send** | 右边面板按类型列出草稿，每封有勾、地址、主题；Kenji 有两个地址要你选，Lucy 没有地址要你填（选/填之前不能勾）；点开一封能看到全文，**Edit** 改一个字 Save；底部"12 of 13 selected" |
+| S16 | 选好 Kenji 的地址，点 **Send 12 emails**，马上点 **Undo** | 底部黑条"Sending 12 emails in 10 s"，Undo 后变成"Not sent"，你的 Gmail 没收到任何邮件 |
+| S17 | 再点 Review and send › Send › 等 10 秒（或 Send now） | "12 emails sent"；你的 Gmail 收件箱收到 12 封，主题开头"[Test → xxx@example.com]"，"已发送"里也有；表格多了 Email 列，显示"Emailed 26 Sep"；点 Lucy 打开候选人面板，填一个地址，**Send from Gmail**，同样收到 |
+| S18 | Connections › Gmail › **Disconnect** | 卡片回到"Not connected"；Google 账户的"第三方连接"里 MeritAI-Test 也没了（myaccount.google.com/permissions） |
 
 ## I 清理
 

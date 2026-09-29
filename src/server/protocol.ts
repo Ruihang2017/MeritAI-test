@@ -17,6 +17,11 @@ import type { VoiceKeyStatus } from "../voice/keyStore";
 import type { EntityChange } from "../changes";
 import type { VoiceUsageSummary } from "../voice/usage";
 import type { IndustryId, JobTemplate } from "../business/jobTemplates";
+import type { ConnectResult, GmailStatus } from "../email/gmail";
+import type { EmailItem, SendResult } from "../email/outbox";
+
+export type GmailState = GmailStatus & { testMode: boolean };
+export type { EmailItem, SendResult };
 
 /** Everything the UI can call. Anything else is refused by the server. */
 export interface Methods {
@@ -126,6 +131,24 @@ export interface Methods {
   wantConnection: { params: { name: string; want: boolean }; result: { wanted: string[] } };
   /** An email draft (.eml) the adviser saved: what the chat's email card shows. */
   emailDraft: { params: { path: string }; result: { ok: true; to: string[]; cc: string[]; subject: string; attachments: string[]; preview: string } | { ok: false; error: string } };
+  /** Gmail (Connections): connected or not, as whom, and test mode. */
+  gmail: { params: void; result: GmailState };
+  /** Google's sign-in in the browser (its address also arrives as a `gmailSignIn` event); resolves when the owner is done. */
+  connectGmail: { params: void; result: ConnectResult };
+  cancelGmailConnect: { params: void; result: { cancelled: boolean } };
+  disconnectGmail: { params: void; result: GmailState };
+  setGmailTestMode: { params: { on: boolean }; result: GmailState };
+  /** A job's candidate emails in the Outbox (design: EmailReview). */
+  jobEmails: { params: { job: string }; result: EmailItem[] };
+  /** One draft, by path or Outbox name (the chat's email card, the candidate panel). */
+  emailItem: { params: { draft: string }; result: EmailItem | null };
+  updateEmailDraft: { params: { draft: string; subject: string; body: string }; result: EmailItem | null };
+  /** Sends after 10 seconds; Undo with cancelEmails, or sendEmailsNow. */
+  sendEmails: { params: { items: { draft: string; to: string }[]; again?: boolean }; result: { ok: true; id: string; sendAt: string; count: number; test: boolean } | { ok: false; error: string } };
+  cancelEmails: { params: { id: string }; result: { cancelled: boolean } };
+  sendEmailsNow: { params: { id: string }; result: { started: boolean } };
+  /** Waits for a send to finish. */
+  emailResults: { params: { id: string }; result: { state: string; results: SendResult[] } };
 }
 export type Method = keyof Methods;
 
@@ -268,6 +291,8 @@ export type ServerEvent =
   | { event: "changed"; change: EntityChange; by: "adviser" | "you"; turnId: string | null }
   /** Sign-in: open `url` and enter `code` (parsed from the engine prompt; `message` is the full text). */
   | { event: "login"; url: string | null; code: string | null; message: string }
+  /** Google's sign-in page for Gmail, in case the browser didn't open by itself. */
+  | { event: "gmailSignIn"; url: string }
   | VoiceEvent
   /** Voice audio to play, only to the page that started voice (PCM16 mono 24 kHz, base64). */
   | { event: "voiceAudio"; pcm: string };

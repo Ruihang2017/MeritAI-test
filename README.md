@@ -46,7 +46,7 @@ To look around first, choose **Try it with a sample business**. It opens a made-
 - **Staff**: the register.
 - **Hiring**: jobs, screening and your decisions.
 - **Profile & policies**, **Files**: what the adviser knows about the business.
-- **Connections**: what's coming.
+- **Connections**: Gmail (send the emails MeritAI drafts), and what's coming.
 - **Attention** (the right-hand panel on Conversations): what is overdue or due soon, worked out from the register.
 - **Your name** (bottom left): Memory, Settings and Send feedback.
 
@@ -92,7 +92,7 @@ A button on a page (Interview kit, Draft the letter, Ask about this…) sends it
 2. The adviser drafts screening criteria from the JD, and you confirm them.
 3. Every application is assessed on its own, blind (no names, photos, ages or addresses), and ranked by rules.
 4. You decide: **Shortlist** or **Not this time**.
-5. Next steps: an interview kit, candidate emails as drafts, and **Add to Staff** for the person you hire.
+5. Next steps: an interview kit, candidate emails (drafted by MeritAI, sent from your Gmail after you review them), and **Add to Staff** for the person you hire.
 
 You can also make any of these decisions just by telling the adviser.
 
@@ -110,11 +110,15 @@ You can also make any of these decisions just by telling the adviser.
 
 ![Advertise the job](docs/images/10-advertise.png)
 
-### 7 Emails: drafts you send yourself
+### 7 Emails: MeritAI drafts, you send
 
-MeritAI never sends email. Ask for an email (an offer with the contract, an interview invite, a letter) and it saves a draft with the files attached.
+Ask for an email (an offer with the contract, an interview invite, a letter) and MeritAI saves a draft with the files attached. The adviser never sends email itself.
 
-**Open in email app** opens it in Outlook (or your default mail app) as a new message: check it, then press Send there. Sending from MeritAI is coming (see Connections).
+- **Without Gmail:** **Open in email app** opens it in Outlook (or your default mail app) as a new message: check it, then press Send there.
+- **With Gmail connected** (Connections › Gmail › Connect Gmail: your browser opens Google's sign-in, choose your account and Allow; it can only send, never read): **Send from Gmail** on the email card.
+- **A job's candidate emails:** Hiring › Next steps › **Draft the emails**, then **Review and send**: every draft in one list, the address from each application (none found: type it; two: pick one), untick or edit any, **Send N emails**. You have 10 seconds to Undo. The table's Email column shows who was emailed and when. One candidate at a time: their panel on the Hiring page.
+- **Test mode** (on until you turn it off in Connections): every email goes to your own Gmail, with the real recipient in the subject.
+- Until Google has reviewed MeritAI, its sign-in says "Google hasn't verified this app": choose **Advanced**, then **Go to MeritAI-Test**.
 
 ![An email draft in the reply](docs/images/11-email-draft.png)
 
@@ -144,12 +148,12 @@ Talk as you would on the phone. On Conversations, the right-hand panel becomes *
 ![Settings: language](docs/images/14-settings-language.png)
 ![Settings: voice usage and a monthly limit](docs/images/15-settings-voice-usage.png)
 
-### 10 Connections (coming soon)
+### 10 Connections
 
-Today MeritAI runs only on this computer: it drafts, and you send.
+**Gmail** works: MeritAI sends the emails it drafts from your Gmail, after you've seen them (see 7). Disconnect removes it from this computer.
 
-**What it will connect to:**
-- email and calendar (Outlook and Microsoft 365, Gmail);
+**Coming:**
+- Outlook and Microsoft 365, Google Calendar;
 - Teams and Slack;
 - job boards (SEEK, LinkedIn Jobs, Indeed);
 - payroll (Xero, MYOB, Employment Hero);
@@ -225,7 +229,7 @@ npm run ui:fake      # the same demo workspace with scripted replies: no model a
 npm run ui:dev       # UI development: hot reload, fake engine
 ```
 
-In the browser the conversation and the pages stay in step: what the adviser changes shows under its reply ("What changed", with the next step), the pages update at once and mark the changed rows, and a dot marks pages changed while you were elsewhere (a hire said in the chat is the same as Add to Staff). Also: email drafts that open in your email app (MeritAI never sends email), New job from 35 role templates, voice usage and a monthly limit in Settings, Connections (what's coming), and Chinese (Settings › Language; documents stay in English).
+In the browser the conversation and the pages stay in step: what the adviser changes shows under its reply ("What changed", with the next step), the pages update at once and mark the changed rows, and a dot marks pages changed while you were elsewhere (a hire said in the chat is the same as Add to Staff). Also: email drafts that open in your email app or go from your Gmail after you review them (the adviser never sends email), New job from 35 role templates, voice usage and a monthly limit in Settings, Connections (Gmail, and what's coming), and Chinese (Settings › Language; documents stay in English).
 
 Demo options: `-- --reseed` puts the demo workspace back to the design's sample data; `-- --demo-dir <name>` uses a separate copy (e.g. for checks while another demo runs); `FX_FAKE_SIGNED_OUT=1` starts signed out (the first-run screens); `npm run ui:fake -- --fresh` starts from an empty workspace. Voice works in the browser (microphone in Conversations; the demo engine uses a free stand-in voice).
 
@@ -307,7 +311,7 @@ Tests, `npm run eval` and the `ab:*` experiments use their own engine folder, `c
 | `npm run test:files` | Inbox/Outbox guards, PDF/DOCX/TXT/MD parsing, docx output, screening from files, injection in documents |
 | `npm run test:research` | Official-source lookups, domain allowlist, no URLs from memory, prompt injection |
 | `npm run inspect` | Which skills, plugins, MCP servers, apps and features Codex exposes |
-| `npm run test:unit` | Free unit checks (no model calls): apprentices, leaving checklist, fixed-term notes, reminder wording, small business status; the server protocol, changes and hires, voice on screen, usage, email drafts, job templates, Chinese |
+| `npm run test:unit` | Free unit checks (no model calls): apprentices, leaving checklist, fixed-term notes, reminder wording, small business status; the server protocol, changes and hires, voice on screen, usage, email drafts, sending from Gmail (addresses, test mode, undo, Google's sign-in with a stand-in Google), job templates, Chinese |
 | `npx tsx scripts/journeys.ts [ids]` | Owner journeys with the real model through the UI's server session on copies of the sample business: the saved data and that every change reached its reply (about 30 journeys; uses the ChatGPT quota) |
 | `npm run typecheck` | Type check |
 

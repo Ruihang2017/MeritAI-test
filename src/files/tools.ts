@@ -7,6 +7,14 @@ import { markdownToDocx } from "./docx";
 import { buildEml, EMAIL_RE } from "./email";
 import { readFileSync } from "node:fs";
 import type { ChangeSink } from "../changes";
+import type { Decision, EmailKind } from "../screening/catalog";
+
+/** Links a draft to the candidate it is for (the Hiring page lists a job's drafts to review and send). */
+export interface EmailLinks {
+  /** A candidate of a job by name or application file, or an error listing who there is. */
+  find(job: string, who: string): { ok: true; hash: string; name: string; decision: Decision | null } | { ok: false; error: string };
+  link(draft: string, job: string | null, hash: string | null, kind: EmailKind): void;
+}
 
 /** Content accepted by save_document; far above any real document. */
 const MAX_SAVE_CHARS = 200_000;
@@ -70,7 +78,7 @@ export function writeNew(outbox: string, stem: string, ext: string, data: string
 const fail = (text: string): ToolOutcome => ({ success: false, text });
 
 /** `onChange`: told about saved files (src/changes.ts). */
-export function fileTools(getFolders: () => Folders, onChange: ChangeSink = () => {}): ClientTool[] {
+export function fileTools(getFolders: () => Folders, onChange: ChangeSink = () => {}, links?: EmailLinks): ClientTool[] {
   return [
     {
       name: "list_files",
@@ -163,23 +171,34 @@ export function fileTools(getFolders: () => Folders, onChange: ChangeSink = () =
     {
       name: "draft_email",
       description:
-        "Save an email as a draft the owner opens in their own email app (Outlook or their default mail app) to check and send, with files from the Outbox or Inbox attached. " +
-        "MeritAI never sends email itself. Use it when the owner wants to email something (an offer, a contract, an interview invite, a letter) or asks for an email they can send. " +
-        "Only addresses the owner gave or that are in a document they asked you to use; leave 'to' empty if you don't have one.",
+        "Save an email as a draft, with files from the Outbox or Inbox attached. The owner sends it: from their own email app, or from their Gmail in MeritAI after reviewing it, if they connected Gmail. " +
+        "You can't send email. Use it when the owner wants to email something (an offer, a contract, an interview invite, a letter) or asks for an email they can send. " +
+        "Only addresses the owner gave or that are in a document they asked you to use; leave 'to' empty if you don't have one (for a candidate, the app finds the address in their application). " +
+        "An email to a candidate of a job: give 'job' and 'candidate' (name or application file, as list_candidates shows) and 'kind', one call per candidate, so the Hiring page can list the job's emails to review and send.",
       inputSchema: {
         type: "object",
         properties: {
-          to: { type: "array", items: { type: "string" }, maxItems: 5, description: "Email addresses (may be empty: the owner fills it in)." },
+          to: { type: "array", items: { type: "string" }, maxItems: 5, description: "Email addresses (may be empty: the owner or the app fills it in)." },
           cc: { type: "array", items: { type: "string" }, maxItems: 5 },
           subject: { type: "string" },
           body: { type: "string", description: "The message in plain text (no markdown), with the sign-off." },
           attachments: { type: "array", items: { type: "string" }, maxItems: 5, description: "File names in the Outbox or Inbox, exactly as listed." },
+          job: { type: ["string", "null"], description: "The job, for an email to one of its candidates; else null." },
+          candidate: { type: ["string", "null"], description: "The candidate's name or application file; else null." },
+          kind: { type: ["string", "null"], enum: ["invite", "not_this_time", "other", null], description: "For a candidate: an interview invitation, a “not this time”, or other." },
         },
-        required: ["to", "cc", "subject", "body", "attachments"],
+        required: ["to", "cc", "subject", "body", "attachments", "job", "candidate", "kind"],
         additionalProperties: false,
       },
       handle: async (args) => {
-        const a = args as { to?: string[]; cc?: string[]; subject?: string; body?: string; attachments?: string[] };
+        const a = args as { to?: string[]; cc?: string[]; subject?: string; body?: string; attachments?: string[]; job?: string | null; candidate?: string | null; kind?: string | null };
+        let who: { job: string; hash: string; name: string; kind: EmailKind } | null = null;
+        if (a.job && a.candidate && links) {
+          const c = links.find(String(a.job), String(a.candidate));
+          if (!c.ok) return fail(`Not saved: ${c.error}.`);
+          const kind: EmailKind = a.kind === "invite" ? "invite" : a.kind === "not_this_time" ? "not" : a.kind === "other" ? "other" : c.decision === "shortlist" ? "invite" : c.decision === "not" ? "not" : "other";
+          who = { job: String(a.job), hash: c.hash, name: c.name, kind };
+        }
         const to = (a.to ?? []).map((x) => String(x).trim()).filter(Boolean);
         const cc = (a.cc ?? []).map((x) => String(x).trim()).filter(Boolean);
         const bad = [...to, ...cc].filter((x) => !EMAIL_RE.test(x));
@@ -204,12 +223,15 @@ export function fileTools(getFolders: () => Folders, onChange: ChangeSink = () =
           files.push({ name: String(n), data: readFileSync(path) });
         }
         if (files.reduce((s, x) => s + x.data.length, 0) > 20 * 1024 * 1024) return fail("Not saved: the attachments are over 20 MB together.");
-        const saved = writeNew(f.outbox, sanitizeStem(`Email - ${subject}`), ".eml", buildEml({ to, cc, subject, body: body.endsWith("\n") ? body : body + "\n", attachments: files }));
+        const saved = writeNew(f.outbox, sanitizeStem(who ? `Email - ${who.name} - ${subject}` : `Email - ${subject}`), ".eml", buildEml({ to, cc, subject, body: body.endsWith("\n") ? body : body + "\n", attachments: files }));
         const path = join(f.outbox, saved);
+        links?.link(saved, who?.job ?? null, who?.hash ?? null, who?.kind ?? "other");
         onChange({ ref: { kind: "file", path, name: saved }, action: "saved", summary: `Email draft "${subject}" saved to the Outbox` });
         return {
           success: true,
-          text: `Saved the email draft "${saved}" in the Outbox${files.length ? ` with ${files.map((x) => x.name).join(", ")} attached` : ""}. The owner opens it in their email app (the Open button), checks it and presses Send there: MeritAI doesn't send email. Say so briefly.`,
+          text:
+            `Saved the email draft "${saved}" in the Outbox${files.length ? ` with ${files.map((x) => x.name).join(", ")} attached` : ""}${who ? ` for ${who.name} (${who.job})` : ""}. ` +
+            `The owner checks it and sends it: in their email app (Open), or from Gmail in MeritAI if they connected it${who ? " (Hiring › Candidate emails › Review and send lists the job's drafts)" : ""}. You don't send email. Say so briefly.`,
           display: `saved: ${path}`,
           files: [path],
         };

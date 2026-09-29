@@ -1118,7 +1118,7 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
   const notEml = app.emailDraft(join(f.outbox, "Offer letter – Zoë.docx"));
   const fb = JSON.parse(readFileSync(await app.exportFeedback({ note: "n", ratings: false, conversation: false, technical: null }), "utf8"));
   record("email drafts and coming connections", [
-    ["a draft in the Outbox, marked unsent, never sent", ok.success && path.endsWith(".eml") && /^X-Unsent: 1$/m.test(eml) && /doesn't send email/.test(ok.text)],
+    ["a draft in the Outbox, marked unsent, never sent", ok.success && path.endsWith(".eml") && /^X-Unsent: 1$/m.test(eml) && /You don't send email/.test(ok.text)],
     ["recipients, subject (non-ASCII), attachment and text read back", back.to[0] === "hannah.cole@example.com" && back.subject === "Your offer: Team leader – Zoë" && back.attachments[0] === "Offer letter – Zoë.docx" && /Attached is your offer/.test(back.preview)],
     ["refused: bad address, unknown or outside attachment", !badAddr.success && !missing.success && !outside.success],
     ["list_files shows the Outbox", /Outbox files/.test(listed.text) && /Offer letter/.test(listed.text)],
@@ -1572,6 +1572,157 @@ const TMP = mkdtempSync(join(tmpdir(), "fx-unit-"));
     ["its receipt reaches the question", (t as { blocks: { kind: string; receipt?: string }[] }).blocks.find((b) => b.kind === "confirm")?.receipt === "hiring: 1 application(s) added to Carpenter"],
   ], JSON.stringify({ r: { ...r, summary: r.summary.applications }, inboxLeft, text: viaTool.text }));
   cat.close?.();
+}
+
+// ------------------------------------------------------------------ email from Gmail: drafts linked to candidates, addresses, test mode, undo
+{
+  const { buildEml: build, parseEml, emailsIn, forSending } = await import("../src/files/email");
+  const { Catalog } = await import("../src/screening/catalog");
+  const { fileTools } = await import("../src/files/tools");
+  const { findCandidate } = await import("../src/business/hiring");
+  const { ingestJob } = await import("../src/screening/pipeline");
+  const { jobEmails, emailItem, checkSend, SendQueue, updateDraft } = await import("../src/email/outbox");
+  const { FakeGmail } = await import("../src/email/gmail");
+  const { launchUrl } = await import("../src/app/launch");
+
+  const d0 = { to: ["a@example.com"], cc: ["b@example.com"], subject: "Your offer · Team leader", body: "Hi Ann,\n\nWelcome aboard.\n", attachments: [{ name: "Contract (DRAFT).docx", data: Buffer.from([1, 2, 3, 250]) }] };
+  const back = parseEml(build(d0));
+  const test = forSending(d0, "ann@example.com", { self: "me@example.com" }).toString("utf8");
+  const real = forSending(d0, "ann@example.com", null).toString("utf8");
+  record("email drafts: read back in full, made ready to send", [
+    ["a draft reads back as written (subject, text, attachment bytes)", back.subject === d0.subject && back.body === d0.body && back.attachments[0]?.name === "Contract (DRAFT).docx" && back.attachments[0].data.equals(d0.attachments[0].data) && back.cc[0] === "b@example.com"],
+    ["test mode: to the owner, the real recipient in the subject, no Cc", /^To: me@example\.com$/m.test(test) && parseEml(test).subject === "[Test → ann@example.com] Your offer · Team leader" && !/^Cc:/m.test(test)],
+    ["sending: the chosen address, no draft markers", /^To: ann@example\.com$/m.test(real) && !/X-Unsent/.test(real) && /^X-Mailer: MeritAI$/m.test(real)],
+    ["addresses in an application: found, lower-cased, once each", JSON.stringify(emailsIn("Ruth.Adeyemi@Example.com | ruth.adeyemi@example.com; phone 0400 000 000; x@y")) === JSON.stringify(["ruth.adeyemi@example.com"])],
+    ["only https pages open in the browser", launchUrl("https://accounts.google.com/o?a=1&b=2", "win32").args[0] === '"https://accounts.google.com/o?a=1&b=2"' && (() => { try { launchUrl("file:///c:/x"); return false; } catch { return true; } })()],
+  ], JSON.stringify({ back: { ...back, attachments: back.attachments.map((a) => a.name) } }));
+
+  const f = ensureFolders(join(TMP, "mail-files"));
+  const changes: { action: string; summary: string }[] = [];
+  const cat = new Catalog(f.data, (c) => changes.push(c));
+  const job = "Team leader";
+  mkdirSync(join(f.jobs, job), { recursive: true });
+  writeFileSync(join(f.jobs, job, "Team leader JD.md"), "# Team leader\n\nLeads a cleaning crew.");
+  writeFileSync(join(f.jobs, job, "Ruth Adeyemi resume.txt"), "Ruth Adeyemi\nruth.adeyemi@example.com\nHotel housekeeping lead.");
+  writeFileSync(join(f.jobs, job, "Kenji Watanabe resume.txt"), "Kenji Watanabe\nkenji.w@example.com (work: kenji@watanabe-family.example)\nSupervisor.");
+  writeFileSync(join(f.jobs, job, "Lucy Brennan resume.txt"), "Lucy Brennan\nRetail, 4 years. Phone only.");
+  await ingestJob(cat, f, job);
+  const ruthHash = cat.applications(job).find((a) => a.sourceRef === "Ruth Adeyemi resume.txt")!.hash;
+  cat.setDecision(job, ruthHash, "not");
+  const draft = fileTools(() => f, () => {}, {
+    find: (j, who) => {
+      const c = findCandidate(cat, j, who);
+      return c.ok ? { ok: true, hash: c.candidate.hash, name: c.candidate.name, decision: c.candidate.decision } : c;
+    },
+    link: (d, j, h, k) => cat.linkEmail(d, j, h, k),
+  }).find((t) => t.name === "draft_email")!;
+  const mail = (who: string | null, to: string[], kind: string | null, subject = `Your application for ${job}`) =>
+    draft.handle({ to, cc: [], subject, body: `Hi ${who ?? "there"},\n\nThank you for applying.\n\nKind regards,\nWattle Lane Cleaning`, attachments: [], job: who ? job : null, candidate: who, kind });
+  const ruth = await mail("Ruth", ["ruth.adeyemi@example.com"], null);
+  await mail("Kenji Watanabe", [], "not_this_time", "Kenji: your application");
+  await mail("Lucy Brennan resume.txt", [], "not_this_time", "Lucy: your application");
+  const nobody = await mail("Zed", [], "invite");
+  const offer = await mail(null, ["hannah@example.com"], null, "Your offer");
+  const items = jobEmails(f, cat, job);
+  const by = (n: string) => items.find((x) => x.candidate?.name.startsWith(n))!;
+  record("candidate emails: drafts linked to candidates, addresses from their applications", [
+    ["a draft for a candidate is linked; the kind follows the decision when not given", ruth.success && /for Ruth Adeyemi \(Team leader\)/.test(ruth.text) && by("Ruth")?.kind === "not"],
+    ["an unknown candidate: not saved, who there is listed", !nobody.success && /no candidate called "Zed"/.test(nobody.text) && /Kenji Watanabe/.test(nobody.text)],
+    ["an email for no candidate isn't in the job's list", offer.success && items.length === 3 && !items.some((x) => x.subject === "Your offer")],
+    ["one address in the application and the draft: one option, from both", JSON.stringify(by("Ruth").options) === JSON.stringify([{ address: "ruth.adeyemi@example.com", from: "both" }])],
+    ["two in the application: both offered", by("Kenji").options.length === 2 && by("Kenji").options.every((o) => o.from === "application")],
+    ["none: nothing to pick (the owner types it)", by("Lucy").options.length === 0],
+  ], JSON.stringify({ items: items.map((x) => [x.candidate?.name, x.kind, x.options]), nobody: nobody.text }));
+
+  const gmail = new FakeGmail();
+  const queue = new SendQueue({ sender: () => gmail, folders: () => f, catalog: () => cat, testSelf: () => gmail.status().email });
+  const reqs = [{ draft: by("Ruth").draft, to: "ruth.adeyemi@example.com" }, { draft: by("Kenji").draft, to: "kenji.w@example.com" }];
+  const notConnected = checkSend(f, cat, reqs, { connected: false, again: false });
+  const badTo = checkSend(f, cat, [{ draft: by("Lucy").draft, to: "lucy at example" }], { connected: true, again: false });
+  await gmail.connect();
+  const q1 = queue.queue(reqs, 60_000);
+  const undone = queue.cancel(q1.id);
+  const r1 = await queue.results(q1.id);
+  const q2 = queue.queue(reqs, 60_000);
+  queue.sendNow(q2.id);
+  const r2 = await queue.results(q2.id);
+  const sentText = gmail.sent.map((b) => b.toString("utf8"));
+  const again = await mail("Ruth", [], "not_this_time");
+  const second = jobEmails(f, cat, job).find((x) => x.candidate?.name.startsWith("Ruth") && !x.sentAt)!;
+  const twice = checkSend(f, cat, [{ draft: second.draft, to: "ruth.adeyemi@example.com" }], { connected: true, again: false });
+  const twiceOk = checkSend(f, cat, [{ draft: second.draft, to: "ruth.adeyemi@example.com" }], { connected: true, again: true });
+  const sentAgain = checkSend(f, cat, [reqs[0]], { connected: true, again: true });
+  updateDraft(f, by("Lucy").draft, { subject: "Lucy: thank you", body: "Hi Lucy,\n\nThanks." });
+  const lucy = emailItem(f, cat, by("Lucy").draft)!;
+  record("sending from Gmail: checks, 10 seconds to undo, test mode, not twice", [
+    ["not connected, or a bad address: refused before anything waits", /isn't connected/.test(notConnected[0] ?? "") && /isn't an email address/.test(badTo.join(" "))],
+    ["Undo: nothing sent", undone && r1.state === "cancelled" && r1.results.length === 0 && q1.count === 2],
+    ["Send now: both sent, in test mode to the owner", r2.state === "done" && r2.results.every((x) => x.ok) && sentText.length === 2 && sentText.every((t) => /^To: you@example\.com$/m.test(t)) && sentText.some((t) => parseEml(t).subject.startsWith("[Test → ruth.adeyemi@example.com]"))],
+    ["recorded as sent, and the page is told", !!cat.email(reqs[0].draft)?.sentAt && cat.email(reqs[0].draft)?.test === true && changes.filter((c) => c.action === "emailed").length === 2],
+    ["a sent draft can't be sent again", /already sent/.test(sentAgain.join(" "))],
+    ["the same kind of email to the same candidate again: only when the owner says so", again.success && second?.earlier !== null && /already sent this kind/.test(twice.join(" ")) && twiceOk.length === 0],
+    ["the owner's edit keeps the draft's recipients", lucy.subject === "Lucy: thank you" && lucy.body.startsWith("Hi Lucy") && lucy.kind === "not"],
+  ], JSON.stringify({ r2, twice, sentAgain }));
+  cat.close?.();
+}
+
+// ------------------------------------------------------------------ Gmail's sign-in (Google played by a fake fetch; the browser by a request to the loopback page)
+{
+  const { GmailAccount, emailFromIdToken } = await import("../src/email/gmail");
+  const idToken = (email: string) => `x.${Buffer.from(JSON.stringify({ email })).toString("base64url")}.y`;
+  const calls: { url: string; auth?: string; body?: string }[] = [];
+  const google = (scope: string, refresh: "ok" | "revoked" = "ok"): typeof fetch =>
+    (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const body = init?.body instanceof URLSearchParams ? init.body.toString() : undefined;
+      calls.push({ url, auth: (init?.headers as Record<string, string> | undefined)?.Authorization, body });
+      const json = (status: number, j: unknown) => new Response(JSON.stringify(j), { status, headers: { "Content-Type": "application/json" } });
+      if (url.includes("oauth2.googleapis.com/token")) {
+        if (body?.includes("grant_type=refresh_token")) return refresh === "ok" ? json(200, { access_token: "at-2", expires_in: 3600 }) : json(400, { error: "invalid_grant" });
+        return json(200, { access_token: "at-1", refresh_token: "rt-1", expires_in: 3600, id_token: idToken("owner@gmail.example"), scope });
+      }
+      if (url.includes("/revoke")) return json(200, {});
+      if (url.includes("/messages/send")) return json(200, { id: "msg-1" });
+      return json(404, {});
+    }) as typeof fetch;
+  const crypt = { protect: async (s: string) => `enc:${s}`, unprotect: async (s: string) => s.replace(/^enc:/, "") };
+  const client = () => ({ id: "cid.apps.googleusercontent.com", secret: "sec" });
+  // The browser: follows Google's redirect back to the loopback page with a code (or a refusal).
+  const browser = (answer: "allow" | "deny") => async (url: string) => {
+    const u = new URL(url);
+    const back = new URL(u.searchParams.get("redirect_uri")!);
+    back.search = answer === "allow" ? `code=abc&state=${u.searchParams.get("state")}` : `error=access_denied&state=${u.searchParams.get("state")}`;
+    setTimeout(() => void fetch(back).catch(() => null), 10);
+  };
+  const file = join(TMP, "gmail.json");
+  const acct = new GmailAccount(file, client, { fetch: google("openid https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email"), ...crypt });
+  let authUrl = "";
+  const ok = await acct.connect(async (url) => ((authUrl = url), browser("allow")(url)));
+  const stored = readFileSync(file, "utf8");
+  const connectedNow = acct.status().connected;
+  const id = await acct.send(Buffer.from("To: x@example.com\r\n\r\nhi"));
+  const sendCall = calls.find((c) => c.url.includes("/messages/send"));
+  const denied = await new GmailAccount(join(TMP, "gmail-2.json"), client, { fetch: google(""), ...crypt }).connect(browser("deny"));
+  const noSend = await new GmailAccount(join(TMP, "gmail-3.json"), client, { fetch: google("openid email"), ...crypt }).connect(browser("allow"));
+  const waiting = new GmailAccount(join(TMP, "gmail-4.json"), client, { fetch: google(""), ...crypt });
+  const pending = waiting.connect(async () => {});
+  await new Promise((r) => setTimeout(r, 50));
+  const cancelled = waiting.cancelConnect() && (await pending);
+  // Later, the permission was removed at Google: a fresh start can't refresh.
+  const later = new GmailAccount(file, client, { fetch: google("", "revoked"), ...crypt });
+  const gone = await later.send(Buffer.from("x")).then(() => "sent", (e: Error) => e.message);
+  const q = new URL(authUrl).searchParams;
+  record("Gmail sign-in: send only, kept encrypted, and what goes wrong", [
+    ["asks for gmail.send, openid and email, with PKCE and a loopback address", q.get("scope") === "https://www.googleapis.com/auth/gmail.send openid email" && q.get("code_challenge_method") === "S256" && /^http:\/\/127\.0\.0\.1:\d+\/$/.test(q.get("redirect_uri") ?? "") && q.get("access_type") === "offline"],
+    ["connected as the account's address; the refresh token stored encrypted only", ok.ok && ok.email === "owner@gmail.example" && connectedNow && /enc:rt-1/.test(stored) && !/"rt-1"/.test(stored)],
+    ["the code is exchanged with the PKCE verifier", calls.some((c) => c.url.includes("/token") && /code_verifier=/.test(c.body ?? "") && /code=abc/.test(c.body ?? ""))],
+    ["sends with the access token, as a raw message", id === "msg-1" && sendCall?.auth === "Bearer at-1" && /uploadType=media/.test(sendCall?.url ?? "")],
+    ["declined on Google's page: cancelled", !denied.ok && denied.cancelled === true],
+    ["“send” unticked on Google's page: not connected, and said why", !noSend.ok && /wasn't allowed to send/.test(noSend.error) && !existsSync(join(TMP, "gmail-3.json"))],
+    ["a sign-in waiting in the browser can be cancelled", cancelled !== false && !(cancelled as { ok: boolean }).ok],
+    ["permission removed at Google: disconnected, and said so", /disconnected/.test(gone) && !existsSync(file)],
+    ["the email in an ID token", emailFromIdToken(idToken("a@b.example")) === "a@b.example" && emailFromIdToken("junk") === null],
+  ], JSON.stringify({ ok, denied, noSend, gone }));
 }
 
 try {

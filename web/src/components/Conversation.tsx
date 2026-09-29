@@ -13,7 +13,7 @@ import { Icon } from "./Icon";
 import { MicButton, VoiceBanner, VoiceBar, type VoiceLevels, type VoiceNote, type VoiceUi } from "./Voice";
 import { ReplyFeedback } from "./Feedback";
 import { ChangeCards } from "./Changes";
-import { EmailCard } from "./Email";
+import { EmailBatchCard, EmailCard } from "./Email";
 
 /** Voice in the browser, as the Conversations page shows it. */
 export interface VoiceProps {
@@ -298,9 +298,7 @@ export function TurnView({ turn, showDay, onAnswer, api, domains, onRedo, compac
               ))}
             </div>
           )}
-          {emails.map((f) => (
-            <EmailCard key={f} path={f} api={api} />
-          ))}
+          {emails.length > 2 ? <EmailBatchCard paths={emails} api={api} /> : emails.map((f) => <EmailCard key={f} path={f} api={api} />)}
           {turn.changes?.length ? <ChangeCards items={turn.changes} api={api} compact={compact} /> : null}
           {turn.status === "completed" && turn.blocks.some((b) => b.kind === "text") && <ReplyFeedback turn={turn} api={api} />}
           {src.length > 0 && turn.status !== "running" && (

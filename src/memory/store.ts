@@ -54,6 +54,8 @@ export interface UserSettings {
   voiceMonthlyLimitUsd?: number;
   /** The tester's name on feedback files (optional, remembered on this computer). */
   feedbackName?: string;
+  /** Gmail test mode: every email goes to the owner themselves; absent = on. */
+  gmailTestMode?: boolean;
 }
 
 export const TASK_TTL_DAYS = 30;

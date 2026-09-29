@@ -71,6 +71,6 @@ export function marks<K>(recent: Seen[], key: (r: EntityRef) => K | null): Map<K
 /** "New · MeritAI", "Updated · MeritAI"… for a marked row. */
 export function markLabel(s: Seen): string {
   const a = s.change.action;
-  const word = a === "added" || a === "created" ? "New" : a === "left" ? "Left" : a === "hired" ? "Hired" : a === "shortlisted" ? "Shortlisted" : a === "not" ? "Not this time" : a === "saved" ? "New" : a === "closed" ? "Closed" : "Updated";
+  const word = a === "added" || a === "created" ? "New" : a === "left" ? "Left" : a === "hired" ? "Hired" : a === "shortlisted" ? "Shortlisted" : a === "not" ? "Not this time" : a === "emailed" ? "Emailed" : a === "saved" ? "New" : a === "closed" ? "Closed" : "Updated";
   return `${word} · MeritAI`;
 }

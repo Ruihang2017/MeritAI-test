@@ -7,7 +7,7 @@ Thank you for testing MeritAI. It is an HR adviser for small business owners who
 ## 1 Rules for the alpha
 
 - **Sample data only.** Use the made-up sample business, or a made-up business of your own. Never enter real employees, candidates or anyone's personal details. MeritAI runs on your personal ChatGPT sign-in, which is not a company-approved account.
-- **Answers can be wrong.** It checks legal points against official Australian sources and shows them, but treat every answer as something to check. Nothing it drafts is sent anywhere: letters and emails are saved as files for you.
+- **Answers can be wrong.** It checks legal points against official Australian sources and shows them, but treat every answer as something to check. Nothing it drafts is sent by itself: letters and emails are saved as files, and an email goes only when you press Send (in your email app, or from your Gmail if you connect it).
 - **Tell us what you find.** Anything that confused you, was wrong, missing or slow is useful (section 6).
 
 ## 2 Before you start
@@ -35,7 +35,7 @@ Thank you for testing MeritAI. It is an HR adviser for small business owners who
 - **Hiring**: jobs, screening applications against criteria you confirm, your decisions, next steps.
 - **Profile & policies**, **Files**: the business profile, policies, Inbox and Outbox.
 - **Ask MeritAI** (top right, or Ctrl J): the side panel, so you can ask from any page without leaving it.
-- **Connections** (marked Soon): what MeritAI will connect to later (email, job boards, payroll, backup). Press **I want this** on the ones you'd use.
+- **Connections** (marked Soon): **Gmail** works now (see 5b); the rest are coming (Outlook, job boards, payroll, backup). Press **I want this** on the ones you'd use.
 - **Your name** (bottom left): Memory, Settings (including **Language · 语言**: English or Chinese) and **Send feedback**.
 - **Voice** (optional): after adding your API key in Settings, press the microphone in Conversations and talk.
 
@@ -45,15 +45,21 @@ Do them in any order. For each, notice: did it tell you what to do, clearly and 
 
 **Hiring**
 1. Open Hiring › **Team leader**. Look at the ranking, open two candidates, decide who to shortlist, and mark the rest "Not this time".
-2. From the next steps, make the **interview kit** and **draft the candidate emails**. Find the drafts in Files › Outbox.
+2. From the next steps, make the **interview kit** and **draft the candidate emails**. With Gmail connected (5b), **Review and send** them; without, find the drafts in Files › Outbox.
 3. **Weekend cleaner**: review the proposed criteria, change one, confirm, and screen the applications.
 4. **Office admin** has no job description: write one with the adviser and save it into the job.
 4b. **New job** › From a template: pick a role in your industry, make it yours, create it. Does the job description fit? Try "Create and ask MeritAI to tailor it".
 5. Ask something you'd really wonder about, e.g. "What can't I ask in an interview?" or "Can I pay a trial shift?"
 
+**5b Sending the candidate emails from Gmail (optional)**
+- Connections › Gmail › **Connect Gmail**. Your browser opens Google's sign-in: choose your Gmail. Google shows **"Google hasn't verified this app"** (MeritAI is still being reviewed): choose **Advanced**, then **Go to MeritAI-Test**, tick **Send email on your behalf**, and Continue. MeritAI can only send; it can't read your email.
+- **Test mode** is on: every email goes to your own Gmail (the real address is in the subject), so nothing reaches the made-up candidates. Leave it on.
+- Hiring › Team leader › **Review and send**: pick or type any missing address, untick or edit what you like, **Send**. You have 10 seconds to **Undo**. Check your Gmail.
+- Finished? Connections › Gmail › **Disconnect**.
+
 **Onboarding**
 6. Hire someone from the Team leader shortlist: either Add to Staff on the Hiring page, or just tell the adviser ("Hannah accepted the offer, she starts Monday"). Check that Staff and the job both show it. Work through the new starter checklist: what must happen before day one?
-6b. Ask the adviser to email the new starter their welcome or contract: it saves an email draft that opens in your email app (it never sends anything itself).
+6b. Ask the adviser to email the new starter their welcome or contract: it saves an email draft; you open it in your email app, or press Send from Gmail (it never sends anything itself).
 7. Marco's starting paperwork is overdue: find out what is missing and record what you've "done".
 8. Ask: "I'm hiring a 16-year-old for weekends. What do I need to know?"
 
@@ -77,7 +83,7 @@ Do them in any order. For each, notice: did it tell you what to do, clearly and 
 ## 7 Known limitations
 
 - English or Chinese (Settings › Language). In Chinese the adviser answers in Chinese, but letters, contracts, emails and job descriptions stay in English. Answers follow Australian employment law and official sources; they are not legal advice.
-- MeritAI doesn't send email or post job ads yet: it saves drafts for you to send (Connections shows what's coming).
+- MeritAI doesn't post job ads yet. Email goes only when you press Send, from your email app or your connected Gmail (Connections shows what's coming).
 - From version 0.2.2, MeritAI updates itself: a new version downloads in the background, **Update ready** appears at the top, and it installs when you press **Restart to update** (or the next time you close MeritAI). Your conversations, settings and files stay. Earlier versions need the new installer once.
 - Voice needs your own API key and costs money (Settings shows an estimate, and a monthly limit stops it). During voice, a change that needs your OK waits on the right of the screen: press Yes, save, or say "yes" (deleting always needs a press).
 - The ChatGPT plan's usage can run out; the app says when, and when it resets.

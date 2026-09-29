@@ -111,7 +111,7 @@ function EmployeeCard({ item, id, name, row, loaded }: { item: TurnChange; id: n
   );
 }
 
-const CAND: Record<string, string> = { hired: "hired", shortlisted: "shortlisted", not: "not this time", cleared: "decision cleared" };
+const CAND: Record<string, string> = { hired: "hired", emailed: "emailed", shortlisted: "shortlisted", not: "not this time", cleared: "decision cleared" };
 const JOB: Record<string, string> = { created: "created", "criteria-drafted": "criteria drafted", "criteria-confirmed": "criteria confirmed", screened: "screened", applications: "new applications", openings: "people to hire changed", closed: "closed", reopened: "reopened" };
 
 function JobCard({ job, api, summary: j, loaded, items }: { job: string; api: Api; summary: JobSummary | null; loaded: boolean; items: TurnChange[] }) {

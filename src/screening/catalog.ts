@@ -65,6 +65,23 @@ export interface Evaluation {
 /** The owner's decision on a screened application (two options, owner 2026-09-27). */
 export type Decision = "shortlist" | "not";
 
+/** What a candidate email is: an interview invitation, a "not this time", or anything else. */
+export type EmailKind = "invite" | "not" | "other";
+
+export interface EmailRecord {
+  /** The draft's file name in the Outbox. */
+  draft: string;
+  job: string | null;
+  /** The candidate's application (content hash); null for an email to no candidate. */
+  hash: string | null;
+  kind: EmailKind;
+  createdAt: string;
+  sentAt: string | null;
+  sentTo: string | null;
+  /** Sent in test mode: it went to the owner, with `sentTo` (the real recipient) in its subject. */
+  test: boolean;
+}
+
 export class Catalog {
   private db: DatabaseSync;
 
@@ -102,6 +119,11 @@ export class Catalog {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS job_settings (job TEXT PRIMARY KEY, openings INTEGER NOT NULL DEFAULT 1, closed_at TEXT);
       CREATE TABLE IF NOT EXISTS hires (job TEXT NOT NULL, hash TEXT NOT NULL, employee_id INTEGER NOT NULL, hired_at TEXT NOT NULL, PRIMARY KEY (job, hash));`);
+    // Added 2026-09-29: email drafts in the Outbox (by file name), the candidate they're for, and when
+    // they were sent from Gmail (design: EmailReview, EmailSent). A draft for no candidate has no job.
+    this.db.exec(`CREATE TABLE IF NOT EXISTS emails (
+      draft TEXT PRIMARY KEY, job TEXT, hash TEXT, kind TEXT NOT NULL CHECK (kind IN ('invite', 'not', 'other')),
+      created_at TEXT NOT NULL, sent_at TEXT, sent_to TEXT, test INTEGER NOT NULL DEFAULT 0, message_id TEXT)`);
   }
 
   close(): void {
@@ -199,6 +221,7 @@ export class Catalog {
     this.db.prepare("DELETE FROM decisions WHERE job = ?").run(job);
     this.db.prepare("DELETE FROM job_settings WHERE job = ?").run(job);
     this.db.prepare("DELETE FROM hires WHERE job = ?").run(job);
+    this.db.prepare("DELETE FROM emails WHERE job = ?").run(job);
     // Parsed text is only kept while some application still refers to it.
     for (const { hash } of hashes) {
       const used = this.db.prepare("SELECT 1 FROM applications WHERE hash = ? LIMIT 1").get(hash);
@@ -257,6 +280,37 @@ export class Catalog {
     this.onChange({ ref: { kind: "job", job }, action: "openings", summary: `${job}: a hire was undone` });
   }
 
+  // ---------------------------------------------------------------- emails
+
+  /** Records a draft in the Outbox, for a candidate of a job or for no one (job and hash null). */
+  linkEmail(draft: string, job: string | null, hash: string | null, kind: EmailKind): void {
+    this.db
+      .prepare("INSERT INTO emails (draft, job, hash, kind, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(draft) DO UPDATE SET job = excluded.job, hash = excluded.hash, kind = excluded.kind")
+      .run(draft, job, hash, kind, now().toISOString());
+  }
+
+  emails(job?: string): EmailRecord[] {
+    const rows = (job === undefined ? this.db.prepare("SELECT * FROM emails").all() : this.db.prepare("SELECT * FROM emails WHERE job = ?").all(job)) as Record<string, unknown>[];
+    return rows.map(toEmail);
+  }
+
+  email(draft: string): EmailRecord | null {
+    const r = this.db.prepare("SELECT * FROM emails WHERE draft = ?").get(draft) as Record<string, unknown> | undefined;
+    return r ? toEmail(r) : null;
+  }
+
+  /** A draft was sent from Gmail (to the owner themselves in test mode). */
+  markEmailSent(draft: string, s: { to: string; test: boolean; messageId: string }): void {
+    const at = now().toISOString();
+    this.db
+      .prepare("INSERT INTO emails (draft, kind, created_at, sent_at, sent_to, test, message_id) VALUES (?, 'other', ?, ?, ?, ?, ?) ON CONFLICT(draft) DO UPDATE SET sent_at = excluded.sent_at, sent_to = excluded.sent_to, test = excluded.test, message_id = excluded.message_id")
+      .run(draft, at, at, s.to, s.test ? 1 : 0, s.messageId);
+    const e = this.email(draft);
+    const ref = e?.job && e.hash ? this.candidate(e.job, e.hash) : null;
+    // An email for no candidate is reported by the app, which knows the draft's path.
+    if (ref) this.onChange({ ref, action: "emailed", summary: `${ref.name}: emailed${s.test ? " (test: to you)" : ""}` });
+  }
+
   // ---------------------------------------------------------------- rubrics
 
   latestRubric(job: string): Rubric | undefined {
@@ -297,6 +351,19 @@ export class Catalog {
       .prepare("INSERT OR REPLACE INTO evaluations (hash, job, version, result, created_at) VALUES (?, ?, ?, ?, ?)")
       .run(hash, job, version, JSON.stringify(e), new Date().toISOString());
   }
+}
+
+function toEmail(r: Record<string, unknown>): EmailRecord {
+  return {
+    draft: r.draft as string,
+    job: (r.job as string | null) ?? null,
+    hash: (r.hash as string | null) ?? null,
+    kind: r.kind as EmailKind,
+    createdAt: r.created_at as string,
+    sentAt: (r.sent_at as string | null) ?? null,
+    sentTo: (r.sent_to as string | null) ?? null,
+    test: (r.test as number) === 1,
+  };
 }
 
 function toRubric(r: Record<string, unknown>): Rubric {

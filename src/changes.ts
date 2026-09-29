@@ -26,6 +26,8 @@ export type ChangeAction =
   | "not"
   | "cleared"
   | "hired"
+  /** candidate or file: an email sent from Gmail */
+  | "emailed"
   /** job */
   | "created"
   | "criteria-drafted"

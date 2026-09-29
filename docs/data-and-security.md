@@ -6,8 +6,8 @@ For the company's IT and security reviewers and its legal and privacy reviewers.
 
 MeritAI is an HR adviser for small business owners without an HR department. It is a Windows desktop app (Electron) that runs OpenAI's Codex engine locally and gives the model only MeritAI's own tools. Today it is an internal alpha: testers play a business owner, **with synthetic data only**, signed in to their own ChatGPT account.
 
-- **On the computer:** the business profile, employee register, screening catalog, workspace files and settings are plain files in the Windows user's folders; only the voice API key is encrypted.
-- **Leaving the computer:** conversations, the business profile and what the model reads go to OpenAI (flows 1 to 5 below); update checks go to GitHub; fonts come from Google; feedback goes by email only when the tester sends it.
+- **On the computer:** the business profile, employee register, screening catalog, workspace files and settings are plain files in the Windows user's folders; only the voice API key and the Gmail sign-in are encrypted.
+- **Leaving the computer:** conversations, the business profile and what the model reads go to OpenAI (flows 1 to 5 below); update checks go to GitHub; fonts come from Google; feedback goes by email only when the tester sends it; with Gmail connected, the emails the owner sends go through Google (flow 9).
 - **Not allowed yet:** real candidate or employee data. Section 8 lists what would have to change and what the company needs to decide.
 
 ## 2. Architecture
@@ -35,8 +35,9 @@ MeritAI is an HR adviser for small business owners without an HR department. It 
 | 6 | Updates | GitHub, public releases of `Ruihang2017/MeritAI-test` | Requests for the release list and `latest.yml`, a random updater ID; downloads the installer | Checked against the sha512 in `latest.yml`; the installer is not code-signed, so this proves integrity, not the publisher |
 | 7 | Feedback | The feedback coordinator's mailbox (today a personal Gmail address), sent by the tester from their own email app | A feedback file: all ratings with the question and answer text, the current conversation, technical details (versions, model, recent errors), an optional tester name. All parts are ticked by default | MeritAI never sends email itself; the tester sees the draft first |
 | 8 | Fonts | Google Fonts | Ordinary web requests (IP address, browser details) | No MeritAI data |
+| 9 | Email from Gmail (only if the owner connects Gmail) | Google: its sign-in (`accounts.google.com`, `oauth2.googleapis.com`) and the Gmail API (`gmail.googleapis.com`), as the owner's own Google account. The OAuth client (a desktop client, "MeritAI-Test") is in the MeritAI developer's personal Google Cloud project | Each email the owner sends: recipient, subject, text and attachments. In test mode (on unless turned off) it goes to the owner's own address, with the real recipient in the subject. Nothing is read from the mailbox | One permission, `gmail.send` (plus `openid email` for the account's address): no reading. Only a button the owner presses sends, after the email and its address are on screen; 10 seconds to undo; the adviser has no sending tool |
 
-Not found in the code: telemetry, analytics or crash reporting (Codex's analytics is turned off in its config). MeritAI never sends email: `draft_email` saves an unsent `.eml` in the Outbox for the owner's email app.
+Not found in the code: telemetry, analytics or crash reporting (Codex's analytics is turned off in its config). The adviser never sends email: `draft_email` saves an unsent `.eml` in the Outbox; the owner sends it from their email app, or from Gmail in MeritAI (flow 9).
 
 Not verified here: which OpenAI endpoints Codex uses, what OpenAI keeps from flows 1 to 5 and for how long, and whether it may use them for training under a personal ChatGPT plan. These depend on OpenAI's terms and the account's settings.
 
@@ -47,7 +48,7 @@ Not verified here: which OpenAI endpoints Codex uses, what OpenAI keeps from flo
 | `%USERPROFILE%\MeritAI` (the workspace; the owner can move it) | Inbox (attachments), Outbox (documents, email drafts, screening reports with candidate names), Jobs (job descriptions, resumes), Policies, Feedback files | Plain files | Until deleted |
 | Workspace `.assistant\` (no tool can reach it) | `business.json` (profile: names, ABN, address, headcount, adviser, and more), `register.sqlite` (employee register: work details only), `catalog.sqlite` (screening: full resume text, names, model evaluations) | Plain files | Until deleted; screening data goes with its job folder |
 | `%APPDATA%\MeritAI\codex_home` (written by Codex) | The sign-in (`auth.json`), full conversations, Codex's own logs and databases | Plain files | Conversations: deleted at start-up once they have had no activity for 30 days. Logs: not managed by MeritAI |
-| `%APPDATA%\MeritAI\memory` | Settings, preferences, work notes, the conversation list, change summaries per reply, ratings (with question and answer text), voice usage | Plain files; the voice API key is encrypted with Windows DPAPI for the Windows user | Work notes 30 days; ratings and preferences until deleted |
+| `%APPDATA%\MeritAI\memory` | Settings, preferences, work notes, the conversation list, change summaries per reply, ratings (with question and answer text), voice usage | Plain files; the voice API key and the Gmail refresh token (`gmail.json`, with the account's address) are encrypted with Windows DPAPI for the Windows user; Gmail's short-lived access token stays in memory | Work notes 30 days; ratings and preferences until deleted |
 | `%APPDATA%\MeritAI` (Electron) | The window's cache and storage (the local server's token for the session, the microphone choice) | Plain files | Browser defaults |
 
 What MeritAI refuses to store: the register rejects tax file numbers, bank details, dates of birth, home addresses and health details (names, notes and other text fields are checked); memory rejects emails, phone numbers, TFNs and dates of birth.
@@ -62,6 +63,7 @@ What MeritAI refuses to store: the register rejects tax file numbers, bank detai
 - **Pay**: replies that calculate pay are flagged; pay rates come only from the Fair Work tools.
 - **Local server**: 127.0.0.1 only, a random port, a one-time token, Origin and Host checks, a method allowlist, a content security policy.
 - **Voice key**: encrypted for the Windows user; shown only as its last 4 characters.
+- **Sending email** (`src/email/`): Google's sign-in in the owner's browser (loopback redirect with PKCE); the only Gmail permission is `gmail.send`, and a sign-in without it is refused. The app sends only drafts from the Outbox, each to an address the owner saw or chose (for a candidate, found by code in their application: none or several means the owner types or picks it), after a 10-second wait with Undo; a candidate already sent the same kind of email is sent it again only when the owner ticks it. Disconnect deletes the token and withdraws the permission at Google.
 
 ## 6. Known limits
 
@@ -73,6 +75,7 @@ What MeritAI refuses to store: the register rejects tax file numbers, bank detai
 6. Voice tool activity lines can carry an employee's name or a file path to OpenAI.
 7. The model sees the Windows user name (in memory).
 8. Codex's own behaviour (endpoints, what its logs hold, whether deleting a conversation removes every copy) was not examined.
+9. The Google OAuth client belongs to the developer's personal Google Cloud project and isn't verified by Google: sign-in shows "Google hasn't verified this app", and at most 100 accounts can connect. Its client ID and secret are inside the desktop app (Google treats a desktop client's secret as not confidential).
 
 ## 7. Target state
 
@@ -95,6 +98,7 @@ What MeritAI refuses to store: the register rejects tax file numbers, bank detai
 3. Feedback: a company mailbox or folder instead of a personal address, and whether conversation and answer text may be included (MeritAI can turn them off by default).
 4. Voice: whether employee or candidate matters may be discussed by voice (audio and transcripts go to OpenAI).
 5. A privacy impact assessment before real data is used.
+6. Email: whether candidate emails may go from the owner's own mailbox through MeritAI, and a company-owned, Google-verified OAuth client (or Microsoft 365) for it.
 
 ## 9. Evidence
 
@@ -112,6 +116,7 @@ The main references, for a reviewer who wants to check the code (paths in the re
 | Register rules | `src/business/register.ts` |
 | Voice | `src/voice/liveSession.ts`, `src/voice/bridge.ts`, `src/voice/keyStore.ts` |
 | Feedback | `src/app/feedback.ts`, `src/app/app.ts` (`exportFeedback`, `emailFeedback`), `web/src/components/Feedback.tsx` |
+| Email from Gmail | `src/email/gmail.ts` (sign-in, token, send), `src/email/outbox.ts` (addresses, checks, the 10-second queue), `src/files/email.ts` (`forSending`), `scripts/build-desktop.mjs` (the OAuth client) |
 | Updates | `src/desktop/updates.ts`, `package.json` (`build.publish`) |
 | Local server | `src/server/server.ts`, `src/server/session.ts` |
 | Conversation retention | `src/app/app.ts` (`SESSION_RETENTION_DAYS`, `cleanupOldSessions`) |

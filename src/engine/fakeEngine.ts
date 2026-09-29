@@ -241,7 +241,7 @@ export class FakeEngine implements Engine {
       yield { type: "turn_end", status: "failed", error: "usage limit" };
       return;
     }
-    if (/\bemail\b|邮件/.test(t)) return yield* this.email(text);
+    if (/\bemails?\b|邮件/.test(t)) return yield* this.email(text);
     if (/accepted|hired|录用|接受了/.test(t)) return yield* this.hired(text);
     if (/resign|quit|leaving|辞职|离职/.test(t)) return yield* this.leaving(text);
     if (/this week|remind|what('s| is) due|提醒|到期/.test(t) && !/final pay|最终工资/.test(t)) return yield* this.reminders();
@@ -317,6 +317,23 @@ export class FakeEngine implements Engine {
 
   /** "Email Hannah her offer": an email draft to open in the email app, with a matching Outbox file attached. */
   private async *email(text: string): AsyncIterable<EngineEvent> {
+    // The Hiring page's "Draft the emails": one draft per decided candidate, linked to them.
+    const job = /candidate emails for the "([^"]+)"/i.exec(text)?.[1];
+    if (job) {
+      const list = yield* this.tool("list_candidates", { job });
+      const people = [...(list?.text ?? "").matchAll(/^- (.+?) \(file: .+?\): [^;]+; decision: (shortlisted|not this time)/gm)].map((m) => ({ name: m[1], invite: m[2] === "shortlisted" }));
+      let n = 0;
+      for (const c of people) {
+        const first = c.name.split(" ")[0];
+        const body = c.invite
+          ? `Hi ${first},\n\nThank you for applying for the ${job} role at Wattle Lane Cleaning. We'd like to meet you for an interview. Could you let me know two or three times that suit you next week?\n\nKind regards,\nJo Kim\nWattle Lane Cleaning`
+          : `Hi ${first},\n\nThank you for applying for the ${job} role at Wattle Lane Cleaning, and for the time you put into your application. We've decided to go ahead with candidates whose experience is a closer match for this role.\n\nWe wish you all the best with your search.\n\nKind regards,\nJo Kim\nWattle Lane Cleaning`;
+        const r = yield* this.tool("draft_email", { to: [], cc: [], subject: c.invite ? `Interview for the ${job} role at Wattle Lane Cleaning` : `Your application for ${job} at Wattle Lane Cleaning`, body, attachments: [], job, candidate: c.name, kind: c.invite ? "invite" : "not_this_time" });
+        if (r?.success) n++;
+      }
+      yield* this.say(n ? `I drafted ${n} emails for the ${job} candidates. Review them on the Hiring page (Candidate emails › Review and send): you check each one, and they go from your Gmail when you press Send.\n\n_Demo reply from the fake engine._` : "There's no one with a decision to email yet.");
+      return;
+    }
     const out = yield* this.tool("list_files", { folder: "outbox" });
     const files = [...(out?.text ?? "").matchAll(/^- (.+?) \(\d+ KB/gm)].map((m) => m[1]);
     const to = /[\w.+-]+@[\w-]+\.[\w.]+/.exec(text)?.[0] ?? null;

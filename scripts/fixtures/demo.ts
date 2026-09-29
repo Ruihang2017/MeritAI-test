@@ -154,7 +154,9 @@ interface Candidate {
   flags?: Partial<Evaluation["flags"]>;
 }
 
-const resume = (name: string, headline: string, lines: string[]) => [name, headline, "", ...lines, "", `(${SYNTHETIC})`];
+/** A synthetic address at example.com (reserved: nothing is ever delivered there), so sending from Gmail can be tried. */
+const emailOf = (name: string) => `${name.toLowerCase().replace(/[^a-z ]/g, "").trim().replace(/\s+/g, ".")}@example.com`;
+const resume = (name: string, headline: string, lines: string[], emails = [emailOf(name)]) => [name, headline, ...emails.map((e) => `Email: ${e}`), "", ...lines, "", `(${SYNTHETIC})`];
 
 const CANDIDATES: Candidate[] = [
   {
@@ -208,7 +210,7 @@ const CANDIDATES: Candidate[] = [
       "Cleaning supervisor, shopping centre (2019 to now): crew of 8, 5 am opening clean.",
       "Commercial cleaning for retail tenants and offices.",
       "Senior First Aid certificate, renewed 2026.",
-    ]),
+    ], ["kenji.watanabe@example.com", "kenji.w@example.net"]),
     status: ["met", "met", "not_evidenced", "met", "met"],
     evidence: ["Cleaning supervisor, crew of 8.", "5 am opening clean.", "", "Commercial cleaning for retail tenants and offices.", "Senior First Aid certificate, renewed 2026."],
     summary: "Strong supervision; no driver licence mentioned",
@@ -222,7 +224,7 @@ const CANDIDATES: Candidate[] = [
       "Barista, then cafe shift lead (2021 to now); opens the cafe at 6 am.",
       "Looking for a cafe supervisor role.",
       "First aid certificate (2025).",
-    ]),
+    ], []),
     status: ["not_evidenced", "met", "not_evidenced", "not_evidenced", "met"],
     evidence: ["", "Opens the cafe at 6 am.", "", "", "First aid certificate (2025)."],
     summary: "No supervision experience in the application",

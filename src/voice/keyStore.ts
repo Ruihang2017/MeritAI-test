@@ -33,7 +33,7 @@ function powershell(script: string, input: string): Promise<string> {
   return new Promise((ok, fail) => {
     const p = execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], { windowsHide: true, timeout: 20_000 }, (e, out) =>
       // PowerShell's own error text could quote its input: never pass it on.
-      e ? fail(new Error("Windows couldn't encrypt or read the voice key")) : ok(out.trim()),
+      e ? fail(new Error("Windows couldn't encrypt or read the saved key")) : ok(out.trim()),
     );
     p.stdin?.end(input);
   });

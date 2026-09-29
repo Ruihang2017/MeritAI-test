@@ -5,7 +5,7 @@ import type { ReplyFormat } from "../basePrompt";
 import { allCodexHomes } from "../engine/codexHome";
 import { now, todayIso } from "../clock";
 import { PendingConfirms } from "./confirms";
-import { launchCommand, openablePath, spawnLauncher, type Launcher, type OpenResult } from "./launch";
+import { launchCommand, launchUrl, openablePath, spawnLauncher, type Launcher, type OpenResult } from "./launch";
 import { stageUploads, type Upload } from "./uploads";
 export type { Upload } from "./uploads";
 export type { Launcher, OpenResult } from "./launch";
@@ -44,6 +44,9 @@ import { INDUSTRIES, industriesFor, JOB_TEMPLATES, type IndustryId, type JobTemp
 import { turnKey, type ChangeSink, type EntityChange } from "../changes";
 import { EMAIL_RE, buildEml, readEml } from "../files/email";
 import { LANGUAGE_ZH } from "../assistant";
+import { FakeGmail, GmailAccount, googleClient, type ConnectResult, type GmailSender, type GmailStatus } from "../email/gmail";
+import { checkSend, emailItem, jobEmails, SendQueue, updateDraft, type EmailItem, type SendRequest, type SendResult } from "../email/outbox";
+import { protect, unprotect } from "../voice/keyStore";
 
 /**
  * The application layer: everything a user interface needs, with no terminal code.
@@ -202,6 +205,15 @@ export interface TurnExtras {
   files: string[];
 }
 
+/** The project's .env (a developer setup: the voice key, the Google client); absent in the desktop app. */
+function loadDotEnv(): void {
+  try {
+    process.loadEnvFile(join(ROOT, ".env"));
+  } catch {
+    /* no .env */
+  }
+}
+
 /** In a workspace's .assistant/: marks the sample business (synthetic data) and the day it is written for. */
 const SAMPLE_MARKER = "sample.json";
 
@@ -276,7 +288,18 @@ export class AssistantApp {
     this.progress = opts.ui.progress ?? (() => {});
     this.onLog = opts.ui.log;
     if (opts.filesRoot) this.a.mem.updateSettings({ filesRoot: opts.filesRoot });
+    this.gmail = this.engineKind === "fake" ? new FakeGmail() : new GmailAccount(join(this.a.mem.dir, "gmail.json"), () => (loadDotEnv(), googleClient()), { fetch, protect, unprotect });
+    this.sending = new SendQueue({
+      sender: () => this.gmail,
+      folders: () => this.folders(),
+      catalog: () => this.a.catalog(),
+      testSelf: () => (this.gmailTestMode() ? this.gmail.status().email : null),
+      onSent: (path, to, test) => this.a.catalog().notify({ ref: { kind: "file", path, name: basename(path) }, action: "emailed", summary: `Email sent to ${to}${test ? " (test: to you)" : ""}` }),
+    });
   }
+
+  private readonly gmail: GmailSender;
+  private readonly sending: SendQueue;
 
   private readonly confirm: Confirm;
   private readonly progress: Progress;
@@ -372,6 +395,9 @@ export class AssistantApp {
   /** Saves notes and shuts the engine down. */
   async close(): Promise<TaskNote[] | null> {
     this.cancelPendingConfirms();
+    // Emails still waiting their 10 seconds aren't sent (their drafts stay in the Outbox).
+    this.sending.cancelAll();
+    this.gmail.cancelConnect();
     this.voice?.stop();
     let notes: TaskNote[] | null = null;
     try {
@@ -1228,6 +1254,84 @@ export class AssistantApp {
     return (await saveReports(this.a.engine, this.folders(), result, format)).map((f) => join(this.folders().outbox, f));
   }
 
+  // ------------------------------------------------------------------ email from Gmail (src/email/)
+
+  /** Whether Gmail is connected (and as whom), and test mode: every email to the owner themselves (on unless turned off). */
+  gmailStatus(): GmailStatus & { testMode: boolean } {
+    return { ...this.gmail.status(), testMode: this.gmailTestMode() };
+  }
+
+  private gmailTestMode(): boolean {
+    return this.a.mem.settings().gmailTestMode ?? true;
+  }
+
+  setGmailTestMode(on: boolean): GmailStatus & { testMode: boolean } {
+    this.a.mem.updateSettings({ gmailTestMode: on });
+    return this.gmailStatus();
+  }
+
+  /**
+   * Google's sign-in in the owner's browser; resolves when they allowed it, declined, or it timed out.
+   * `onUrl` gets the sign-in page's address (a UI links to it in case the browser didn't open).
+   */
+  connectGmail(onUrl?: (url: string) => void): Promise<ConnectResult> {
+    return this.gmail.connect(async (url) => {
+      onUrl?.(url);
+      await this.launcher(launchUrl(url));
+    });
+  }
+
+  cancelGmailConnect(): boolean {
+    return this.gmail.cancelConnect();
+  }
+
+  async disconnectGmail(): Promise<GmailStatus & { testMode: boolean }> {
+    this.sending.cancelAll();
+    await this.gmail.disconnect();
+    return this.gmailStatus();
+  }
+
+  /** A job's candidate emails in the Outbox, to review and send (design: EmailReview). */
+  jobEmails(job: string): EmailItem[] {
+    jobDir(this.folders(), job);
+    return jobEmails(this.folders(), this.a.catalog(), job);
+  }
+
+  /** One draft (by its path or its name in the Outbox): the chat's email card and the candidate panel. */
+  emailItem(pathOrName: string): EmailItem | null {
+    return emailItem(this.folders(), this.a.catalog(), basename(pathOrName));
+  }
+
+  /** The owner's edit of a draft's subject and text before sending. */
+  updateEmailDraft(draft: string, change: { subject: string; body: string }): EmailItem | null {
+    updateDraft(this.folders(), basename(draft), change);
+    return this.emailItem(draft);
+  }
+
+  /**
+   * Sends drafts from Gmail after 10 seconds (Undo: cancelEmails; Send now: sendEmailsNow). Each goes
+   * to the address the owner saw or chose; `again` sends a candidate the same kind of email a second time.
+   */
+  sendEmails(reqs: SendRequest[], opts: { again?: boolean } = {}): { ok: true; id: string; sendAt: string; count: number; test: boolean } | { ok: false; error: string } {
+    const clean = reqs.map((r) => ({ draft: basename(String(r.draft)), to: String(r.to ?? "").trim() }));
+    const problems = checkSend(this.folders(), this.a.catalog(), clean, { connected: this.gmail.status().connected, again: !!opts.again });
+    if (problems.length) return { ok: false, error: problems.join(" ") };
+    return { ok: true, ...this.sending.queue(clean), test: this.gmailTestMode() };
+  }
+
+  cancelEmails(id: string): boolean {
+    return this.sending.cancel(id);
+  }
+
+  sendEmailsNow(id: string): boolean {
+    return this.sending.sendNow(id);
+  }
+
+  /** Waits for a send to finish: what was sent and what wasn't (nothing when it was undone). */
+  emailResults(id: string): Promise<{ state: string; results: SendResult[] }> {
+    return this.sending.results(id);
+  }
+
   // ------------------------------------------------------------------ voice
 
   voiceActive(): boolean {
@@ -1247,11 +1351,7 @@ export class AssistantApp {
 
   /** VOICE_OPENAI_API_KEY from .env: the developer setup, used when no key is saved. */
   private envVoiceKey(): string | undefined {
-    try {
-      process.loadEnvFile(join(ROOT, ".env"));
-    } catch {
-      /* no .env */
-    }
+    loadDotEnv();
     return process.env.VOICE_OPENAI_API_KEY || undefined;
   }
 

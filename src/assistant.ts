@@ -156,7 +156,14 @@ export function createAssistant(opts: {
     ...parentalLeaveTools(todayLocal),
     ...reminderTools({ register, business }),
     officialSourcesTool(() => engine),
-    ...fileTools(folders, changes.emit),
+    ...fileTools(folders, changes.emit, {
+      find: (job, who) => {
+        if (!listJobs(folders()).includes(job)) return { ok: false, error: `no job called "${job}"` };
+        const f = findCandidate(catalog(), job, who);
+        return f.ok ? { ok: true, hash: f.candidate.hash, name: f.candidate.name, decision: f.candidate.decision } : f;
+      },
+      link: (draft, job, hash, kind) => catalog().linkEmail(draft, job, hash, kind),
+    }),
     ...screeningTools({ engine: () => engine, folders, catalog, onProgress: opts.onProgress }),
     ...hiringTools({ folders, catalog, register, confirm: opts.confirm }),
   ];

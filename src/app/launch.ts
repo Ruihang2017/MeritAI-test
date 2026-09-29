@@ -42,6 +42,13 @@ export function launchCommand(action: "open" | "reveal", path: string, platform:
   return { command: "xdg-open", args: [action === "open" ? path : dirname(path)] };
 }
 
+/** Opens a web address in the default browser (Google's sign-in). Only https; quoted verbatim on Windows (a URL has no `"`). */
+export function launchUrl(url: string, platform: NodeJS.Platform = process.platform): LaunchCommand {
+  if (!/^https:\/\/[^\s"]+$/.test(url)) throw new Error("not a web address");
+  if (platform === "win32") return { command: "explorer.exe", args: [`"${url}"`], verbatim: true };
+  return { command: platform === "darwin" ? "open" : "xdg-open", args: [url] };
+}
+
 const inside = (child: string, parent: string) => {
   const r = relative(parent, child);
   return r === "" || (r !== ".." && !r.startsWith(`..${sep}`) && !isAbsolute(r));

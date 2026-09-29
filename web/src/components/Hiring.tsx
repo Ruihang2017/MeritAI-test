@@ -8,6 +8,8 @@ import { fromJob, type Ask, type Asking } from "../ask";
 import { markLabel, marks, useLive } from "../live";
 import { NewJobDialog } from "./NewJob";
 import { JobDescriptionCard } from "./JobDescription";
+import { CandidateEmail, EmailReview, SendToast, useGmail, useSend } from "./Mail";
+import type { EmailItem, GmailState } from "../../../src/server/protocol";
 
 // The Hiring page as on the design canvas (Hiring*, artboards): jobs on the left, the selected
 // job's steps, criteria, applications and ranked candidates on the right.
@@ -76,6 +78,11 @@ export function HiringPage({
   /** "Change decisions" on a decided job: back to the deciding view. */
   const [reviewing, setReviewing] = useState(false);
   const [duplicating, setDuplicating] = useState<string | null>(null);
+  // Candidate emails from Gmail (design: EmailReview, EmailOne, EmailSent).
+  const [emails, setEmails] = useState<EmailItem[]>([]);
+  const [reviewEmails, setReviewEmails] = useState(false);
+  const { gmail, reload: reloadGmail } = useGmail(api);
+  const live = useLive();
 
   const loadJobs = useCallback(async () => {
     try {
@@ -91,6 +98,7 @@ export function HiringPage({
     async (job: string) => {
       try {
         setResult(await api.call("screenResults", { job }));
+        setEmails(await api.call("jobEmails", { job }).catch(() => []));
       } catch (e) {
         setResult(null);
         setError((e as Error).message);
@@ -107,8 +115,19 @@ export function HiringPage({
   useEffect(() => {
     if (!refreshKey) return;
     void loadJobs();
+    reloadGmail();
     if (selRef.current) void loadResult(selRef.current);
-  }, [refreshKey, loadJobs, loadResult]);
+  }, [refreshKey, loadJobs, loadResult, reloadGmail]);
+  const sender = useSend(api, () => {
+    if (selRef.current) void loadResult(selRef.current);
+  });
+  const waiting = sender.batch && (sender.batch.state === "waiting" || sender.batch.state === "sending") ? new Set(sender.batch.drafts) : new Set<string>();
+  const sendEmails = async (items: { draft: string; to: string }[], again: boolean) => {
+    const e = await sender.send(items, again);
+    if (!e && selRef.current) void loadResult(selRef.current);
+    return e;
+  };
+  const toConnections = () => (setReviewEmails(false), live.open({ kind: "connections" }));
   /** A request about a job; `draft`: fill the side panel's box and wait for the owner's words. */
   const onAsk = (job: string, text: string, draft = false) => ask({ text, from: fromJob(job), ...(draft ? { draft } : {}) });
 
@@ -284,6 +303,10 @@ export function HiringPage({
             onReport={report}
             onAsk={(t, draft) => onAsk(job.job, t, draft)}
             onRefresh={() => void refresh()}
+            emails={emails}
+            gmail={gmail}
+            waiting={waiting}
+            onReviewEmails={() => setReviewEmails(true)}
             asking={asking}
             reviewing={reviewing}
             onReview={setReviewing}
@@ -319,8 +342,32 @@ export function HiringPage({
           hire={result.hires.find((h) => h.file === cand.file) ?? null}
           closed={!!result.closedAt}
           onOpenEmployee={onOpenEmployee}
+          email={
+            <>
+              {emails
+                .filter((e) => e.candidate?.file === cand.file)
+                .sort((a, b) => Number(!!a.sentAt) - Number(!!b.sentAt))
+                .slice(0, 1)
+                .map((e) => (
+                  <CandidateEmail
+                    key={e.draft}
+                    api={api}
+                    e={e}
+                    gmail={gmail}
+                    sending={waiting.has(e.draft)}
+                    onSend={(to, again) => void sendEmails([{ draft: e.draft, to }], again).then((err) => err && setError(err))}
+                    onChanged={() => void refresh()}
+                    onConnect={toConnections}
+                  />
+                ))}
+            </>
+          }
         />
       )}
+      {reviewEmails && job && (
+        <EmailReview api={api} job={job.job} items={emails} gmail={gmail} onClose={() => setReviewEmails(false)} onSend={sendEmails} onChanged={() => void refresh()} onConnect={toConnections} />
+      )}
+      {sender.batch && <SendToast batch={sender.batch} from={gmail?.email ?? null} onUndo={sender.undo} onNow={sender.now} onClose={sender.dismiss} onReview={() => (sender.dismiss(), setReviewEmails(true))} />}
       {duplicating && (
         <DuplicateJob
           api={api}
@@ -405,6 +452,11 @@ function JobPane(p: {
   onAddApps: (files: File[]) => void;
   /** Reload the job list and this job (after the job description card saved something). */
   onRefresh: () => void;
+  /** The job's candidate emails in the Outbox, Gmail, and the drafts waiting to be sent. */
+  emails: EmailItem[];
+  gmail: GmailState | null;
+  waiting: Set<string>;
+  onReviewEmails: () => void;
 }) {
   const { job, result: r } = p;
   const { recent } = useLive();
@@ -447,13 +499,20 @@ function JobPane(p: {
   const [tab, setTab] = useState<Decision | "all">("shortlist");
   const [hireOpen, setHireOpen] = useState(false);
   const names = (cs: Ranked[]) => cs.map((c) => c.name).join(", ");
+  const unsentMail = p.emails.filter((e) => !e.sentAt);
+  const sentMail = p.emails.filter((e) => e.sentAt);
+  const lastSent = sentMail.map((e) => e.sentAt!).sort().pop();
+  // The Email column: each candidate's email, a draft still to send before one already sent (EmailSent).
+  const mailOf = new Map<string, EmailItem>();
+  for (const e of p.emails) if (e.candidate && (!mailOf.has(e.candidate.file) || (mailOf.get(e.candidate.file)!.sentAt && !e.sentAt))) mailOf.set(e.candidate.file, e);
+  const mailCol = p.emails.length > 0;
   const notHired = shortlisted.filter((c) => !hires.has(c.file));
   const kitPrompt = shortlisted.length
     ? `Build an interview kit for the "${job.job}" role for the shortlisted candidates (${names(shortlisted)}), using the confirmed screening criteria.`
     : `Build an interview kit for the "${job.job}" role, using the confirmed screening criteria.`;
   const emailsPrompt =
     shortlisted.length || notNow.length
-      ? `Draft the candidate emails for the "${job.job}" role and save each one as a draft in my Outbox (I'll send them myself): ${[shortlisted.length ? `interview invitations for ${names(shortlisted)}` : "", notNow.length ? `respectful "not this time" emails for ${names(notNow)}` : ""].filter(Boolean).join("; ")}.`
+      ? `Draft the candidate emails for the "${job.job}" role, one draft per candidate, linked to them: ${[shortlisted.length ? `interview invitations for ${names(shortlisted)}` : "", notNow.length ? `respectful "not this time" emails for ${names(notNow)}` : ""].filter(Boolean).join("; ")}.`
       : `Draft emails to the candidates for the "${job.job}" role: interview invitations for the shortlist, and respectful "not this time" emails for the rest.`;
 
   type Step = { label: string; state: "done" | "now" | "todo" | "warn" };
@@ -830,11 +889,26 @@ function JobPane(p: {
                       Make the interview kit
                     </AskButton>
                   </NextStep>
-                  <NextStep n={2} title="Candidate emails" text={`${plural(shortlisted.length, "interview invitation")} and ${notNow.length} “not this time” email${notNow.length === 1 ? "" : "s"}, saved as drafts in your Outbox. You check and send them.`}>
-                    <AskButton prompt={emailsPrompt} asking={p.asking} busyLabel="Drafting in the side panel" primary onAsk={p.onAsk}>
-                      Draft the emails
-                    </AskButton>
-                  </NextStep>
+                  {!unsentMail.length && !sentMail.length ? (
+                    <NextStep n={2} title="Candidate emails" text={`${plural(shortlisted.length, "interview invitation")} and ${notNow.length} “not this time” email${notNow.length === 1 ? "" : "s"}, drafted into your Outbox. ${p.gmail?.connected ? "You review them and send them from your Gmail." : "You check and send them."}`}>
+                      <AskButton prompt={emailsPrompt} asking={p.asking} busyLabel="Drafting in the side panel" primary onAsk={p.onAsk}>
+                        Draft the emails
+                      </AskButton>
+                    </NextStep>
+                  ) : unsentMail.length ? (
+                    <NextStep n={2} title="Candidate emails" text={`${plural(unsentMail.length, "draft")} ready: ${draftKinds(unsentMail)}.${sentMail.length ? ` ${sentMail.length} already sent.` : ""} ${p.gmail?.connected ? "Review them, then send from your Gmail." : "Review them; connect Gmail to send from MeritAI."}`}>
+                      <button type="button" className="btn p" onClick={p.onReviewEmails}>
+                        <Icon name="send" size={16} />
+                        Review and send
+                      </button>
+                    </NextStep>
+                  ) : (
+                    <NextStep n={2} done title="Candidate emails" text={`${plural(sentMail.length, "email")} sent from your Gmail${lastSent ? ` on ${fmtDay(localDay(lastSent))}` : ""}${sentMail.some((e) => e.test) ? " (test mode: to you)" : ""}.`}>
+                      <button type="button" className="btn g" onClick={p.onReviewEmails}>
+                        See them
+                      </button>
+                    </NextStep>
+                  )}
                   <NextStep
                     n={3}
                     done={r.hires.length > 0}
@@ -937,6 +1011,7 @@ function JobPane(p: {
                         <th className="opt-col">Desirable</th>
                         <th className="opt-col">Summary</th>
                         <th style={{ width: 236 }}>Decision</th>
+                        {mailCol && <th>Email</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -973,6 +1048,7 @@ function JobPane(p: {
                               <DecisionButtons name={c.name} value={dec.get(c.file) ?? null} onChange={(d) => p.onDecide(c.file, d)} />
                             )}
                           </td>
+                          {mailCol && <td style={{ whiteSpace: "nowrap" }}>{mailPill(mailOf.get(c.file), p.waiting)}</td>}
                         </tr>
                       ))}
                     </tbody>
@@ -1017,6 +1093,21 @@ function JobPane(p: {
       </div>
     </>
   );
+}
+
+/** "2 interview invitations and 11 “not this time”", leaving out kinds there are none of. */
+function draftKinds(es: EmailItem[]): string {
+  const n = (k: EmailItem["kind"]) => es.filter((e) => e.kind === k).length;
+  const parts = [n("invite") && plural(n("invite"), "interview invitation"), n("not") && `${n("not")} “not this time”`, n("other") && plural(n("other"), "other email")].filter(Boolean);
+  return parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : String(parts[0] ?? "");
+}
+
+/** A candidate's email in the table: sent (when), waiting to go, or a draft. */
+function mailPill(e: EmailItem | undefined, waiting: Set<string>): React.ReactNode {
+  if (!e) return null;
+  if (e.sentAt) return <span className="pill ok">{`Emailed ${fmtDay(localDay(e.sentAt))}`}</span>;
+  if (waiting.has(e.draft)) return <span className="pill info">Sending…</span>;
+  return <span className="pill n">Draft</span>;
 }
 
 /** Shortlist / Not this time; clicking the chosen one again clears it. */
@@ -1391,7 +1482,10 @@ function Candidate({
   onOpen,
   onInvite,
   onPhone,
+  email,
 }: {
+  /** The candidate's email from the Outbox, to send from Gmail (EmailOne). */
+  email?: React.ReactNode;
   c: Ranked;
   result: JobResults;
   decision: Decision | null;
@@ -1463,6 +1557,7 @@ function Candidate({
           </div>
         )}
         <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55 }}>{ev.summary}</p>
+        {email}
         <section>
           <h3 className="cap" style={{ margin: "0 0 4px" }}>
             Against your criteria

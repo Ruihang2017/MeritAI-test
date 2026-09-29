@@ -440,6 +440,22 @@ export class UiSession {
     turnExtras: async () => this.app.turnExtras(),
     connections: async () => ({ wanted: this.app.wantedConnections() }),
     wantConnection: async (p) => ({ wanted: this.app.wantConnection(str(p?.name, "name", 100), p?.want === true) }),
+    // Gmail (src/email/): the app sends, after the owner pressed Send; none of these is the adviser's.
+    gmail: async () => this.app.gmailStatus(),
+    connectGmail: async () => this.app.connectGmail((url) => this.emit({ event: "gmailSignIn", url })),
+    cancelGmailConnect: async () => ({ cancelled: this.app.cancelGmailConnect() }),
+    disconnectGmail: async () => this.app.disconnectGmail(),
+    setGmailTestMode: async (p) => this.app.setGmailTestMode(p?.on !== false),
+    jobEmails: async (p) => this.app.jobEmails(this.jobName(p?.job)),
+    emailItem: async (p) => this.app.emailItem(str(p?.draft, "draft", 2000)),
+    updateEmailDraft: async (p) => this.app.updateEmailDraft(str(p?.draft, "draft", 2000), { subject: str(p?.subject, "subject", 500), body: str(p?.body, "body", 50_000) }),
+    sendEmails: async (p) => {
+      if (!Array.isArray(p?.items)) throw new Error("items must be a list");
+      return this.app.sendEmails(p.items.slice(0, 101).map((x) => ({ draft: str(x?.draft, "draft", 500), to: str(x?.to, "to", 320) })), { again: p?.again === true });
+    },
+    cancelEmails: async (p) => ({ cancelled: this.app.cancelEmails(str(p?.id, "id", 50)) }),
+    sendEmailsNow: async (p) => ({ started: this.app.sendEmailsNow(str(p?.id, "id", 50)) }),
+    emailResults: async (p) => this.app.emailResults(str(p?.id, "id", 50)),
   };
 
   private async run(turnId: string, events: AsyncIterable<AppEvent>): Promise<void> {
