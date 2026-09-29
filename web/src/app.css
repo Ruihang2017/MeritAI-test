@@ -2822,6 +2822,26 @@ button.sample {
   text-transform: none;
 }
 
+/* No applications yet (design: HiringNoApps); files dropped anywhere on the job page are added */
+.apps-drop {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 22px 24px;
+  border: 2px dashed #9db5e6;
+  border-radius: 12px;
+  background: #f5f8fe;
+  color: #1a57cc;
+}
+.apps-drop b {
+  color: #1b1f27;
+}
+.job-body.drop-over {
+  outline: 2px dashed #1a57cc;
+  outline-offset: -6px;
+  background: #f5f8fe;
+}
+
 /* The job description on the Hiring page (design: HiringJD, HiringJDOpen, HiringJDEdit, HiringJDChanged) */
 .jd-card {
   overflow: visible;

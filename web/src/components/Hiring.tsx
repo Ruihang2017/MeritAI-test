@@ -144,9 +144,11 @@ export function HiringPage({
       if (r.status === "not-confirmed") setNote(<>The criteria weren't confirmed, so nothing was screened.</>);
     });
   const confirmAndScreen = (version: number, count: number) =>
-    run("Screening", async () => {
+    run(count ? "Screening" : "Confirming the criteria", async () => {
       if (!sel) return;
       await api.call("confirmCriteria", { job: sel, version });
+      // No applications yet: the criteria are confirmed; screening waits for them (HiringNoApps).
+      if (!count) return;
       setScreening(count);
       await api.call("screen", { job: sel });
     });
@@ -410,7 +412,17 @@ function JobPane(p: {
   const rubric = r.rubric;
   const confirmed = rubric?.confirmed ?? false;
   const screened = r.ranked.length;
-  const unscreened = r.files.filter((f) => f.status === "application").length - screened;
+  const applicationCount = r.files.filter((f) => f.status === "application").length;
+  const unscreened = applicationCount - screened;
+  // Files dropped anywhere on the job page are added as applications (HiringNoApps).
+  const [dropOver, setDropOver] = useState(false);
+  const dropApps = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setDropOver(false);
+    const files = (await filesFromDrop(e)).map((x) => x.file).filter((f) => /\.(pdf|docx|txt|md)$/i.test(f.name));
+    if (files.length) p.onAddApps(files);
+  };
+  const addInput = useRef<HTMLInputElement>(null);
   const unreadable = r.files.filter((f) => f.status === "unreadable");
   const duplicates = r.files.filter((f) => f.status === "duplicate");
   const screeningNow = p.busy === "Screening";
@@ -545,7 +557,12 @@ function JobPane(p: {
           )}
         </div>
       </div>
-      <div className="job-body">
+      <div
+        className={`job-body${dropOver ? " drop-over" : ""}`}
+        onDragOver={(e) => (e.preventDefault(), !dropOver && setDropOver(true))}
+        onDragLeave={(e) => e.currentTarget === e.target && setDropOver(false)}
+        onDrop={(e) => void dropApps(e)}
+      >
         <ol className="steps4" aria-label="Steps">
           {steps.map((s, i) => (
             <li key={i} className={s.state} aria-current={s.state === "now" ? "step" : undefined}>
@@ -580,6 +597,23 @@ function JobPane(p: {
         {/* The job description (HiringJD, HiringJDOpen, HiringJDEdit, HiringJDChanged): open until the criteria are confirmed. */}
         {job.jd && (
           <JobDescriptionCard api={p.api} job={job.job} closed={false} defaultOpen={!confirmed} version={r} onReviewCriteria={p.onDraft} onAsk={p.onAsk} onChanged={p.onRefresh} />
+        )}
+
+        {/* No applications yet (HiringNoApps): drop them here, choose them, or send them to MeritAI. */}
+        {job.jd && applicationCount === 0 && !p.busy && (
+          <section className="apps-drop" aria-label="Applications">
+            <Icon name="upload" size={30} stroke={1.6} />
+            <div className="grow" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <b style={{ fontSize: 16 }}>No applications yet</b>
+              <span style={{ fontSize: 14, color: "#4A5363", lineHeight: 1.5 }}>
+                Drop the resumes here, or choose them: PDF, Word or text, one file per person. Or send them to MeritAI in the side panel and say it's for this job: it adds them for you, after your OK.
+              </span>
+            </div>
+            <input ref={addInput} type="file" multiple hidden accept=".pdf,.docx,.txt,.md" onChange={(e) => (e.target.files?.length && p.onAddApps([...e.target.files]), (e.target.value = ""))} />
+            <button type="button" className="btn p" style={{ flexShrink: 0 }} onClick={() => addInput.current?.click()}>
+              Choose files
+            </button>
+          </section>
         )}
 
         {/* No job description yet (HiringJobs). */}
@@ -663,13 +697,14 @@ function JobPane(p: {
                 Criteria must be about the job. Age, gender, race, disability, pregnancy, family responsibilities and similar attributes can't be used, directly or through a stand-in like "recent graduate".
               </p>
               <div className="row-wrap" style={{ alignItems: "center" }}>
-                <button type="button" className="btn p" disabled={!!p.busy || unscreened <= 0} onClick={() => p.onConfirm(rubric.version, unscreened)}>
-                  Yes, screen {plural(unscreened, "application")}
+                {/* No applications yet (HiringNoApps): confirm the criteria now, screen when they come. */}
+                <button type="button" className="btn p" disabled={!!p.busy || (applicationCount > 0 && unscreened <= 0)} onClick={() => p.onConfirm(rubric.version, applicationCount > 0 ? unscreened : 0)}>
+                  {applicationCount > 0 ? <>Yes, screen {plural(unscreened, "application")}</> : "Yes, use these criteria"}
                 </button>
                 <button type="button" className="btn" disabled={!!p.busy} onClick={() => p.onAsk(`Change the screening criteria for the "${job.job}" role: `, true)}>
                   No, change them
                 </button>
-                <span className="meta">Takes about a minute. Up to 20 per run.</span>
+                <span className="meta">{applicationCount > 0 ? "Takes about a minute. Up to 20 per run." : "No applications yet: screening starts when you add them."}</span>
               </div>
             </div>
           </>

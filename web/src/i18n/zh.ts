@@ -539,6 +539,11 @@ export const ZH: Record<string, string> = {
   Pay: "薪酬",
   "Suburb and state": "区和州",
   "Award rate for the level (check the Pay and Conditions Tool)": "该级别的 Award 工资（用 Pay and Conditions Tool 核实）",
+  // No applications yet (design: HiringNoApps)
+  "Drop the resumes here, or choose them: PDF, Word or text, one file per person. Or send them to MeritAI in the side panel and say it's for this job: it adds them for you, after your OK.": "把简历拖到这里，或点选文件：PDF、Word 或文本，每人一个文件。也可以把简历发给右栏的 MeritAI，说明是这个职位的，它会在你确认后帮你加进来。",
+  "Yes, use these criteria": "是，使用这些标准",
+  "No applications yet: screening starts when you add them.": "还没有申请：加入申请后再开始筛选。",
+  "Confirming the criteria": "正在确认标准",
   // Pay and hours in a new job (design: NewJobEdit, NewJobPay). The examples themselves go into the English job description.
   "Days, times, hours a week": "哪几天、几点到几点、每周几小时",
   "For the job description: the days and times, about how many hours a week.": "写进职位描述：哪几天、几点到几点、每周大约多少小时。",
