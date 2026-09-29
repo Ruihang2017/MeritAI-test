@@ -17,11 +17,11 @@ Thank you for testing MeritAI. It is an HR adviser for small business owners who
 | A Windows 10 or 11 computer | About 1 GB of free space |
 | A ChatGPT account whose plan includes Codex | You sign in with it once, in a browser. The adviser's usage counts against that account's plan |
 | Optional, for voice: an OpenAI API key | Created at platform.openai.com (API keys), with billing set up. Separate from ChatGPT; voice costs about US$0.05 a minute, billed to that key's account |
-| The installer | `MeritAI Setup 0.2.1.exe`, from the MeritAI test coordinator (Horace, ruihang2017@gmail.com) |
+| The installer | `MeritAI-Setup-0.2.2.exe`, from the MeritAI test coordinator (Horace, ruihang2017@gmail.com) |
 
 ## 3 Install and first start
 
-1. Run `MeritAI Setup 0.2.1.exe`. It installs for your Windows user only.
+1. Run `MeritAI-Setup-0.2.2.exe`. It installs for your Windows user only. If an earlier MeritAI is installed, this one replaces it and keeps your sign-in and data.
    - Windows may say "Windows protected your PC", because this test build isn't signed: choose **More info**, then **Run anyway**. Only do this for the installer you got from the test coordinator.
 2. Open **MeritAI** from the Start menu.
 3. **Sign in**: choose Sign in with ChatGPT, open the page it shows, sign in and enter the code. The app moves on by itself.

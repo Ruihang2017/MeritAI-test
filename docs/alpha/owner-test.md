@@ -2,7 +2,7 @@
 
 从上到下做一遍，每步对照"预期"。有问题记下步骤号和截图；也可以在 app 里用 Send feedback 存一个文件发给开发。
 
-全部用示例企业或虚构数据。A–H 大约 60 分钟，J–P（今晚新做的）大约 45 分钟；语音（第 F 步）另算，真实语音约 US$0.05/分钟。
+全部用示例企业或虚构数据。A–H 大约 60 分钟，J–R 大约 45 分钟，S（0.2.2 的新内容）大约 15 分钟；语音（第 F 步）另算，真实语音约 US$0.05/分钟。
 
 ## 0 准备
 
@@ -15,9 +15,11 @@
 
 | # | 做什么 | 预期 |
 |---|---|---|
-| A1 | 运行 `release\MeritAI Setup 0.2.1.exe` | 可能弹出 SmartScreen 警告（没有签名），点 More info › Run anyway；装到当前用户下，开始菜单出现 MeritAI |
+| A0 | 电脑上装着 0.2.1 的话，先按第 I 步卸载并清理（这样才能测首次运行）；不想从头测，也可以直接装 0.2.2 覆盖，登录和数据都保留，跳到 A5 之后 | 开始菜单里没有 MeritAI，或者保留了旧版 |
+| A1 | 运行 `release\MeritAI-Setup-0.2.2.exe`（或从 GitHub 的 0.2.2 草稿下载同名文件） | 可能弹出 SmartScreen 警告（没有签名），点 More info › Run anyway；装到当前用户下，开始菜单出现 MeritAI |
 | A2 | 从开始菜单打开 MeritAI | 一个窗口，标题 MeritAI；出现首次运行的登录页 |
-| A3 | Sign in with ChatGPT → 在浏览器里登录并输入代码 | 回到 app 后自动进入下一步，**不用**手动刷新 |
+| A3a | 点 Sign in with ChatGPT，出现代码后点等待栏右边的 **Cancel** | 回到 "Sign in with ChatGPT" 按钮，**没有**报错 |
+| A3 | 再点 Sign in with ChatGPT → 在浏览器里登录并输入代码 | 回到 app 后自动进入下一步，**不用**手动刷新 |
 | A4 | 工作区保留默认的 `C:\Users\<你>\MeritAI` | 下一步是选企业 |
 | A5 | 选 **Try it with a sample business** | 进入 Wattle Lane Cleaning：9 名员工、3 个在招职位；顶部显示 **Sample data**；日期按 2026-09-26 算（提醒是合理的） |
 | A6 | 任务管理器 › 详细信息 | 运行的是 `…\MeritAI\resources\codex\bin\codex.exe`，**不是**你自己装的 Codex |
@@ -101,7 +103,7 @@
 | G1 | 在一条回答下点 👍 | 显示 "Thanks: marked helpful." |
 | G2 | 在另一条下点 👎，选两个原因，写一句话，Save feedback | 显示 "Thanks: noted what went wrong." |
 | G3 | 名字 › Send feedback：写一句话，三项都勾上，保存 | 显示 Saved；Show in folder 打开 `C:\Users\<你>\MeritAI\Feedback\` |
-| G4 | 用记事本打开那个 json | 有你写的话、2 条评分（包括问题和回答开头）、当前对话、版本号 0.2.1；**没有** key 或密码 |
+| G4 | 用记事本打开那个 json | 有你写的话、2 条评分（包括问题和回答开头）、当前对话、版本号 0.2.2；**没有** key 或密码 |
 
 ## H 切换到自己的企业（5 分钟）
 
@@ -202,6 +204,19 @@
 | R3 | `--fake-update downloading` | 顶栏 "Downloading update · 45%"，Settings 里是进度条 |
 | R4 | 浏览器版（不加这个参数） | Settings 里写着"浏览器版从项目运行，更新只随桌面版提供" |
 | R5 | 真正的更新：发 0.2.2 之后的下一版时 | 按 `docs/alpha/distribution.md` 先发草稿、本机试装，再正式发布；装着 0.2.2 的电脑几分钟内出现 Update ready |
+
+## S 0.2.2 的新内容（9 月 29 日，15 分钟）
+
+在示例企业里做（NSW，9 名员工，app 的"今天"是 2026-09-26）。每条都是新对话。
+
+| # | 做什么 | 预期 |
+|---|---|---|
+| S1 | "We're hiring a full-time cleaner who starts on 5 October 2026. What do I need to do?" | 清单开头说明 5 October 2026 是星期一、是 NSW 的 **Labour Day** 公众假期；**不**叫你改日子；说明员工不上班的话，通常那天本来要上班的（casual 除外）要按正常工时付基本工资，细节打 Fair Work Infoline 13 13 94；带 Fair Work 链接 |
+| S2 | "Our new cleaner will work from home in Melbourne. What's different for her?" | 按 VIC 的公众假期；长期服务假写"各州法律不同，问 NSW Industrial Relations 或 Workforce Inspectorate Victoria 适用哪个州"，**不**直接给天数；工伤保险提到 VIC |
+| S3 | "Mia Rossi asked when she can become permanent." | 说明员工选择转正：满 12 个月（小企业）**并且**员工认为自己已不符合 casual 定义；不会自动转正；雇主要协商、21 天内书面答复、只能按法定理由拒绝；Mia 的最早日期已经到了（按 2025-06-19 入职算） |
+| S4 | 同样问 Marco Silva | 最早日期是 **2027-09-06** |
+| S5 | "Write a welcome email for Sam, who starts on Monday 13 October." | 2026 年 10 月 13 日是**星期二**：回答要么写对成 Tuesday，要么照抄了 Monday，这时回答下面出现黄色提醒 "This reply has a weekday that doesn't match its date…"（中文界面是"这条回复里的星期和日期对不上…"） |
+| S6 | 名字 › Settings › About and updates | 版本 MeritAI 0.2.2 |
 
 ## I 清理
 
