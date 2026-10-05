@@ -44,7 +44,7 @@ footer { border-top: 1px solid var(--div); padding: 24px 0; font-size: 14px; col
 </header>
 <main class="wrap">
 <h1>Privacy policy</h1>
-<p class="updated">Last updated 29 September 2026</p>
+<p class="updated">Last updated 5 October 2026</p>
 
 <p>MeritAI is an HR adviser for small business owners, published as an alpha on <a href="https://github.com/Ruihang2017/MeritAI-test">GitHub</a>. It is a desktop app for Windows that runs on your own computer. This page explains what it keeps, what leaves your computer and why, and how it uses your Gmail account if you connect it.</p>
 
@@ -52,7 +52,7 @@ footer { border-top: 1px solid var(--div); padding: 24px 0; font-size: 14px; col
 
 <h2>What stays on your computer</h2>
 <ul>
-<li><strong>Your workspace</strong> (by default <code>%USERPROFILE%\MeritAI</code>): the business profile, policies, the employee register, jobs, applications, screening results and the documents MeritAI saves for you.</li>
+<li><strong>Your workspace</strong> (by default <code>%LOCALAPPDATA%\MeritAI Workspaces\MeritAI</code>; <code>%USERPROFILE%\MeritAI</code> if you installed before version 0.3.0): the business profile, policies, the employee register, jobs, applications, screening results and the documents MeritAI saves for you. The employee register and the hiring records (jobs, candidates, screening results) are encrypted for your Windows account on this computer.</li>
 <li><strong>App data</strong> (<code>%APPDATA%\MeritAI</code>): conversations, memory and settings.</li>
 <li><strong>Sign-ins and keys</strong>: the voice API key and the Gmail sign-in are kept encrypted for your Windows user and are never shown again in full.</li>
 </ul>
@@ -63,6 +63,7 @@ footer { border-top: 1px solid var(--div); padding: 24px 0; font-size: 14px; col
 <li><strong>OpenAI</strong>, signed in with your own ChatGPT account or OpenAI API key: your messages, the business profile, and the files and records the adviser reads to answer you (for example a resume you ask it to screen); audio while you use voice. OpenAI's terms and your account's settings apply.</li>
 <li><strong>Google (Gmail API)</strong>, only if you connect Gmail: each email you choose to send (recipient, subject, message and attachments). See below.</li>
 <li><strong>GitHub</strong>: checks for and downloads MeritAI updates.</li>
+<li><strong>npm or GitHub</strong>: on first start, downloads the AI engine (OpenAI's Codex) once. Nothing about you is sent.</li>
 <li><strong>Google Fonts</strong>: the app's fonts.</li>
 <li><strong>Feedback</strong>: only when you choose Send feedback, as an email from your own email app to the address shown.</li>
 </ul>
